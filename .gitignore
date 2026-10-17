@@ -1,1 +1,32 @@
-# 由部署脚本初始化
+# ---------- 依赖 ----------
+node_modules/
+npm-debug.log*
+pnpm-debug.log*
+
+# ---------- 密钥与配置（绝不要提交）----------
+.env
+.env.local
+config.json
+config.*.json
+
+# ---------- 运行期数据（用户、兑换码、会话 —— 含隐私，勿提交）----------
+data/db.json
+data/db.json.tmp
+data/db.json.broken-*
+data/*.json
+!data/exam-spec.mjs
+
+# ---------- 本地调试产物 ----------
+scratch/*.json
+scratch/*.log
+.chrome-profile/
+.chrome-profile2/
+docs/img/*.tmp.png
+
+# ---------- 系统 ----------
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+.idea/
+.vscode/

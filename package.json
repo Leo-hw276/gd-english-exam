@@ -1,0 +1,28 @@
+{
+  "name": "gd-english-exam",
+  "version": "1.0.0",
+  "private": true,
+  "description": "广东省江门市中考英语听说考试（人机对话）在线模拟系统 · DeepSeek 自动组卷与 30 分制 AI 评分 · 含管理员后台与会员兑换码",
+  "type": "module",
+  "main": "server.mjs",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "dev": "node server.mjs --port 8777",
+    "test:api": "node scratch/smoke-api.mjs"
+  },
+  "keywords": [
+    "中考",
+    "英语听说",
+    "人机对话",
+    "江门",
+    "广东",
+    "DeepSeek",
+    "AI评分"
+  ],
+  "author": "Lieo456le",
+  "license": "MIT",
+  "dependencies": {}
+}

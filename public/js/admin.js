@@ -1,0 +1,463 @@
+/**
+ * admin.js —— 管理员后台
+ *
+ * 功能：
+ *  · 配置 AI 接口（v1 地址 / API Key / 拉取模型列表 / 选择模型 / 连通性测试）
+ *  · 设置定价（免费次数、次卡单价、月卡单价与天数、说明文案）→ 实时展示在「收费标准」页
+ *  · 生成兑换码（次卡次数 / 月卡天数，随机字母+数字），作废、导出 CSV
+ *  · 用户管理（加次数、加天数、重置免费次数、停用、删除、改密码）
+ *  · 数据概览与流水日志
+ */
+
+import { S, $, $$, esc, toast, showScreen } from './app.js';
+
+let adminReady = false;
+
+async function api(path, body, method = 'POST') {
+  const opt = { method, headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin' };
+  if (body !== undefined) opt.body = JSON.stringify(body);
+  const res = await fetch(path, opt);
+  const text = await res.text();
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(`服务返回异常（${res.status}）`);
+  }
+  if (res.status >= 400 || data.ok === false) {
+    const e = new Error(data.error || `请求失败（${res.status}）`);
+    e.status = res.status;
+    throw e;
+  }
+  return data;
+}
+
+const fmtTime = (t) => (t ? new Date(t).toLocaleString('zh-CN') : '—');
+const fmtDate = (t) => (t ? new Date(t).toLocaleDateString('zh-CN') : '—');
+
+/* ------------------------------------------------------------------ *
+ *  登录
+ * ------------------------------------------------------------------ */
+
+async function adminLogin() {
+  const pw = $('#ad-pass').value;
+  if (!pw) return toast('请输入管理员密码', 'warn');
+  try {
+    const d = await api('/api/admin/login', { password: pw });
+    toast(d.message || '已进入后台', 'ok');
+    $('#ad-pass').value = '';
+    await loadOverview();
+    adminReady = true;
+  } catch (e) {
+    toast('登录失败：' + e.message, 'bad', 5000);
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ *  读取概览
+ * ------------------------------------------------------------------ */
+
+async function loadOverview() {
+  try {
+    const d = await api('/api/admin/overview', undefined, 'GET');
+    $('#admin-login-card').style.display = 'none';
+    $('#admin-panel').style.display = '';
+    adminReady = true;
+
+    // 统计
+    const st = d.stats || {};
+    $('#admin-stats').innerHTML = `
+      <div class="stat"><div class="k">注册用户</div><div class="v">${st.users ?? 0}</div></div>
+      <div class="stat"><div class="k">月卡会员</div><div class="v">${st.proUsers ?? 0}</div></div>
+      <div class="stat"><div class="k">累计考试次数</div><div class="v">${st.attempts ?? 0}</div></div>
+      <div class="stat"><div class="k">兑换码</div><div class="v">${st.codesUsed ?? 0} / ${st.codes ?? 0}</div></div>
+      <div class="stat"><div class="k">估算营收</div><div class="v">¥${st.revenueEstimate ?? 0}</div></div>`;
+
+    // 接口配置
+    const s = d.settings;
+    const locked = s.locked || {};
+    const sources = s.sources || {};
+
+    $('#ad-base').value = s.apiBase || '';
+    $('#ad-key').placeholder = s.apiKeySet ? `已配置（${s.apiKeyHint}）— 留空则不改动` : 'sk-...';
+    $('#ad-key').value = '';
+    $('#ad-tpaper').value = s.paperTemperature ?? 0.85;
+    $('#ad-tscore').value = s.scoreTemperature ?? 0.2;
+    fillModelSelect(s.availableModels || [], s.model);
+    fillRegionSelect(s.examRegion);
+
+    // 环境变量锁定的项：禁用输入并说明来源，避免「改了不生效」的困惑
+    const ENV_OF = { apiBase: 'EXAM_API_BASE', apiKey: 'EXAM_API_KEY', model: 'EXAM_MODEL' };
+    const lockNote = [];
+    for (const k of ['apiBase', 'apiKey', 'model']) {
+      const el = $('#ad-' + (k === 'apiBase' ? 'base' : k === 'apiKey' ? 'key' : 'model'));
+      if (!el) continue;
+      if (locked[k]) {
+        el.disabled = true;
+        el.title = `由环境变量 ${ENV_OF[k]} 指定，后台不可修改`;
+        lockNote.push(ENV_OF[k]);
+      } else {
+        el.disabled = false;
+        el.title = '';
+      }
+    }
+    const lockBox = $('#ad-env-note');
+    if (lockBox) {
+      lockBox.style.display = lockNote.length ? '' : 'none';
+      lockBox.innerHTML = lockNote.length
+        ? `🔒 <b>${lockNote.join('、')}</b> 当前由部署环境变量指定，后台对应输入框已锁定。<br>
+           如需在后台自行管理，请到部署平台（如 Railway 的 Variables）删除这些变量后重新部署。`
+        : '';
+    }
+    const srcBox = $('#ad-env-source');
+    if (srcBox) {
+      const label = { env: '环境变量', db: '后台设置', none: '未配置' };
+      srcBox.textContent =
+        `当前来源 —— v1 地址：${label[sources.apiBase] || '—'} ｜ API Key：${label[sources.apiKey] || '—'} ｜ 模型：${label[sources.model] || '—'}` +
+        ` ｜ 数据文件：${sources.dbFile === 'env' ? 'EXAM_DB_FILE 指定' : '默认 data/db.json'}`;
+    }
+
+    // 定价
+    const p = s.pricing || {};
+    $('#ad-free').value = p.freeTrials ?? 2;
+    $('#ad-peruse').value = p.perUse?.price ?? 2.9;
+    $('#ad-monthly').value = p.monthly?.price ?? 29.9;
+    $('#ad-days').value = p.monthly?.days ?? 30;
+    $('#ad-peruse-desc').value = p.perUse?.desc || '';
+    $('#ad-monthly-desc').value = p.monthly?.desc || '';
+    $('#ad-free-note').value = p.freeTrialNote || '';
+    $('#ad-source').value = p.sourceNote || '';
+
+    renderCodes(d.codes || []);
+    renderUsers(d.users || []);
+    renderLogs(d.logs || []);
+  } catch (e) {
+    $('#admin-login-card').style.display = '';
+    $('#admin-panel').style.display = 'none';
+    if (e.status !== 401) toast('读取后台数据失败：' + e.message, 'bad', 5000);
+  }
+}
+
+function fillModelSelect(models, current) {
+  const sel = $('#ad-model');
+  const list = models.length ? models : current ? [current] : [];
+  sel.innerHTML =
+    (list.length ? '' : '<option value="">（尚未拉取模型列表）</option>') +
+    list.map((m) => `<option value="${esc(m)}"${m === current ? ' selected' : ''}>${esc(m)}</option>`).join('');
+  if (current && !list.includes(current)) {
+    sel.insertAdjacentHTML('afterbegin', `<option value="${esc(current)}" selected>${esc(current)}（当前）</option>`);
+  }
+  $('#ad-model-hint').textContent = models.length ? `共 ${models.length} 个可用模型` : '';
+}
+
+function fillRegionSelect(current) {
+  const sel = $('#ad-region');
+  const cities = S.cities || {};
+  const entries = Object.entries(cities);
+  sel.innerHTML = entries.length
+    ? entries.map(([k, v]) => `<option value="${esc(k)}"${k === current ? ' selected' : ''}>${esc(v.name)}</option>`).join('')
+    : `<option value="${esc(current || 'jiangmen')}">${esc(current || 'jiangmen')}</option>`;
+}
+
+/* ------------------------------------------------------------------ *
+ *  接口配置
+ * ------------------------------------------------------------------ */
+
+async function fetchModels() {
+  const hint = $('#ad-model-hint');
+  hint.textContent = '正在拉取…';
+  try {
+    const d = await api('/api/admin/models', {
+      apiBase: $('#ad-base').value.trim(),
+      apiKey: $('#ad-key').value.trim() || undefined,
+    });
+    fillModelSelect(d.models, $('#ad-model').value || S.cfg?.model);
+    hint.textContent = `拉取成功，共 ${d.count} 个模型`;
+    toast(`获取到 ${d.count} 个模型`, 'ok');
+  } catch (e) {
+    hint.textContent = '拉取失败';
+    toast('获取模型列表失败：' + e.message, 'bad', 6000);
+  }
+}
+
+async function testConn() {
+  const hint = $('#ad-save-hint');
+  hint.textContent = '测试中，请稍候…';
+  try {
+    const d = await api('/api/admin/test', {});
+    hint.textContent = `连通正常 · ${d.ms}ms · ${d.model}`;
+    toast(`模型连通正常（${d.ms}ms）`, 'ok', 4000);
+  } catch (e) {
+    hint.textContent = '连通失败';
+    toast('连通测试失败：' + e.message, 'bad', 6000);
+  }
+}
+
+async function saveApi() {
+  const hint = $('#ad-save-hint');
+  const body = {
+    apiBase: $('#ad-base').value.trim(),
+    model: $('#ad-model').value,
+    examRegion: $('#ad-region').value,
+    paperTemperature: Number($('#ad-tpaper').value),
+    scoreTemperature: Number($('#ad-tscore').value),
+  };
+  const key = $('#ad-key').value.trim();
+  if (key) body.apiKey = key;
+  try {
+    await api('/api/admin/settings', body);
+    hint.textContent = '已保存 ✓';
+    toast('接口配置已保存', 'ok');
+    $('#ad-key').value = '';
+    await loadOverview();
+  } catch (e) {
+    toast('保存失败：' + e.message, 'bad', 5000);
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ *  定价
+ * ------------------------------------------------------------------ */
+
+async function savePricing() {
+  const hint = $('#ad-price-hint');
+  try {
+    await api('/api/admin/settings', {
+      pricing: {
+        freeTrials: Number($('#ad-free').value) || 0,
+        freeTrialNote: $('#ad-free-note').value,
+        perUse: { ...(S.pricing?.perUse || {}), price: Number($('#ad-peruse').value) || 0, desc: $('#ad-peruse-desc').value },
+        monthly: { ...(S.pricing?.monthly || {}), price: Number($('#ad-monthly').value) || 0, days: Number($('#ad-days').value) || 30, desc: $('#ad-monthly-desc').value },
+        sourceNote: $('#ad-source').value,
+      },
+    });
+    hint.textContent = '已保存 ✓';
+    toast('定价已更新，前台收费页立即生效', 'ok');
+    // 同步到本地状态，前台收费页立刻刷新
+    const h = await api('/api/health', undefined, 'GET');
+    S.pricing = h.pricing;
+    await loadOverview();
+  } catch (e) {
+    toast('保存失败：' + e.message, 'bad', 5000);
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ *  兑换码
+ * ------------------------------------------------------------------ */
+
+function renderCodes(codes) {
+  const tb = $('#ad-code-table tbody');
+  if (!tb) return;
+  if (!codes.length) {
+    tb.innerHTML = '<tr><td colspan="7" class="muted">还没有兑换码，点击上方「生成兑换码」创建。</td></tr>';
+    return;
+  }
+  tb.innerHTML = codes
+    .map(
+      (c) => `<tr>
+      <td><code class="code">${esc(c.code)}</code></td>
+      <td>${c.type === 'monthly' ? '月卡天数' : '次卡次数'}</td>
+      <td class="num">${c.value}${c.type === 'monthly' ? ' 天' : ' 次'}</td>
+      <td>${
+        c.disabled
+          ? '<span class="tag bad">已作废</span>'
+          : c.usedBy
+          ? `<span class="tag warn">已使用</span>`
+          : '<span class="tag ok">未使用</span>'
+      }</td>
+      <td class="muted" style="font-size:12px">${c.usedAt ? fmtTime(c.usedAt) : '—'}</td>
+      <td class="muted" style="font-size:12px">${esc(c.note || '')}</td>
+      <td>${
+        c.usedBy || c.disabled
+          ? ''
+          : `<button class="btn ghost sm" data-code-disable="${esc(c.code)}">作废</button>`
+      }</td>
+    </tr>`
+    )
+    .join('');
+  tb.querySelectorAll('[data-code-disable]').forEach((b) => {
+    b.onclick = async () => {
+      if (!confirm(`确定作废兑换码 ${b.dataset.codeDisable}？`)) return;
+      await api('/api/admin/codes', { action: 'disable', code: b.dataset.codeDisable });
+      toast('已作废', 'ok');
+      await loadOverview();
+    };
+  });
+}
+
+async function genCodes() {
+  const hint = $('#ad-code-hint');
+  hint.textContent = '生成中…';
+  try {
+    const d = await api('/api/admin/codes', {
+      type: $('#ad-code-type').value,
+      value: Number($('#ad-code-value').value) || 1,
+      count: Number($('#ad-code-count').value) || 1,
+      prefix: $('#ad-code-prefix').value.trim() || 'JMKT',
+      note: $('#ad-code-note').value.trim(),
+    });
+    hint.textContent = d.message;
+    toast(d.message, 'ok');
+    renderCodes(d.codes || []);
+  } catch (e) {
+    hint.textContent = '生成失败';
+    toast('生成失败：' + e.message, 'bad', 5000);
+  }
+}
+
+async function exportCodes() {
+  try {
+    const d = await api('/api/admin/codes', undefined, 'GET');
+    const rows = (d.codes || []).filter((c) => !c.usedBy && !c.disabled);
+    if (!rows.length) return toast('没有未使用的兑换码', 'warn');
+    const csv =
+      '\uFEFF兑换码,类型,额度,备注,生成时间\n' +
+      rows
+        .map((c) => [c.code, c.type === 'monthly' ? `月卡${c.value}天` : `次卡${c.value}次`, c.value, c.note || '', fmtTime(c.createdAt)].join(','))
+        .join('\n');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `兑换码-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast(`已导出 ${rows.length} 个未使用兑换码`, 'ok');
+  } catch (e) {
+    toast('导出失败：' + e.message, 'bad', 5000);
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ *  用户管理
+ * ------------------------------------------------------------------ */
+
+function renderUsers(users) {
+  const tb = $('#ad-user-table tbody');
+  if (!tb) return;
+  if (!users.length) {
+    tb.innerHTML = '<tr><td colspan="6" class="muted">还没有注册用户。</td></tr>';
+    return;
+  }
+  tb.innerHTML = users
+    .map(
+      (u) => `<tr>
+      <td>${esc(u.email)}${u.disabled ? ' <span class="tag bad">已停用</span>' : ''}</td>
+      <td class="num">${u.credits} 次</td>
+      <td class="num">${u.freeLeft}</td>
+      <td>${u.proActive ? `剩 ${u.proDaysLeft} 天` : '—'}</td>
+      <td class="num">${u.usedCount}</td>
+      <td class="nowrap">
+        <button class="btn ghost sm" data-u-add-credit="${esc(u.id)}">+1 次</button>
+        <button class="btn ghost sm" data-u-add-day="${esc(u.id)}">+30 天</button>
+        <button class="btn ghost sm" data-u-reset="${esc(u.id)}">重置免费</button>
+        <button class="btn ghost sm" data-u-disable="${esc(u.id)}" data-cur="${u.disabled ? 1 : 0}">${u.disabled ? '启用' : '停用'}</button>
+        <button class="btn ghost sm" data-u-del="${esc(u.id)}">删除</button>
+      </td>
+    </tr>`
+    )
+    .join('');
+
+  tb.querySelectorAll('[data-u-add-credit]').forEach((b) => {
+    b.onclick = () => userAction({ id: b.dataset.uAddCredit, addCredits: 1 }, '已加 1 次');
+  });
+  tb.querySelectorAll('[data-u-add-day]').forEach((b) => {
+    b.onclick = () => userAction({ id: b.dataset.uAddDay, addDays: 30 }, '已加 30 天会员');
+  });
+  tb.querySelectorAll('[data-u-reset]').forEach((b) => {
+    b.onclick = () => userAction({ id: b.dataset.uReset, resetFree: true }, '已重置免费次数');
+  });
+  tb.querySelectorAll('[data-u-disable]').forEach((b) => {
+    b.onclick = () => userAction({ id: b.dataset.uDisable, disabled: b.dataset.cur !== '1' }, '已更新状态');
+  });
+  tb.querySelectorAll('[data-u-del]').forEach((b) => {
+    b.onclick = async () => {
+      if (!confirm('确定删除该用户？此操作不可恢复。')) return;
+      try {
+        await api('/api/admin/users', { action: 'delete', id: b.dataset.uDel });
+        toast('用户已删除', 'ok');
+        await loadOverview();
+      } catch (e) {
+        toast('删除失败：' + e.message, 'bad');
+      }
+    };
+  });
+}
+
+async function userAction(patch, msg) {
+  try {
+    const d = await api('/api/admin/users', patch);
+    toast(msg, 'ok');
+    renderUsers(d.users || []);
+  } catch (e) {
+    toast('操作失败：' + e.message, 'bad');
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ *  日志
+ * ------------------------------------------------------------------ */
+
+function renderLogs(logs) {
+  const tb = $('#ad-log-table tbody');
+  if (!tb) return;
+  tb.innerHTML = logs.length
+    ? logs
+        .map(
+          (l) => `<tr>
+        <td class="muted" style="font-size:12px">${fmtTime(l.at)}</td>
+        <td><span class="tag">${esc(l.action)}</span></td>
+        <td class="muted" style="font-size:12px">${esc(l.detail || '')}</td>
+      </tr>`
+        )
+        .join('')
+    : '<tr><td colspan="3" class="muted">暂无日志。</td></tr>';
+}
+
+/* ------------------------------------------------------------------ *
+ *  绑定
+ * ------------------------------------------------------------------ */
+
+function bind() {
+  $('#btn-admin-login')?.addEventListener('click', adminLogin);
+  $('#ad-pass')?.addEventListener('keydown', (e) => e.key === 'Enter' && adminLogin());
+  $('#btn-admin-refresh')?.addEventListener('click', () => loadOverview().then(() => toast('已刷新', 'ok', 1500)));
+  $('#btn-admin-models')?.addEventListener('click', fetchModels);
+  $('#btn-admin-test')?.addEventListener('click', testConn);
+  $('#btn-admin-save')?.addEventListener('click', saveApi);
+  $('#btn-admin-save-price')?.addEventListener('click', savePricing);
+  $('#btn-admin-gen')?.addEventListener('click', genCodes);
+  $('#btn-admin-export')?.addEventListener('click', exportCodes);
+}
+
+bind();
+
+// 登录态变化时自动加载 / 卸载后台
+window.addEventListener('jmkt:auth', (e) => {
+  if (e.detail?.admin) {
+    loadOverview();
+  } else {
+    adminReady = false;
+    $('#admin-login-card').style.display = '';
+    $('#admin-panel').style.display = 'none';
+  }
+});
+
+// 进入后台时若已登录，自动拉数据
+document.addEventListener('click', (e) => {
+  const a = e.target.closest('[data-goto="screen-admin"]');
+  if (a && (adminReady || S.isAdmin)) setTimeout(loadOverview, 50);
+});
+
+// 首次进入显示提示
+(async () => {
+  try {
+    const d = await api('/api/auth/me', undefined, 'GET');
+    if (d.admin) await loadOverview();
+    else {
+      const h = await fetch('/api/health').then((r) => r.json());
+      const hint = $('#admin-first-hint');
+      if (hint) hint.textContent = '初始状态尚未设置管理员密码：在下方输入任意 6 位以上密码即可完成首次设置，请务必记住。';
+    }
+  } catch {}
+})();
