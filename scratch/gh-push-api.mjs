@@ -147,6 +147,23 @@ async function worker() {
 
 await Promise.all(Array.from({ length: CONC }, worker));
 
+/* ---------- 2.5 排除文件继承远程版本 ----------
+ * tree 是全新组装的，不在 entries 里的文件会从仓库中消失。
+ * 对被排除的文件（如手动维护的 README.md），从远程把当前内容拿回来，
+ * 以远程 blob 原样并入 tree —— 排除=保留远程版本，而不是删除。
+ */
+for (const ex of EXCLUDE) {
+  const cand = filesAll.filter((f) => f === ex || f.startsWith(ex + '/'));
+  for (const rel of cand) {
+    const r = await api(`${R}/contents/${encodeURIComponent(rel).replace(/%2F/gi, '/')}?ref=${BRANCH}`);
+    if (r.status !== 200) continue; // 远程本来就没有，跳过
+    const meta = r.body;
+    if (meta.type !== 'file' || !meta.sha) continue;
+    entries.push({ path: rel.replace(/\\/g, '/'), mode: '100644', type: 'blob', sha: meta.sha });
+    console.log(`  保留远程版本：${rel}（${meta.size} 字节）`);
+  }
+}
+
 /* ---------- 3. 组装 tree ---------- */
 console.log('\n组装文件树…');
 const tree = await api(R + '/git/trees', {
