@@ -96,7 +96,8 @@ if (isEmptyRepo) {
 // core.quotepath=false 让含中文的文件名以 UTF-8 原样输出，而不是 "\346\234\213..." 这种转义
 const filesAll = git(['-c', 'core.quotepath=false', 'ls-files']).split('\n').filter(Boolean);
 // GH_EXCLUDE 支持逗号分隔的排除清单（精确路径或目录前缀），例如 'README.md,docs/'
-const EXCLUDE = (process.env.GH_EXCLUDE || '')
+// 默认排除 README.md：远程 README 是手动维护的排版版，本地版本不覆盖它
+const EXCLUDE = (process.env.GH_EXCLUDE ?? 'README.md')
   .split(',')
   .map((s) => s.trim().replace(/\/$/, ''))
   .filter(Boolean);

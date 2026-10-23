@@ -60,30 +60,22 @@ for (const f of FILES) {
 }
 
 /**
- * 判断某项配置来自哪里：'env'（环境变量） / 'db'（后台设置） / 'none'
- * 用于在管理后台明确告诉管理员「当前 Key 是环境变量锁定的，后台改不了」。
+ * 判断某项配置当前值来自哪里：'db'（网站后台保存，权威来源）/ 'env-init'（仅作初始值）
+ * 网站后台是唯一配置入口；环境变量只在新库初始化时提供一次默认值，之后以后台为准。
  */
 export function configSources(settings) {
   const s = settings || {};
+  const from = (v) => (v ? 'db' : 'none');
   return {
-    apiKey: process.env.EXAM_API_KEY ? 'env' : s.apiKey ? 'db' : 'none',
-    apiBase: process.env.EXAM_API_BASE ? 'env' : s.apiBase ? 'db' : 'none',
-    model: process.env.EXAM_MODEL ? 'env' : s.model ? 'db' : 'none',
-    adminPassword: process.env.ADMIN_PASSWORD
-      ? 'env'
-      : s.adminPasswordHash
-      ? 'db'
-      : 'none',
+    apiKey: from(s.apiKey),
+    apiBase: from(s.apiBase),
+    model: from(s.model),
+    adminPassword: s.adminPasswordHash ? 'db' : 'none',
     dbFile: process.env.EXAM_DB_FILE ? 'env' : 'default',
   };
 }
 
-/** 哪些配置被环境变量锁定（后台不可改） */
-export function envLocked(settings) {
-  const src = configSources(settings);
-  return {
-    apiKey: src.apiKey === 'env',
-    apiBase: src.apiBase === 'env',
-    model: src.model === 'env',
-  };
+/** 后台始终可改（环境变量不再锁定任何配置项） */
+export function envLocked() {
+  return { apiKey: false, apiBase: false, model: false };
 }

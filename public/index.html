@@ -337,20 +337,18 @@
       <div class="card">
         <h2>AI 接口配置</h2>
         <p class="muted">
-          配置模型网关地址与密钥，拉取可用模型后选择一个作为组卷与评分模型。<br />
-          若部署时已通过环境变量指定，则环境变量优先级最高，后台对应输入框会被自动锁定。
+          v1 接口地址、API 密钥、模型选择全部在网站后台完成并保存到数据库，<b>不依赖部署平台的环境变量</b>，保存后立即生效。
         </p>
-        <div id="ad-env-note" class="notice" style="display:none;margin-bottom:14px"></div>
         <div id="ad-env-source" class="muted" style="font-size:12.5px;margin-bottom:14px"></div>
         <div class="row">
           <div style="flex:1;min-width:260px">
-            <label class="muted">v1 接口地址（Base URL）</label>
+            <label class="muted">v1 接口地址（Base URL，漏填 /v1 会自动补全）</label>
             <input type="text" id="ad-base" placeholder="https://api.hcnsec.cn/v1" />
           </div>
         </div>
         <div class="row" style="margin-top:12px">
           <div style="flex:1;min-width:260px">
-            <label class="muted">API Key</label>
+            <label class="muted">API Key（留空则保持当前 Key 不变）</label>
             <input type="password" id="ad-key" placeholder="sk-..." />
           </div>
         </div>
@@ -360,8 +358,9 @@
           <span class="muted" id="ad-model-hint"></span>
         </div>
         <div style="margin-top:14px">
-          <label class="muted">选择模型</label>
-          <select id="ad-model" style="width:100%;margin-top:6px"></select>
+          <label class="muted">模型（可下拉选择，也可直接输入模型名）</label>
+          <input type="text" id="ad-model" list="ad-model-list" style="width:100%;margin-top:6px" placeholder="先点「拉取模型列表」，或直接输入模型名" />
+          <datalist id="ad-model-list"></datalist>
         </div>
         <div class="row" style="margin-top:14px">
           <div style="min-width:150px">

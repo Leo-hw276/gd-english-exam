@@ -1339,42 +1339,38 @@ async function handleAdminSettings(req, res) {
   if (!requireAdmin(req, res)) return;
   const b = await jsonBody(req);
   const cur = DB.getSettings();
-  const locked = DB.envLocked(cur);
   const patch = {};
-  const refused = [];
 
+  // v1 地址 / 密钥 / 模型 全部来自网站后台，保存即生效（数据库是权威来源）
   for (const k of ['apiKey', 'apiBase', 'model', 'siteName', 'examRegion', 'paperTemperature', 'scoreTemperature']) {
     if (b[k] === undefined) continue;
-    // 环境变量锁定的项不接受后台修改，避免"改了不生效"的困惑
-    if ((k === 'apiKey' || k === 'apiBase' || k === 'model') && locked[k]) {
-      refused.push(k);
-      continue;
-    }
-    patch[k] = b[k];
+    patch[k] = String(b[k]).trim();
   }
+  if (patch.apiBase) {
+    patch.apiBase = patch.apiBase.replace(/\/+$/, '');
+    if (!/^https?:\/\//.test(patch.apiBase)) {
+      return sendJson(res, 400, { ok: false, error: '接口地址需要以 http:// 或 https:// 开头' });
+    }
+    // 兼容只填域名的情况：自动补 /v1
+    if (!/\/v\d+$/.test(patch.apiBase)) {
+      patch.apiBase += '/v1';
+      console.log('[settings] 接口地址自动补全为', patch.apiBase);
+    }
+  }
+  if (patch.apiKey === '') delete patch.apiKey; // 空字符串 = 不修改
   if (b.pricing && typeof b.pricing === 'object') patch.pricing = b.pricing;
   if (b.newPassword) {
     if (String(b.newPassword).length < 6) return sendJson(res, 400, { ok: false, error: '管理员密码至少 6 位' });
-    if (DB.configSources(cur).adminPassword === 'env') {
-      return sendJson(res, 400, {
-        ok: false,
-        error: '管理员密码由环境变量 ADMIN_PASSWORD 指定，请在部署平台修改',
-      });
-    }
     patch.adminPasswordHash = DB.hashPassword(String(b.newPassword));
   }
 
   DB.updateSettings(patch);
-  DB.log('admin-settings', 'admin', Object.keys(patch).join(',') || '(无变更)');
+  DB.log('admin-settings', 'admin', Object.keys(patch).filter((k) => k !== 'apiKey').join(',') || '(无变更)');
 
-  const ENV_NAME = { apiKey: 'EXAM_API_KEY', apiBase: 'EXAM_API_BASE', model: 'EXAM_MODEL' };
   sendJson(res, 200, {
     ok: true,
     settings: DB.getPublicSettings(),
-    refused: refused.map((k) => ENV_NAME[k]),
-    message: refused.length
-      ? `已保存；${refused.map((k) => ENV_NAME[k]).join('、')} 由环境变量锁定，后台修改被忽略（如需后台管理，请先移除该环境变量）`
-      : '设置已保存',
+    message: '设置已保存（网站后台为唯一配置入口，立即生效）',
   });
 }
 

@@ -148,10 +148,9 @@ export function load() {
     } catch {}
     db = EMPTY_DB();
   }
-  // 环境变量优先级最高（部署时用 env 覆盖，避免把密钥写进仓库）
-  if (process.env.EXAM_API_KEY) db.settings.apiKey = process.env.EXAM_API_KEY;
-  if (process.env.EXAM_API_BASE) db.settings.apiBase = process.env.EXAM_API_BASE;
-  if (process.env.EXAM_MODEL) db.settings.model = process.env.EXAM_MODEL;
+  // 配置唯一入口是网站后台（管理员在 /#admin 里填 v1 地址、密钥、模型并保存在库里）。
+  // 环境变量只在新库第一次初始化时作为初始默认值（见 EMPTY_DB），之后以数据库为准，
+  // 后台随时可改 —— 不经过部署平台的变量注入，改完立即生效。
   if (process.env.ADMIN_PASSWORD && !db.settings.adminPasswordHash) {
     db.settings.adminPasswordHash = hashPassword(process.env.ADMIN_PASSWORD);
     save();
@@ -203,7 +202,7 @@ export function getPublicSettings() {
     apiKeyHint: hasKey ? s.apiKey.slice(0, 6) + '••••' + s.apiKey.slice(-4) : '',
     availableModels: s.availableModels,
     pricing: s.pricing,
-    // 配置来源：让管理员一眼看出某项目前由环境变量还是后台设置决定
+    // 配置来源（db=网站后台保存；环境变量仅作新库初始值，不锁定）
     sources: configSources(s),
     locked: envLocked(s),
   };

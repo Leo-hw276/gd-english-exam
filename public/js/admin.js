@@ -73,9 +73,8 @@ async function loadOverview() {
       <div class="stat"><div class="k">兑换码</div><div class="v">${st.codesUsed ?? 0} / ${st.codes ?? 0}</div></div>
       <div class="stat"><div class="k">估算营收</div><div class="v">¥${st.revenueEstimate ?? 0}</div></div>`;
 
-    // 接口配置
+    // 接口配置（网站后台是唯一配置入口，数据库为权威来源）
     const s = d.settings;
-    const locked = s.locked || {};
     const sources = s.sources || {};
 
     $('#ad-base').value = s.apiBase || '';
@@ -86,35 +85,12 @@ async function loadOverview() {
     fillModelSelect(s.availableModels || [], s.model);
     fillRegionSelect(s.examRegion);
 
-    // 环境变量锁定的项：禁用输入并说明来源，避免「改了不生效」的困惑
-    const ENV_OF = { apiBase: 'EXAM_API_BASE', apiKey: 'EXAM_API_KEY', model: 'EXAM_MODEL' };
-    const lockNote = [];
-    for (const k of ['apiBase', 'apiKey', 'model']) {
-      const el = $('#ad-' + (k === 'apiBase' ? 'base' : k === 'apiKey' ? 'key' : 'model'));
-      if (!el) continue;
-      if (locked[k]) {
-        el.disabled = true;
-        el.title = `由环境变量 ${ENV_OF[k]} 指定，后台不可修改`;
-        lockNote.push(ENV_OF[k]);
-      } else {
-        el.disabled = false;
-        el.title = '';
-      }
-    }
-    const lockBox = $('#ad-env-note');
-    if (lockBox) {
-      lockBox.style.display = lockNote.length ? '' : 'none';
-      lockBox.innerHTML = lockNote.length
-        ? `🔒 <b>${lockNote.join('、')}</b> 当前由部署环境变量指定，后台对应输入框已锁定。<br>
-           如需在后台自行管理，请到部署平台（如 Railway 的 Variables）删除这些变量后重新部署。`
-        : '';
-    }
     const srcBox = $('#ad-env-source');
     if (srcBox) {
-      const label = { env: '环境变量', db: '后台设置', none: '未配置' };
+      const label = { db: '网站后台保存 ✓', none: '未配置' };
       srcBox.textContent =
-        `当前来源 —— v1 地址：${label[sources.apiBase] || '—'} ｜ API Key：${label[sources.apiKey] || '—'} ｜ 模型：${label[sources.model] || '—'}` +
-        ` ｜ 数据文件：${sources.dbFile === 'env' ? 'EXAM_DB_FILE 指定' : '默认 data/db.json'}`;
+        `当前配置来源 —— v1 地址：${label[sources.apiBase] || '—'} ｜ API Key：${label[sources.apiKey] || '—'} ｜ 模型：${label[sources.model] || '—'}` +
+        ` ｜ 数据文件：${sources.dbFile === 'env' ? 'EXAM_DB_FILE 指定' : '默认 data/db.json'}（环境变量仅作首次初始值，不锁定后台）`;
     }
 
     // 定价
@@ -140,15 +116,18 @@ async function loadOverview() {
 }
 
 function fillModelSelect(models, current) {
-  const sel = $('#ad-model');
-  const list = models.length ? models : current ? [current] : [];
-  sel.innerHTML =
-    (list.length ? '' : '<option value="">（尚未拉取模型列表）</option>') +
-    list.map((m) => `<option value="${esc(m)}"${m === current ? ' selected' : ''}>${esc(m)}</option>`).join('');
-  if (current && !list.includes(current)) {
-    sel.insertAdjacentHTML('afterbegin', `<option value="${esc(current)}" selected>${esc(current)}（当前）</option>`);
+  // ad-model 是可输入文本框 + datalist：既能下拉选，也能手填模型名
+  const input = $('#ad-model');
+  const list = $('#ad-model-list');
+  if (current && !models.includes(current)) models = [current, ...models];
+  if (list) {
+    list.innerHTML = models.map((m) => `<option value="${esc(m)}"></option>`).join('');
   }
-  $('#ad-model-hint').textContent = models.length ? `共 ${models.length} 个可用模型` : '';
+  if (input && document.activeElement !== input) {
+    input.value = current || input.value || '';
+  }
+  const hint = $('#ad-model-hint');
+  if (hint) hint.textContent = models.length ? `共 ${models.length} 个可用模型` : '';
 }
 
 function fillRegionSelect(current) {
@@ -185,7 +164,19 @@ async function testConn() {
   const hint = $('#ad-save-hint');
   hint.textContent = '测试中，请稍候…';
   try {
-    const d = await api('/api/admin/test', {});
+    // 传当前输入框的值：改了还没保存也能直接测
+    const d = await api('/api/admin/test', {
+      apiBase: $('#ad-base').value.trim() || undefined,
+      apiKey: $('#ad-key').value.trim() || undefined,
+      model: $('#ad-model').value.trim() || undefined,
+    });
+    const failedStep = (d.steps || []).find((x) => x.ok === false);
+    if (d.ok === false || failedStep) {
+      const why = failedStep ? `${failedStep.step}: ${failedStep.error || '失败'}` : d.error || d.stage || '失败';
+      hint.textContent = '连通失败';
+      toast('连通测试失败：' + why, 'bad', 8000);
+      return;
+    }
     hint.textContent = `连通正常 · ${d.ms}ms · ${d.model}`;
     toast(`模型连通正常（${d.ms}ms）`, 'ok', 4000);
   } catch (e) {
