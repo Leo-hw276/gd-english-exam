@@ -41,10 +41,10 @@ const fmtDate = (t) => (t ? new Date(t).toLocaleDateString('zh-CN') : '—');
 
 async function adminLogin() {
   const pw = $('#ad-pass').value;
-  if (!pw) return toast('请输入管理员密码', 'warn');
+  if (!pw) return toast('请输入密码', 'warn');
   try {
-    const d = await api('/api/admin/login', { password: pw });
-    toast(d.message || '已进入后台', 'ok');
+    const d = await api('/api/admin/login', { account: 'admin', password: pw });
+    toast('已进入后台', 'ok');
     $('#ad-pass').value = '';
     await loadOverview();
     adminReady = true;
@@ -127,6 +127,7 @@ async function loadOverview() {
     $('#ad-monthly-desc').value = p.monthly?.desc || '';
     $('#ad-free-note').value = p.freeTrialNote || '';
     $('#ad-source').value = p.sourceNote || '';
+    renderImagePreview(p.sourceImage || '');
 
     renderCodes(d.codes || []);
     renderUsers(d.users || []);
@@ -229,6 +230,7 @@ async function savePricing() {
         perUse: { ...(S.pricing?.perUse || {}), price: Number($('#ad-peruse').value) || 0, desc: $('#ad-peruse-desc').value },
         monthly: { ...(S.pricing?.monthly || {}), price: Number($('#ad-monthly').value) || 0, days: Number($('#ad-days').value) || 30, desc: $('#ad-monthly-desc').value },
         sourceNote: $('#ad-source').value,
+        sourceImage: currentImage || '',
       },
     });
     hint.textContent = '已保存 ✓';
@@ -243,8 +245,129 @@ async function savePricing() {
 }
 
 /* ------------------------------------------------------------------ *
- *  兑换码
+ *  定价说明配图
  * ------------------------------------------------------------------ */
+let currentImage = '';
+
+function renderImagePreview(url) {
+  currentImage = url || '';
+  const img = $('#ad-img-preview');
+  if (!img) return;
+  if (url) {
+    img.src = url;
+    img.style.display = '';
+  } else {
+    img.removeAttribute('src');
+    img.style.display = 'none';
+  }
+}
+
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result || ''));
+    r.onerror = () => reject(new Error('读取文件失败'));
+    r.readAsDataURL(file);
+  });
+}
+
+async function uploadImage() {
+  const file = $('#ad-img-file')?.files?.[0];
+  const hint = $('#ad-img-hint');
+  if (!file) {
+    toast('请先选择一张图片', 'warn');
+    return;
+  }
+  if (file.size > 3 * 1024 * 1024) {
+    toast('图片超过 3MB，请压缩后再上传', 'bad', 6000);
+    return;
+  }
+  if (hint) hint.textContent = '上传中…';
+  try {
+    const dataUrl = await fileToDataUrl(file);
+    const d = await api('/api/admin/upload', { dataUrl });
+    renderImagePreview(d.url);
+    if (hint) hint.textContent = `已上传（${(d.bytes / 1024).toFixed(0)}KB），点「保存定价」后生效`;
+    toast('图片已上传，记得点「保存定价」', 'ok');
+  } catch (e) {
+    if (hint) hint.textContent = '上传失败';
+    toast('上传失败：' + e.message, 'bad', 6000);
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ *  用户数据：导出 / 导入 / 一键清空
+ * ------------------------------------------------------------------ */
+
+async function exportUsers() {
+  const hint = $('#ad-user-hint');
+  try {
+    const d = await api('/api/admin/users', { action: 'export' });
+    const blob = new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    const stamp = new Date().toISOString().slice(0, 10);
+    a.href = URL.createObjectURL(blob);
+    a.download = `users-backup-${stamp}.json`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    if (hint) hint.textContent = `已导出 ${d.users?.length || 0} 个用户`;
+    toast(`已导出 ${d.users?.length || 0} 个用户（含密码哈希，请妥善保管）`, 'ok', 6000);
+  } catch (e) {
+    toast('导出失败：' + e.message, 'bad', 6000);
+  }
+}
+
+async function importUsers(e) {
+  const file = e.target.files?.[0];
+  const hint = $('#ad-user-hint');
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const data = JSON.parse(text);
+    const n = Array.isArray(data) ? data.length : data?.users?.length || 0;
+    if (!n) throw new Error('文件里没有用户数据');
+    const mode = confirm(
+      `即将导入 ${n} 个用户。\n\n点「确定」= 合并（同邮箱覆盖，其余保留）\n点「取消」= 取消导入`
+    )
+      ? 'merge'
+      : null;
+    if (!mode) {
+      if (hint) hint.textContent = '已取消';
+      return;
+    }
+    if (hint) hint.textContent = '导入中…';
+    const r = await api('/api/admin/users', { action: 'import', mode, data });
+    toast(r.message, 'ok', 6000);
+    if (hint) hint.textContent = r.message;
+    await loadOverview();
+  } catch (err) {
+    toast('导入失败：' + err.message, 'bad', 7000);
+    if (hint) hint.textContent = '导入失败';
+  } finally {
+    e.target.value = '';
+  }
+}
+
+async function clearUsers() {
+  const hint = $('#ad-user-hint');
+  const first = confirm(
+    '⚠️ 危险操作\n\n这会删除【所有注册用户】以及他们的登录状态，且不可撤销。\n\n建议先点「导出用户数据」做个备份。\n\n确定继续吗？'
+  );
+  if (!first) return;
+  const typed = prompt('请输入 CLEAR（全大写）以确认清空所有用户：');
+  if (typed !== 'CLEAR') {
+    toast('已取消（确认词不正确）', 'warn');
+    return;
+  }
+  try {
+    const r = await api('/api/admin/users', { action: 'clear', confirm: 'CLEAR' });
+    toast(r.message, 'ok', 6000);
+    if (hint) hint.textContent = r.message;
+    await loadOverview();
+  } catch (e) {
+    toast('清空失败：' + e.message, 'bad', 6000);
+  }
+}
 
 function renderCodes(codes) {
   const tb = $('#ad-code-table tbody');
@@ -426,6 +549,18 @@ function bind() {
   $('#btn-admin-test')?.addEventListener('click', testConn);
   $('#btn-admin-save')?.addEventListener('click', saveApi);
   $('#btn-admin-save-price')?.addEventListener('click', savePricing);
+  $('#btn-admin-export')?.addEventListener('click', exportUsers);
+  $('#btn-admin-import')?.addEventListener('click', () => $('#ad-import-file')?.click());
+  $('#ad-import-file')?.addEventListener('change', importUsers);
+  $('#btn-admin-clear')?.addEventListener('click', clearUsers);
+  $('#btn-admin-img-upload')?.addEventListener('click', uploadImage);
+  $('#btn-admin-img-clear')?.addEventListener('click', () => {
+    renderImagePreview('');
+    const f = $('#ad-img-file');
+    if (f) f.value = '';
+    const hint = $('#ad-img-hint');
+    if (hint) hint.textContent = '已清除，点「保存定价」后生效';
+  });
   $('#btn-admin-gen')?.addEventListener('click', genCodes);
   $('#btn-admin-export')?.addEventListener('click', exportCodes);
 }

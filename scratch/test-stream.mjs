@@ -1,10 +1,12 @@
+import '../data/env.mjs';
+
 // 密钥一律来自环境变量（可写在 .env，已 gitignore），绝不硬编码在代码里
 const KEY = process.env.EXAM_API_KEY;
 if (!KEY) {
   console.error('缺少 EXAM_API_KEY 环境变量。请在项目根目录建 .env 并写入 EXAM_API_KEY=sk-xxx');
   process.exit(1);
 }
-const BASE = 'https://api.hcnsec.cn/v1';
+const BASE = process.env.EXAM_API_BASE || 'https://api.hcnsec.cn/v1';
 
 const PROMPT = `为主题「校园生活」命制广东省中考英语听说考试的三段听力对话，只输出 JSON：
 { "chooseInfo": [ { "script": [{"spk":"W","en":"..."},{"spk":"M","en":"..."}],

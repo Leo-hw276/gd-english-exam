@@ -1106,6 +1106,7 @@ async function handleScore(req, res, cfg, session, user) {
   return sendJson(res, 200, report);
 }
 
+
 async function handleHealth(req, res, cfg) {
   const s = DB.getSettings();
   sendJson(res, 200, {
@@ -1306,20 +1307,19 @@ async function handleRedeem(req, res) {
 
 async function handleAdminLogin(req, res) {
   const b = await jsonBody(req);
+  const account = String(b.account || 'admin').trim();
   const pw = String(b.password || '');
   const s = DB.getSettings();
 
-  if (!s.adminPasswordHash) {
-    if (pw.length < 6) return sendJson(res, 400, { ok: false, error: '首次设置管理员密码，至少 6 位' });
-    DB.setAdminPassword(pw);
-    const token = DB.createSession('admin', 'admin');
-    setSessionCookie(res, token, 'admin');
-    return sendJson(res, 200, { ok: true, token, firstTime: true, message: '管理员密码已设置' });
-  }
-  if (!DB.checkAdminPassword(pw)) return sendJson(res, 401, { ok: false, error: '管理员密码错误' });
+  if (!s.adminUsername) s.adminUsername = 'admin';
+
+  if (account !== s.adminUsername) return sendJson(res, 401, { ok: false, error: '账号或密码错误' });
+  if (!s.adminPasswordHash) return sendJson(res, 401, { ok: false, error: '管理员密码未设置' });
+  if (!DB.checkAdminPassword(pw)) return sendJson(res, 401, { ok: false, error: '账号或密码错误' });
+
   const token = DB.createSession('admin', 'admin');
   setSessionCookie(res, token, 'admin');
-  sendJson(res, 200, { ok: true, token });
+  sendJson(res, 200, { ok: true, token, account: s.adminUsername });
 }
 
 async function handleAdminOverview(req, res) {
@@ -1415,25 +1415,281 @@ async function handleAdminModels(req, res) {
   }
 }
 
+/**
+ * 连通性测试
+ * 之前的问题：只测了 chat，而且用的是「已保存」的配置 —— 管理员改了输入框里
+ * 的地址/密钥后点测试，测的还是旧的，容易误判。现在：
+ *   1. 优先用请求体里传来的地址/密钥/模型（即当前输入框的值），没传才回退到已保存配置
+ *   2. 分两步测：先 GET /models（快，验证地址+密钥），再发一次 chat（验证模型可用）
+ *   3. 每一步都返回耗时与失败原因，前端可以逐条显示
+ */
 async function handleAdminTest(req, res) {
   if (!requireAdmin(req, res)) return;
-  const cfg = getCfg();
-  if (!cfg.apiKey) return sendJson(res, 400, { ok: false, error: '尚未配置 API Key' });
+  const b = await jsonBody(req).catch(() => ({}));
+  const s = DB.getSettings();
+
+  const apiBase = String(b.apiBase || s.apiBase || '').replace(/\/$/, '');
+  const apiKey = String(b.apiKey || s.apiKey || '');
+  const model = String(b.model || s.model || '');
+
+  if (!apiBase) return sendJson(res, 400, { ok: false, error: '请先填写 v1 接口地址' });
+  if (!apiKey) return sendJson(res, 400, { ok: false, error: '请先填写 API Key' });
+
+  const steps = [];
   const t0 = Date.now();
+
+  /* --- 第 1 步：拉模型列表，验证「地址 + 密钥」是否可用 --- */
+  let modelCount = 0;
+  if (!b.skipModels) {
+    const t = Date.now();
+    try {
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), 20000);
+      const r = await fetch(`${apiBase}/models`, {
+        headers: { Authorization: `Bearer ${apiKey}` },
+        signal: ctl.signal,
+      });
+      clearTimeout(timer);
+      const txt = await r.text();
+      if (!r.ok) {
+        steps.push({ step: 'models', ok: false, ms: Date.now() - t, error: `HTTP ${r.status}：${txt.slice(0, 200)}` });
+        return sendJson(res, 200, {
+          ok: false,
+          stage: 'models',
+          steps,
+          ms: Date.now() - t0,
+          hint:
+            r.status === 401 || r.status === 403
+              ? '密钥无效或没有权限，请检查 API Key 是否正确、是否有多余空格。'
+              : r.status === 404
+              ? '该地址下没有 /models 接口，请确认 v1 地址是否填写正确（例如应填 https://api.hcnsec.cn/v1）。'
+              : '上游服务异常，可稍后重试。',
+        });
+      }
+      let list = [];
+      try {
+        const j = JSON.parse(txt);
+        list = Array.isArray(j.data) ? j.data : Array.isArray(j.models) ? j.models : [];
+      } catch {}
+      modelCount = list.length;
+      steps.push({
+        step: 'models',
+        ok: true,
+        ms: Date.now() - t,
+        count: modelCount,
+        sample: list.slice(0, 5).map((m) => m.id || m.name).filter(Boolean),
+      });
+    } catch (e) {
+      steps.push({
+        step: 'models',
+        ok: false,
+        ms: Date.now() - t,
+        error: e.name === 'AbortError' ? '连接超时（20 秒）' : e.message,
+      });
+      return sendJson(res, 200, {
+        ok: false,
+        stage: 'models',
+        steps,
+        ms: Date.now() - t0,
+        hint: '无法连接到该地址，请检查网络、地址是否可访问，以及是否需要在地址结尾保留 /v1。',
+      });
+    }
+  }
+
+  /* --- 第 2 步：真发一次对话，验证「模型」是否可用 --- */
+  const tChat = Date.now();
+  let content = '';
   try {
-    const { content } = await callChat({
-      apiKey: cfg.apiKey,
-      apiBase: cfg.apiBase,
-      model: cfg.model,
+    const out = await callChat({
+      apiKey,
+      apiBase,
+      model,
       system: '你是连通性测试助手，只回一个 JSON。',
       user: '请只返回 {"ok":true}',
       temperature: 0,
       maxTokens: 64,
     });
-    sendJson(res, 200, { ok: true, ms: Date.now() - t0, model: cfg.model, sample: String(content).slice(0, 200) });
+    content = String(out.content || '');
+    steps.push({ step: 'chat', ok: true, ms: Date.now() - tChat, sample: content.slice(0, 120) });
   } catch (e) {
-    sendJson(res, 502, { ok: false, error: e.message, ms: Date.now() - t0 });
+    const msg = String(e.message || e);
+    steps.push({ step: 'chat', ok: false, ms: Date.now() - tChat, error: msg.slice(0, 300) });
+    return sendJson(res, 200, {
+      ok: false,
+      stage: 'chat',
+      steps,
+      ms: Date.now() - t0,
+      model,
+      hint: /无响应|中断|超时/.test(msg)
+        ? '地址与密钥正常，但模型本次响应超时（网关或模型侧拥塞），可稍后重试或换一个模型。'
+        : /model|not found|404/i.test(msg)
+        ? `模型「${model}」可能不可用，请点「拉取模型列表」重新选择。`
+        : '模型调用失败，请检查模型名是否正确。',
+    });
   }
+
+  sendJson(res, 200, {
+    ok: true,
+    ms: Date.now() - t0,
+    apiBase,
+    model,
+    modelCount,
+    steps,
+    sample: content.slice(0, 200),
+    message: `连通正常：接口可访问（${modelCount} 个模型），模型「${model}」响应正常`,
+  });
+}
+
+/* ---------------- 图片上传（定价说明配图等） ---------------- */
+
+const UPLOAD_DIR = process.env.EXAM_UPLOAD_DIR
+  ? path.resolve(process.env.EXAM_UPLOAD_DIR)
+  : path.join(path.dirname(DB.DB_FILE), 'uploads');
+
+const MIME_EXT = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/jpg': 'jpg',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+  'image/svg+xml': 'svg',
+};
+
+const MAX_UPLOAD_BYTES = 3 * 1024 * 1024; // 单张图最大 3MB
+
+async function handleAdminUpload(req, res) {
+  if (!requireAdmin(req, res)) return;
+  const b = await jsonBody(req);
+  const dataUrl = String(b.dataUrl || '');
+  const m = dataUrl.match(/^data:([^;]+);base64,(.+)$/s);
+  if (!m) return sendJson(res, 400, { ok: false, error: '图片格式不正确（需要 data URL）' });
+
+  const mime = m[1].toLowerCase();
+  const ext = MIME_EXT[mime];
+  if (!ext) return sendJson(res, 400, { ok: false, error: '只支持 PNG / JPG / WebP / GIF / SVG 图片' });
+
+  let buf;
+  try {
+    buf = Buffer.from(m[2], 'base64');
+  } catch {
+    return sendJson(res, 400, { ok: false, error: '图片解码失败' });
+  }
+  if (!buf.length) return sendJson(res, 400, { ok: false, error: '图片内容为空' });
+  if (buf.length > MAX_UPLOAD_BYTES) {
+    return sendJson(res, 400, {
+      ok: false,
+      error: `图片过大（${(buf.length / 1024 / 1024).toFixed(1)}MB），请压缩到 3MB 以内`,
+    });
+  }
+
+  try {
+    fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+    // 文件名用时间戳 + 随机串，避免中文名与重名问题
+    const name = `${Date.now().toString(36)}-${randomUUID().slice(0, 8)}.${ext}`;
+    fs.writeFileSync(path.join(UPLOAD_DIR, name), buf);
+    const url = `/uploads/${name}`;
+    DB.log('admin-upload', 'admin', `${name} (${(buf.length / 1024).toFixed(0)}KB)`);
+    sendJson(res, 200, { ok: true, url, bytes: buf.length, name });
+  } catch (e) {
+    sendJson(res, 500, { ok: false, error: '保存失败：' + e.message });
+  }
+}
+
+/** 托管已上传的图片 */
+function serveUpload(res, urlPath) {
+  const name = path.basename(decodeURIComponent(urlPath));
+  if (!name || name.includes('..')) return sendJson(res, 400, { ok: false, error: 'Bad name' });
+  const file = path.join(UPLOAD_DIR, name);
+  if (!fs.existsSync(file)) return sendJson(res, 404, { ok: false, error: 'Not found' });
+  const ext = path.extname(name).slice(1).toLowerCase();
+  const type =
+    Object.entries(MIME_EXT).find(([, e]) => e === ext)?.[0] || 'application/octet-stream';
+  const buf = fs.readFileSync(file);
+  res.writeHead(200, {
+    'Content-Type': type,
+    'Content-Length': buf.length,
+    'Cache-Control': 'public, max-age=31536000, immutable',
+  });
+  res.end(buf);
+}
+
+
+/* ---------------- 用户数据 导出 / 导入 / 清空 ---------------- */
+
+async function handleAdminUsers(req, res) {
+  if (!requireAdmin(req, res)) return;
+
+  const b = req.method === 'POST' ? await jsonBody(req).catch(() => ({})) : {};
+  const action = String(b.action || '');
+
+  // 导出
+  if (action === 'export' || (req.method === 'GET' && new URL(req.url, 'http://x').searchParams.get('export'))) {
+    const dump = DB.exportUsers();
+    DB.log('admin-export-users', 'admin', `${dump.users.length} 个用户`);
+    return sendJson(res, 200, { ok: true, ...dump });
+  }
+
+  // 导入
+  if (action === 'import') {
+    try {
+      const mode = b.mode === 'replace' ? 'replace' : 'merge';
+      const result = DB.importUsers(b.data, mode);
+      return sendJson(res, 200, {
+        ok: true,
+        ...result,
+        message:
+          `导入完成：新增 ${result.added}，更新 ${result.updated}` +
+          (result.skipped ? `，跳过 ${result.skipped}` : '') +
+          (result.removed ? `，清空原有 ${result.removed}` : ''),
+        users: DB.listUsers(),
+      });
+    } catch (e) {
+      return sendJson(res, 400, { ok: false, error: e.message });
+    }
+  }
+
+  // 一键清空
+  if (action === 'clear') {
+    if (b.confirm !== 'CLEAR') {
+      return sendJson(res, 400, { ok: false, error: '危险操作：需要在请求里带 confirm: "CLEAR"' });
+    }
+    const done = DB.clearData({
+      users: true,
+      sessions: true,
+      codes: Boolean(b.codes),
+      orders: Boolean(b.orders),
+      logs: Boolean(b.logs),
+    });
+    return sendJson(res, 200, {
+      ok: true,
+      cleared: done,
+      message: `已清空 ${done.users || 0} 个用户、${done.sessions || 0} 个会话` +
+        (done.codes ? `、${done.codes} 个兑换码` : '') +
+        (done.orders ? `、${done.orders} 条流水` : ''),
+      users: DB.listUsers(),
+    });
+  }
+
+  // 删除单个用户 / 更新单个用户
+  if (action === 'delete') {
+    try {
+      DB.deleteUser(b.id);
+      return sendJson(res, 200, { ok: true, users: DB.listUsers(), message: '用户已删除' });
+    } catch (e) {
+      return sendJson(res, 400, { ok: false, error: e.message });
+    }
+  }
+  if (b.id) {
+    try {
+      const u = DB.updateUser(b.id, b);
+      return sendJson(res, 200, { ok: true, user: u, users: DB.listUsers(), message: '已更新用户' });
+    } catch (e) {
+      return sendJson(res, 400, { ok: false, error: e.message });
+    }
+  }
+
+  // 默认：列出用户
+  sendJson(res, 200, { ok: true, users: DB.listUsers() });
 }
 
 async function handleAdminCodes(req, res) {
@@ -1463,20 +1719,8 @@ async function handleAdminCodes(req, res) {
   }
 }
 
-async function handleAdminUsers(req, res) {
-  if (!requireAdmin(req, res)) return;
-  if (req.method === 'GET') return sendJson(res, 200, { ok: true, users: DB.listUsers() });
-  const b = await jsonBody(req);
-  try {
-    if (b.action === 'delete') {
-      DB.deleteUser(b.id);
-      return sendJson(res, 200, { ok: true, users: DB.listUsers(), message: '用户已删除' });
-    }
-    const u = DB.updateUser(b.id, b);
-    sendJson(res, 200, { ok: true, user: u, users: DB.listUsers(), message: '已更新用户' });
-  } catch (e) {
-    sendJson(res, 400, { ok: false, error: e.message });
-  }
+async function handleAdminUsersLegacyRemoved() {
+  /* 旧实现已合并到上面的 handleAdminUsers */
 }
 
 
@@ -1532,8 +1776,12 @@ const server = http.createServer((req, res) => {
     if (p === '/api/admin/settings' && req.method === 'POST') return handleAdminSettings(req, res);
     if (p === '/api/admin/models' && req.method === 'POST') return handleAdminModels(req, res);
     if (p === '/api/admin/test' && req.method === 'POST') return handleAdminTest(req, res);
+    if (p === '/api/admin/upload' && req.method === 'POST') return handleAdminUpload(req, res);
     if (p === '/api/admin/codes') return handleAdminCodes(req, res);
     if (p === '/api/admin/users') return handleAdminUsers(req, res);
+
+    // 已上传的图片（定价说明配图等）
+    if (p.startsWith('/uploads/')) return serveUpload(res, p);
 
     if (p.startsWith('/api/')) return sendJson(res, 404, { ok: false, error: 'Unknown API' });
     return serveStatic(res, p);

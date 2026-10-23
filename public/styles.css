@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   --bg: #f4f6fb;
   --bg-soft: #eaeef7;
   --card: #ffffff;
@@ -706,28 +706,30 @@ ul.tips li { margin-bottom: 5px; font-size: 14px; color: var(--ink-2); }
 .topnav { display: flex; gap: 4px; margin-left: 18px; }
 .topnav a {
   font-size: 13.5px;
-  color: rgba(255, 255, 255, 0.78);
+  color: var(--ink-2, #414651);
   text-decoration: none;
   padding: 6px 11px;
   border-radius: 8px;
-  font-weight: 500;
+  font-weight: 600;
   transition: background 0.15s, color 0.15s;
   white-space: nowrap;
 }
-.topnav a:hover { background: rgba(255, 255, 255, 0.14); color: #fff; }
+.topnav a:hover { background: var(--brand-soft, #eef2ff); color: var(--brand, #3538cd); }
+.topnav a.active { background: var(--brand, #3538cd); color: #fff; }
 
 .userchip { display: flex; align-items: center; gap: 8px; }
-.userchip .uc-name { font-size: 13px; color: #fff; font-weight: 600; white-space: nowrap; }
+.userchip .uc-name { font-size: 13px; color: var(--ink, #101828); font-weight: 700; white-space: nowrap; }
 .userchip .uc-quota {
   font-size: 12px;
   padding: 3px 9px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.16);
-  color: #fff;
+  background: var(--bg-soft, #f2f4f7);
+  color: var(--ink-2, #414651);
+  font-weight: 600;
   white-space: nowrap;
 }
-.userchip .uc-quota.ok { background: #12b76a; }
-.userchip .uc-quota.bad { background: #f04438; }
+.userchip .uc-quota.ok { background: #12b76a; color: #fff; }
+.userchip .uc-quota.bad { background: #f04438; color: #fff; }
 
 /* ==================================================================
  *  窄容器 / 标签页 / 行内元素
@@ -924,4 +926,109 @@ textarea:disabled {
   color: #8a8a94 !important;
   cursor: not-allowed;
   border-style: dashed !important;
+}
+
+
+/* ==================================================================
+ *  通用补充（识别结果框 / 按钮变体 / 提示）
+ * ================================================================== */
+
+.transcript-box {
+  min-height: 60px;
+  padding: 16px;
+  background: var(--bg-soft, #f9fafb);
+  border: 2px dashed var(--muted-border, #e5e7eb);
+  border-radius: 10px;
+  font-size: 15px;
+  color: var(--text, #1a1a2e);
+  line-height: 1.6;
+  margin-top: 12px;
+}
+
+.transcript-box.has-content {
+  border-color: var(--ok, #10b981);
+  border-style: solid;
+  background: #f0fdf4;
+}
+
+.btn.primary {
+  background: linear-gradient(135deg, var(--brand, #3538cd) 0%, #4f46e5 100%);
+  color: white;
+}
+
+.btn.primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #2d30a8 0%, #4338ca 100%);
+  transform: translateY(-1px);
+}
+
+.btn.primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn.danger {
+  background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%);
+  color: white;
+}
+
+.btn.danger:hover:not(:disabled) {
+  background: linear-gradient(135deg, #b91c1c 0%, #dc2626 100%);
+}
+
+.btn.lg {
+  padding: 12px 32px;
+  font-size: 16px;
+}
+
+.error {
+  padding: 12px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+  border-radius: 8px;
+}
+
+/* ---------- 手机端适配 ---------- */
+@media (max-width: 720px) {
+  .topbar-inner { flex-wrap: wrap; gap: 8px; padding: 8px 12px; }
+  .topnav {
+    order: 10;
+    width: 100%;
+    margin-left: 0;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 2px;
+  }
+  .topnav a { white-space: nowrap; flex: 0 0 auto; padding: 6px 10px; font-size: 13px; }
+  .topbar-inner .spacer { display: none; }
+  .wrap { padding-left: 12px; padding-right: 12px; }
+  .card { padding: 16px; border-radius: 12px; }
+  .btn { padding: 10px 16px; font-size: 14px; }
+  .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .price-grid { grid-template-columns: 1fr !important; }
+  table.spec { font-size: 12.5px; }
+  table.spec th,
+  table.spec td { padding: 7px 6px; }
+}
+
+@media (max-width: 400px) {
+  .topnav a { font-size: 12px; padding: 5px 8px; }
+}
+
+/* 定价说明配图 */
+.price-source-img {
+  display: block;
+  max-width: 100%;
+  margin: 14px auto 0;
+  border-radius: 12px;
+  border: 1px solid #e9edf3;
+  box-shadow: 0 4px 16px rgba(16, 24, 40, 0.06);
+}
+.ad-img-preview {
+  max-width: 100%;
+  max-height: 200px;
+  border-radius: 10px;
+  border: 1px solid #e9edf3;
+  margin-top: 10px;
+  display: block;
 }

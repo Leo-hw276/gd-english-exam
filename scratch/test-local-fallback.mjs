@@ -2,8 +2,10 @@
  * 验证「AI 不可用 → 本地降级评分」通道：
  *  临时把 API Key 改成无效值 → 调用 /api/score → 应该拿到完整报告而不是报错，且额度不被扣。
  */
-const BASE = 'http://127.0.0.1:8777';
-const AD = 'jmkt-admin-2026';
+import '../data/env.mjs';
+
+const BASE = process.env.BASE || 'http://127.0.0.1:8777';
+const AD = process.env.ADMIN_PASSWORD || 'jmkt-admin-2026';
 
 const j = async (path, body, method = 'POST', headers = {}) => {
   const r = await fetch(BASE + path, {

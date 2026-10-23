@@ -94,7 +94,16 @@ if (isEmptyRepo) {
 
 /* ---------- 1. 取出所有已跟踪文件 ---------- */
 // core.quotepath=false 让含中文的文件名以 UTF-8 原样输出，而不是 "\346\234\213..." 这种转义
-const files = git(['-c', 'core.quotepath=false', 'ls-files']).split('\n').filter(Boolean);
+const filesAll = git(['-c', 'core.quotepath=false', 'ls-files']).split('\n').filter(Boolean);
+// GH_EXCLUDE 支持逗号分隔的排除清单（精确路径或目录前缀），例如 'README.md,docs/'
+const EXCLUDE = (process.env.GH_EXCLUDE || '')
+  .split(',')
+  .map((s) => s.trim().replace(/\/$/, ''))
+  .filter(Boolean);
+const files = filesAll.filter(
+  (f) => !EXCLUDE.some((x) => f === x || f.startsWith(x + '/'))
+);
+if (EXCLUDE.length) console.log(`排除不上传：${EXCLUDE.join(', ')}（${filesAll.length - files.length} 个文件）`);
 console.log(`待上传文件：${files.length} 个`);
 
 // 只上传与上一次提交一致的内容（工作区已 commit，保证一致性）

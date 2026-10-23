@@ -1,4 +1,6 @@
 // 诊断：网关流式调用在不同 prompt 长度下是否稳定
+import '../data/env.mjs';
+
 // 密钥一律来自环境变量（可写在 .env，已 gitignore），绝不硬编码在代码里
 const KEY = process.env.EXAM_API_KEY;
 if (!KEY) {

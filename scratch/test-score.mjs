@@ -41,14 +41,17 @@ function goodMetrics(sec) {
 // 朗读：直接用范文原文（满分内容）
 const readAloudAns = { transcript: paper.readAloud.passage, metrics: goodMetrics(48) };
 
-// 听选信息：选正确选项
+// 听选信息：选正确选项（题目结构为 { q, options, answerIndex, evidence }）
 const chooseInfo = paper.chooseInfo.map((seg) =>
-  seg.questions.map((q) => ({ transcript: q.answer || q.options?.[q.correctIndex ?? 0] || q.options?.[0] || '', metrics: goodMetrics(5) }))
+  seg.questions.map((q) => ({
+    transcript: q.options?.[q.answerIndex] || q.options?.[0] || '',
+    metrics: goodMetrics(5),
+  }))
 );
 
-// 回答问题：用 expected / answer 字段
+// 回答问题：用 answer / keyPoints 字段
 const answerQuestions = paper.answerQuestions.questions.map((q) => ({
-  transcript: q.answer || q.expected || q.a || '',
+  transcript: [q.answer, ...(q.keyPoints || [])].filter(Boolean).join(' '),
   metrics: goodMetrics(6),
 }));
 

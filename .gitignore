@@ -30,3 +30,6 @@ desktop.ini
 *.swp
 .idea/
 .vscode/
+.chrome-profile*
+data/uploads/
+scratch/shots/

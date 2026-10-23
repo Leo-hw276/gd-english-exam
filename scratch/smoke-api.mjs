@@ -1,4 +1,7 @@
 // 后端接口冒烟测试：健康检查 → 管理员登录 → 设 Key → 拉模型 → 生成兑换码 → 注册 → 兑换 → 组卷
+// 直接复用服务端那套 .env 加载器，保证脚本与运行中的应用读同一份配置
+import '../data/env.mjs';
+
 const BASE = process.env.BASE || 'http://127.0.0.1:8777';
 // 密钥一律来自环境变量（可写在 .env，已 gitignore），绝不硬编码在代码里
 const KEY = process.env.EXAM_API_KEY;

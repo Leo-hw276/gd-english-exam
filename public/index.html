@@ -18,15 +18,15 @@
       <span>广东中考英语听说 · 模拟考场</span>
     </a>
     <nav class="topnav">
-      <a href="#" data-goto="screen-intro">首页</a>
+      <a href="#" data-goto="screen-intro">模拟考试</a>
       <a href="#" data-goto="screen-pricing">收费标准</a>
       <a href="#" data-goto="screen-account">我的账户</a>
-      <a href="#" data-goto="screen-admin">管理后台</a>
     </nav>
     <div class="spacer"></div>
     <span class="pill brand" id="pill-model">—</span>
     <span class="pill" id="pill-api">检查中…</span>
     <span class="pill" id="pill-asr">语音识别</span>
+    <span class="pill" id="pill-tts">TTS</span>
     <button class="btn sm ghost" id="btn-auth-open">登录 / 注册</button>
     <div class="userchip hidden" id="user-chip">
       <span class="uc-name" id="uc-name">—</span>
@@ -319,10 +319,9 @@
   <div class="wrap">
     <div class="card" id="admin-login-card">
       <h2>管理员登录</h2>
-      <p class="muted" id="admin-first-hint"></p>
       <div class="row">
-        <input type="password" id="ad-pass" placeholder="管理员密码" style="flex:1;min-width:220px" />
-        <button class="btn" id="btn-admin-login">进入后台</button>
+        <input type="password" id="ad-pass" placeholder="请输入密码" style="flex:1;min-width:220px" />
+        <button class="btn" id="btn-admin-login">确认</button>
       </div>
     </div>
 
@@ -405,6 +404,18 @@
         <div style="margin-top:12px">
           <label class="muted">定价来源 / 说明（展示在收费页）</label><textarea id="ad-source" rows="3"></textarea>
         </div>
+
+        <div style="margin-top:14px">
+          <label class="muted">定价说明配图（可选，展示在收费页底部）</label>
+          <div class="row" style="margin-top:8px">
+            <input type="file" id="ad-img-file" accept="image/png,image/jpeg,image/webp,image/gif" />
+            <button class="btn ghost sm" id="btn-admin-img-upload">上传图片</button>
+            <button class="btn ghost sm" id="btn-admin-img-clear">清除图片</button>
+            <span class="muted" id="ad-img-hint">支持 PNG / JPG / WebP，≤3MB</span>
+          </div>
+          <img id="ad-img-preview" class="ad-img-preview" alt="" style="display:none" />
+        </div>
+
         <div class="row" style="margin-top:16px">
           <button class="btn" id="btn-admin-save-price">保存定价</button>
           <span class="muted" id="ad-price-hint"></span>
@@ -442,6 +453,13 @@
 
       <div class="card">
         <h2>用户管理</h2>
+        <div class="row" style="margin-bottom:12px;gap:8px">
+          <button class="btn ghost sm" id="btn-admin-export">⬇️ 导出用户数据</button>
+          <button class="btn ghost sm" id="btn-admin-import">⬆️ 导入用户数据</button>
+          <input type="file" id="ad-import-file" accept="application/json,.json" style="display:none" />
+          <button class="btn danger sm" id="btn-admin-clear">🗑 一键清空用户</button>
+          <span class="muted" id="ad-user-hint"></span>
+        </div>
         <div style="max-height:360px;overflow:auto">
           <table class="spec" id="ad-user-table">
             <thead><tr><th>邮箱</th><th>额度</th><th>免费余</th><th>会员到期</th><th>已考</th><th>操作</th></tr></thead>
@@ -462,6 +480,7 @@
     </div>
   </div>
 </section>
+
 
 <div id="toast"></div>
 

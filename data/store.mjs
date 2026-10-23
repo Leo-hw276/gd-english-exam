@@ -52,6 +52,7 @@ export const DEFAULT_PRICING = {
   },
   sourceNote:
     '定价由本站管理员在后台自行设定，非官方收费标准；广东省中考英语听说考试本身不向考生收取任何费用。',
+  sourceImage: '', // 定价说明配图（/uploads/xxx.png），由管理员后台上传
 };
 
 export const DEFAULT_SETTINGS = {
@@ -59,12 +60,15 @@ export const DEFAULT_SETTINGS = {
   apiBase: process.env.EXAM_API_BASE || 'https://api.hcnsec.cn/v1',
   model: process.env.EXAM_MODEL || 'DeepSeek-V4.1-Flash',
   availableModels: [],
-  adminPasswordHash: '',
+  adminUsername: 'admin',
+  adminPasswordHash: process.env.ADMIN_PASSWORD ? hashPassword(process.env.ADMIN_PASSWORD) : '',
   siteName: '广东中考英语听说 · 在线模拟',
   examRegion: 'jiangmen',
   pricing: DEFAULT_PRICING,
   paperTemperature: 0.85,
   scoreTemperature: 0.2,
+  // 单句精练每日限额（0 = 不限）
+  practiceDailyLimit: 50,
 };
 
 /* ------------------------------------------------------------------ *
@@ -444,6 +448,126 @@ export function deleteUser(id) {
   for (const [t, s] of Object.entries(db0.sessions)) if (s.userId === id) delete db0.sessions[t];
   log('admin-delete-user', id, '');
   save();
+}
+
+/* ------------------------------------------------------------------ *
+ *  用户数据：导出 / 导入 / 一键清空
+ *  注意：导出文件包含密码哈希（scrypt 加盐），用于完整备份与还原，
+ *  请只保存在自己手上，不要公开分享。
+ * ------------------------------------------------------------------ */
+
+export function exportUsers() {
+  const db0 = load();
+  return {
+    exportedAt: new Date().toISOString(),
+    version: 1,
+    users: db0.users.map((u) => ({
+      id: u.id,
+      email: u.email,
+      name: u.name,
+      passHash: u.passHash,
+      credits: u.credits || 0,
+      freeUsed: u.freeUsed || 0,
+      proUntil: u.proUntil || 0,
+      usedCount: u.usedCount || 0,
+      disabled: Boolean(u.disabled),
+      createdAt: u.createdAt || Date.now(),
+      lastLoginAt: u.lastLoginAt || 0,
+    })),
+  };
+}
+
+/**
+ * 导入用户。
+ * @param {object} payload  导出文件的内容，或直接是用户数组
+ * @param {'merge'|'replace'} mode  merge=按邮箱覆盖/新增；replace=先清空再导入
+ */
+export function importUsers(payload, mode = 'merge') {
+  const db0 = load();
+  const list = Array.isArray(payload) ? payload : Array.isArray(payload?.users) ? payload.users : null;
+  if (!list) throw new Error('导入内容格式不正确（需要 users 数组）');
+  if (!list.length) throw new Error('导入内容为空');
+
+  const result = { added: 0, updated: 0, skipped: 0, removed: 0 };
+
+  if (mode === 'replace') {
+    result.removed = db0.users.length;
+    db0.users = [];
+    db0.sessions = {};
+  }
+
+  const byEmail = new Map(db0.users.map((u) => [String(u.email).toLowerCase(), u]));
+
+  for (const raw of list) {
+    const email = String(raw?.email || '').trim().toLowerCase();
+    if (!email || !email.includes('@')) {
+      result.skipped++;
+      continue;
+    }
+    const existing = byEmail.get(email);
+    const fields = {
+      name: String(raw.name || email.split('@')[0]).slice(0, 40),
+      passHash: typeof raw.passHash === 'string' && raw.passHash.includes(':') ? raw.passHash : hashPassword('123456'),
+      credits: Math.max(0, Number(raw.credits) || 0),
+      freeUsed: Math.max(0, Number(raw.freeUsed) || 0),
+      proUntil: Number(raw.proUntil) || 0,
+      usedCount: Math.max(0, Number(raw.usedCount) || 0),
+      disabled: Boolean(raw.disabled),
+      createdAt: Number(raw.createdAt) || Date.now(),
+      lastLoginAt: Number(raw.lastLoginAt) || 0,
+    };
+
+    if (existing) {
+      Object.assign(existing, fields);
+      result.updated++;
+    } else {
+      const u = { id: String(raw.id || crypto.randomUUID()), email, ...fields };
+      db0.users.push(u);
+      byEmail.set(email, u);
+      result.added++;
+    }
+  }
+
+  log('admin-import-users', 'admin', `mode=${mode} +${result.added} ~${result.updated} -${result.removed}`);
+  save();
+  return result;
+}
+
+/**
+ * 一键清空用户数据。
+ * @param {{users?:boolean, sessions?:boolean, codes?:boolean, orders?:boolean, logs?:boolean}} scope
+ */
+export function clearData(scope = {}) {
+  const db0 = load();
+  const done = {};
+  if (scope.users !== false) {
+    done.users = db0.users.length;
+    db0.users = [];
+  }
+  // 用户没了，用户会话必须一起清，否则会出现"幽灵登录"；
+  // 但管理员自己的会话要保留，否则清空后立刻被踢出后台。
+  if (scope.users !== false || scope.sessions) {
+    const keepAdmin = Object.fromEntries(
+      Object.entries(db0.sessions).filter(([, s]) => s && s.kind === 'admin')
+    );
+    done.sessions = Object.keys(db0.sessions).length - Object.keys(keepAdmin).length;
+    db0.sessions = keepAdmin;
+  }
+  if (scope.codes) {
+    done.codes = db0.codes.length;
+    db0.codes = [];
+  }
+  if (scope.orders) {
+    done.orders = db0.orders.length;
+    db0.orders = [];
+  }
+  if (scope.logs) {
+    done.logs = db0.logs.length;
+    db0.logs = [];
+  }
+  log('admin-clear-data', 'admin', JSON.stringify(done));
+  save();
+  return done;
 }
 
 export function listOrders(limit = 200) {

@@ -58,6 +58,8 @@ const busy = (title, sub = '') =>
 export function showScreen(id) {
   $$('.screen').forEach((s) => s.classList.toggle('active', s.id === id));
   window.scrollTo(0, 0);
+  // 顶栏高亮当前页
+  $$('.topnav a').forEach((a) => a.classList.toggle('active', a.dataset.goto === id));
   if (id === 'screen-account') renderAccount();
   if (id === 'screen-pricing') renderPricing();
 }
@@ -336,10 +338,13 @@ function renderPricing() {
     </div>`;
   const src = $('#price-source');
   if (src) {
+    const img = p.sourceImage
+      ? `<img class="price-source-img" src="${esc(p.sourceImage)}" alt="定价说明配图" loading="lazy" />`
+      : '';
     src.innerHTML = `<b>定价来源：</b>${esc(p.sourceNote || '')}
       <br><b>当前标准：</b>免费 ${free} 次 · 次卡 ${sym}${p.perUse?.price ?? 2.9}/次 · 月卡 ${sym}${
       p.monthly?.price ?? 29.9
-    }/${p.monthly?.days ?? 30} 天。`;
+    }/${p.monthly?.days ?? 30} 天。${img}`;
   }
   const lf = $('#li-free');
   if (lf) lf.textContent = String(free);
