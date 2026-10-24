@@ -70,8 +70,8 @@ const RL = {
   register: (ip) => rateLimit(`reg:${ip}`, { windowMs: 10 * 60_000, max: 5 }),
   // 登录：每 IP 每 5 分钟最多 10 次
   login: (ip) => rateLimit(`login:${ip}`, { windowMs: 5 * 60_000, max: 10 }),
-  // 验证码请求：每 IP 每分钟最多 20 次
-  captcha: (ip) => rateLimit(`cap:${ip}`, { windowMs: 60_000, max: 20 }),
+  // 验证码请求：每 IP 每分钟最多 30 次（用户可能反复刷新）
+  captcha: (ip) => rateLimit(`cap:${ip}`, { windowMs: 60_000, max: 30 }),
   // 组卷：每用户每分钟 3 次
   paper: (uid) => rateLimit(`paper:${uid}`, { windowMs: 60_000, max: 3 }),
   // 通用 API：每 IP 每分钟 120 次
@@ -581,6 +581,25 @@ function readBody(req, limit = 12 * 1024 * 1024) {
       chunks.push(c);
     });
     req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+    req.on('error', reject);
+  });
+}
+
+/** 读取原始二进制请求体（用于音频上传） */
+function readBodyRaw(req, limit = 12 * 1024 * 1024) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let size = 0;
+    req.on('data', (c) => {
+      size += c.length;
+      if (size > limit) {
+        reject(new Error('音频过大（上限 8MB）'));
+        req.destroy();
+        return;
+      }
+      chunks.push(c);
+    });
+    req.on('end', () => resolve(Buffer.concat(chunks)));
     req.on('error', reject);
   });
 }
@@ -1848,6 +1867,78 @@ function handleTtsVoices(req, res) {
   sendJson(res, 200, { ok: true, voices: TTS_VOICES });
 }
 
+/* ---------------- ASR 服务端兜底转写 ---------------- */
+
+/**
+ * 浏览器原生 SpeechRecognition 不可用（微信/Via/网络受限）时，
+ * 前端把录音上传到这里转写，结果再交给 LLM 评分。
+ *
+ * 转写走「模型网关的 OpenAI 兼容 /audio/transcriptions」接口（若网关支持）。
+ * 网关不支持时返回 501，前端静默降级为纯声学评分，不影响交卷。
+ */
+async function handleAsr(req, res, cfg) {
+  const ctx = requireUser(req, res);
+  if (!ctx) return;
+  const ip = clientIp(req);
+  const rl = RL.tts(ip);
+  if (!rl.ok) return sendJson(res, 429, { ok: false, error: '转写请求过于频繁' });
+
+  const ctype = String(req.headers['content-type'] || 'audio/webm');
+  const audio = await readBodyRaw(req, 8 * 1024 * 1024).catch(() => null);
+  if (!audio || !audio.length) return sendJson(res, 400, { ok: false, error: '未收到音频数据' });
+
+  const apiKey = apiKeyFor(req, cfg, ctx.session);
+  if (!apiKey) return sendJson(res, 400, { ok: false, error: '服务端未配置 API Key' });
+
+  const lang = 'en';
+  const models = ['whisper-1', 'whisper-large-v3', 'qwen-audio-asr'];
+
+  for (const model of models) {
+    try {
+      const fd = new FormData();
+      fd.append('file', new Blob([audio], { type: ctype }), 'answer.webm');
+      fd.append('model', model);
+      fd.append('language', lang);
+      fd.append('response_format', 'json');
+
+      const r = await fetch(`${cfg.apiBase}/audio/transcriptions`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${apiKey}` },
+        body: fd,
+        signal: AbortSignal.timeout(45000),
+      });
+      const txt = await r.text();
+      if (!r.ok) {
+        // 404/400 多为网关不支持该模型或接口，换下一个
+        if (r.status === 404 || r.status === 400 || r.status === 422) continue;
+        return sendJson(res, 502, { ok: false, error: `转写失败（HTTP ${r.status}）：${txt.slice(0, 160)}` });
+      }
+      let out = '';
+      try {
+        const j = JSON.parse(txt);
+        out = String(j.text || j.transcription || j.result || '').trim();
+      } catch {
+        out = txt.trim();
+      }
+      if (out) {
+        console.log(`[asr] ok model=${model} chars=${out.length}`);
+        return sendJson(res, 200, { ok: true, text: out, model, engine: 'server' });
+      }
+    } catch (e) {
+      // 网络/超时：继续试下一个模型
+      const msg = String(e.message || e);
+      if (/timeout|abort/i.test(msg)) continue;
+    }
+  }
+
+  // 网关不支持语音转写：明确告知，前端据此降级
+  return sendJson(res, 501, {
+    ok: false,
+    error: '当前模型网关不支持语音转写接口（/audio/transcriptions），已自动降级为纯声学评分',
+    engine: 'server',
+  });
+}
+
 /* ---------------- 管理员活动日志 ---------------- */
 
 async function handleAdminActivity(req, res) {
@@ -1919,6 +2010,7 @@ const server = http.createServer((req, res) => {
     // ---------- TTS（语音合成，公开但限流）----------
     if (p === '/api/tts' && req.method === 'POST') return handleTts(req, res);
     if (p === '/api/tts/voices') return handleTtsVoices(req, res);
+    if (p === '/api/asr' && req.method === 'POST') return handleAsr(req, res, cfg);
 
     // ---------- 认证 ----------
     if (p === '/api/auth/register' && req.method === 'POST') return handleRegister(req, res);

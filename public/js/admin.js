@@ -40,7 +40,7 @@ const fmtDate = (t) => (t ? new Date(t).toLocaleDateString('zh-CN') : '—');
  * ------------------------------------------------------------------ */
 
 async function adminLogin() {
-  const pw = $('#ad-pass').value;
+  const pw = $('#cfg-pass').value;
   if (!pw) return toast('请输入密码', 'warn');
   const btn = $('#btn-admin-login');
   const old = btn ? btn.textContent : '';
@@ -50,7 +50,7 @@ async function adminLogin() {
   }
   try {
     await api('/api/admin/login', { account: 'admin', password: pw });
-    $('#ad-pass').value = '';
+    $('#cfg-pass').value = '';
     // 登录已成功：先把面板打开（配置卡片是静态 HTML，立刻可见可用），
     // 再去读数据。这样即使部署平台冷启动慢、读取超时，也不会看不到接口配置。
     $('#admin-login-card').style.display = 'none';
@@ -96,15 +96,15 @@ async function loadOverview() {
     const s = d.settings;
     const sources = s.sources || {};
 
-    $('#ad-base').value = s.apiBase || '';
-    $('#ad-key').placeholder = s.apiKeySet ? `已配置（${s.apiKeyHint}）— 留空则不改动` : 'sk-...';
-    $('#ad-key').value = '';
-    $('#ad-tpaper').value = s.paperTemperature ?? 0.85;
-    $('#ad-tscore').value = s.scoreTemperature ?? 0.2;
+    $('#cfg-base').value = s.apiBase || '';
+    $('#cfg-key').placeholder = s.apiKeySet ? `已配置（${s.apiKeyHint}）— 留空则不改动` : 'sk-...';
+    $('#cfg-key').value = '';
+    $('#cfg-tpaper').value = s.paperTemperature ?? 0.85;
+    $('#cfg-tscore').value = s.scoreTemperature ?? 0.2;
     fillModelSelect(s.availableModels || [], s.model);
     fillRegionSelect(s.examRegion);
 
-    const srcBox = $('#ad-env-source');
+    const srcBox = $('#cfg-env-source');
     if (srcBox) {
       const label = { db: '网站后台保存 ✓', none: '未配置' };
       srcBox.textContent =
@@ -114,14 +114,14 @@ async function loadOverview() {
 
     // 定价
     const p = s.pricing || {};
-    $('#ad-free').value = p.freeTrials ?? 2;
-    $('#ad-peruse').value = p.perUse?.price ?? 2.9;
-    $('#ad-monthly').value = p.monthly?.price ?? 29.9;
-    $('#ad-days').value = p.monthly?.days ?? 30;
-    $('#ad-peruse-desc').value = p.perUse?.desc || '';
-    $('#ad-monthly-desc').value = p.monthly?.desc || '';
-    $('#ad-free-note').value = p.freeTrialNote || '';
-    $('#ad-source').value = p.sourceNote || '';
+    $('#cfg-free').value = p.freeTrials ?? 2;
+    $('#cfg-peruse').value = p.perUse?.price ?? 2.9;
+    $('#cfg-monthly').value = p.monthly?.price ?? 29.9;
+    $('#cfg-days').value = p.monthly?.days ?? 30;
+    $('#cfg-peruse-desc').value = p.perUse?.desc || '';
+    $('#cfg-monthly-desc').value = p.monthly?.desc || '';
+    $('#cfg-free-note').value = p.freeTrialNote || '';
+    $('#cfg-source').value = p.sourceNote || '';
     renderImagePreview(p.sourceImage || '');
 
     renderCodes(d.codes || []);
@@ -136,8 +136,8 @@ async function loadOverview() {
 
 function fillModelSelect(models, current) {
   // ad-model 是可输入文本框 + datalist：既能下拉选，也能手填模型名
-  const input = $('#ad-model');
-  const list = $('#ad-model-list');
+  const input = $('#cfg-model');
+  const list = $('#cfg-model-list');
   if (current && !models.includes(current)) models = [current, ...models];
   if (list) {
     list.innerHTML = models.map((m) => `<option value="${esc(m)}"></option>`).join('');
@@ -145,12 +145,12 @@ function fillModelSelect(models, current) {
   if (input && document.activeElement !== input) {
     input.value = current || input.value || '';
   }
-  const hint = $('#ad-model-hint');
+  const hint = $('#cfg-model-hint');
   if (hint) hint.textContent = models.length ? `共 ${models.length} 个可用模型` : '';
 }
 
 function fillRegionSelect(current) {
-  const sel = $('#ad-region');
+  const sel = $('#cfg-region');
   const cities = S.cities || {};
   const entries = Object.entries(cities);
   sel.innerHTML = entries.length
@@ -163,14 +163,14 @@ function fillRegionSelect(current) {
  * ------------------------------------------------------------------ */
 
 async function fetchModels() {
-  const hint = $('#ad-model-hint');
+  const hint = $('#cfg-model-hint');
   hint.textContent = '正在拉取…';
   try {
     const d = await api('/api/admin/models', {
-      apiBase: $('#ad-base').value.trim(),
-      apiKey: $('#ad-key').value.trim() || undefined,
+      apiBase: $('#cfg-base').value.trim(),
+      apiKey: $('#cfg-key').value.trim() || undefined,
     });
-    fillModelSelect(d.models, $('#ad-model').value || S.cfg?.model);
+    fillModelSelect(d.models, $('#cfg-model').value || S.cfg?.model);
     hint.textContent = `拉取成功，共 ${d.count} 个模型`;
     toast(`获取到 ${d.count} 个模型`, 'ok');
   } catch (e) {
@@ -180,14 +180,14 @@ async function fetchModels() {
 }
 
 async function testConn() {
-  const hint = $('#ad-save-hint');
+  const hint = $('#cfg-save-hint');
   hint.textContent = '测试中，请稍候…';
   try {
     // 传当前输入框的值：改了还没保存也能直接测
     const d = await api('/api/admin/test', {
-      apiBase: $('#ad-base').value.trim() || undefined,
-      apiKey: $('#ad-key').value.trim() || undefined,
-      model: $('#ad-model').value.trim() || undefined,
+      apiBase: $('#cfg-base').value.trim() || undefined,
+      apiKey: $('#cfg-key').value.trim() || undefined,
+      model: $('#cfg-model').value.trim() || undefined,
     });
     const failedStep = (d.steps || []).find((x) => x.ok === false);
     if (d.ok === false || failedStep) {
@@ -205,21 +205,21 @@ async function testConn() {
 }
 
 async function saveApi() {
-  const hint = $('#ad-save-hint');
+  const hint = $('#cfg-save-hint');
   const body = {
-    apiBase: $('#ad-base').value.trim(),
-    model: $('#ad-model').value,
-    examRegion: $('#ad-region').value,
-    paperTemperature: Number($('#ad-tpaper').value),
-    scoreTemperature: Number($('#ad-tscore').value),
+    apiBase: $('#cfg-base').value.trim(),
+    model: $('#cfg-model').value,
+    examRegion: $('#cfg-region').value,
+    paperTemperature: Number($('#cfg-tpaper').value),
+    scoreTemperature: Number($('#cfg-tscore').value),
   };
-  const key = $('#ad-key').value.trim();
+  const key = $('#cfg-key').value.trim();
   if (key) body.apiKey = key;
   try {
     await api('/api/admin/settings', body);
     hint.textContent = '已保存 ✓';
     toast('接口配置已保存', 'ok');
-    $('#ad-key').value = '';
+    $('#cfg-key').value = '';
     await loadOverview();
   } catch (e) {
     toast('保存失败：' + e.message, 'bad', 5000);
@@ -231,15 +231,15 @@ async function saveApi() {
  * ------------------------------------------------------------------ */
 
 async function savePricing() {
-  const hint = $('#ad-price-hint');
+  const hint = $('#cfg-price-hint');
   try {
     await api('/api/admin/settings', {
       pricing: {
-        freeTrials: Number($('#ad-free').value) || 0,
-        freeTrialNote: $('#ad-free-note').value,
-        perUse: { ...(S.pricing?.perUse || {}), price: Number($('#ad-peruse').value) || 0, desc: $('#ad-peruse-desc').value },
-        monthly: { ...(S.pricing?.monthly || {}), price: Number($('#ad-monthly').value) || 0, days: Number($('#ad-days').value) || 30, desc: $('#ad-monthly-desc').value },
-        sourceNote: $('#ad-source').value,
+        freeTrials: Number($('#cfg-free').value) || 0,
+        freeTrialNote: $('#cfg-free-note').value,
+        perUse: { ...(S.pricing?.perUse || {}), price: Number($('#cfg-peruse').value) || 0, desc: $('#cfg-peruse-desc').value },
+        monthly: { ...(S.pricing?.monthly || {}), price: Number($('#cfg-monthly').value) || 0, days: Number($('#cfg-days').value) || 30, desc: $('#cfg-monthly-desc').value },
+        sourceNote: $('#cfg-source').value,
         sourceImage: currentImage || '',
       },
     });
@@ -261,7 +261,7 @@ let currentImage = '';
 
 function renderImagePreview(url) {
   currentImage = url || '';
-  const img = $('#ad-img-preview');
+  const img = $('#cfg-img-preview');
   if (!img) return;
   if (url) {
     img.src = url;
@@ -282,8 +282,8 @@ function fileToDataUrl(file) {
 }
 
 async function uploadImage() {
-  const file = $('#ad-img-file')?.files?.[0];
-  const hint = $('#ad-img-hint');
+  const file = $('#cfg-img-file')?.files?.[0];
+  const hint = $('#cfg-img-hint');
   if (!file) {
     toast('请先选择一张图片', 'warn');
     return;
@@ -310,7 +310,7 @@ async function uploadImage() {
  * ------------------------------------------------------------------ */
 
 async function exportUsers() {
-  const hint = $('#ad-user-hint');
+  const hint = $('#cfg-user-hint');
   try {
     const d = await api('/api/admin/users', { action: 'export' });
     const blob = new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' });
@@ -329,7 +329,7 @@ async function exportUsers() {
 
 async function importUsers(e) {
   const file = e.target.files?.[0];
-  const hint = $('#ad-user-hint');
+  const hint = $('#cfg-user-hint');
   if (!file) return;
   try {
     const text = await file.text();
@@ -359,7 +359,7 @@ async function importUsers(e) {
 }
 
 async function clearUsers() {
-  const hint = $('#ad-user-hint');
+  const hint = $('#cfg-user-hint');
   const first = confirm(
     '⚠️ 危险操作\n\n这会删除【所有注册用户】以及他们的登录状态，且不可撤销。\n\n建议先点「导出用户数据」做个备份。\n\n确定继续吗？'
   );
@@ -380,7 +380,7 @@ async function clearUsers() {
 }
 
 function renderCodes(codes) {
-  const tb = $('#ad-code-table tbody');
+  const tb = $('#cfg-code-table tbody');
   if (!tb) return;
   if (!codes.length) {
     tb.innerHTML = '<tr><td colspan="7" class="muted">还没有兑换码，点击上方「生成兑换码」创建。</td></tr>';
@@ -420,15 +420,15 @@ function renderCodes(codes) {
 }
 
 async function genCodes() {
-  const hint = $('#ad-code-hint');
+  const hint = $('#cfg-code-hint');
   hint.textContent = '生成中…';
   try {
     const d = await api('/api/admin/codes', {
-      type: $('#ad-code-type').value,
-      value: Number($('#ad-code-value').value) || 1,
-      count: Number($('#ad-code-count').value) || 1,
-      prefix: $('#ad-code-prefix').value.trim() || 'JMKT',
-      note: $('#ad-code-note').value.trim(),
+      type: $('#cfg-code-type').value,
+      value: Number($('#cfg-code-value').value) || 1,
+      count: Number($('#cfg-code-count').value) || 1,
+      prefix: $('#cfg-code-prefix').value.trim() || 'JMKT',
+      note: $('#cfg-code-note').value.trim(),
     });
     hint.textContent = d.message;
     toast(d.message, 'ok');
@@ -466,7 +466,7 @@ async function exportCodes() {
  * ------------------------------------------------------------------ */
 
 function renderUsers(users) {
-  const tb = $('#ad-user-table tbody');
+  const tb = $('#cfg-user-table tbody');
   if (!tb) return;
   if (!users.length) {
     tb.innerHTML = '<tr><td colspan="6" class="muted">还没有注册用户。</td></tr>';
@@ -532,7 +532,7 @@ async function userAction(patch, msg) {
  * ------------------------------------------------------------------ */
 
 function renderLogs(logs) {
-  const tb = $('#ad-log-table tbody');
+  const tb = $('#cfg-log-table tbody');
   if (!tb) return;
   tb.innerHTML = logs.length
     ? logs
@@ -625,22 +625,22 @@ async function clearActivity() {
 
 function bind() {
   $('#btn-admin-login')?.addEventListener('click', adminLogin);
-  $('#ad-pass')?.addEventListener('keydown', (e) => e.key === 'Enter' && adminLogin());
+  $('#cfg-pass')?.addEventListener('keydown', (e) => e.key === 'Enter' && adminLogin());
   $('#btn-admin-refresh')?.addEventListener('click', () => loadOverview().then(() => toast('已刷新', 'ok', 1500)));
   $('#btn-admin-models')?.addEventListener('click', fetchModels);
   $('#btn-admin-test')?.addEventListener('click', testConn);
   $('#btn-admin-save')?.addEventListener('click', saveApi);
   $('#btn-admin-save-price')?.addEventListener('click', savePricing);
   $('#btn-admin-export')?.addEventListener('click', exportUsers);
-  $('#btn-admin-import')?.addEventListener('click', () => $('#ad-import-file')?.click());
-  $('#ad-import-file')?.addEventListener('change', importUsers);
+  $('#btn-admin-import')?.addEventListener('click', () => $('#cfg-import-file')?.click());
+  $('#cfg-import-file')?.addEventListener('change', importUsers);
   $('#btn-admin-clear')?.addEventListener('click', clearUsers);
   $('#btn-admin-img-upload')?.addEventListener('click', uploadImage);
   $('#btn-admin-img-clear')?.addEventListener('click', () => {
     renderImagePreview('');
-    const f = $('#ad-img-file');
+    const f = $('#cfg-img-file');
     if (f) f.value = '';
-    const hint = $('#ad-img-hint');
+    const hint = $('#cfg-img-hint');
     if (hint) hint.textContent = '已清除，点「保存定价」后生效';
   });
   $('#btn-admin-gen')?.addEventListener('click', genCodes);

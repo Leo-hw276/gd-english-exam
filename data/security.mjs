@@ -148,7 +148,8 @@ export function isBanned(key) {
 /* ==================================================================
  *  4. 图形验证码
  *
- *  要求：图像 + 字母数字混合，校验时【大小写不敏感】（用户要求「大小写、数字一样」）。
+ *  要求：图像 + 字母数字混合，且【同时包含大写与小写字母】，
+ *  校验时【大小写敏感】——用户输入的字母大小写必须与图中完全一致。
  *  实现：纯 SVG（无 canvas 依赖，服务端直出），带干扰线与噪点，
  *  答案为内存态，5 分钟过期，一次性使用。
  * ================================================================== */
@@ -161,15 +162,31 @@ function sweepCaptchas() {
   for (const [k, v] of captchas) if (now > v.exp) captchas.delete(k);
 }
 
-// 去掉容易混淆的字符（0/O、1/I/l）
-const CAPTCHA_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+// 去掉容易混淆的字符（0/O、1/I/l），保留大小写两套字母
+const UPPER = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+const LOWER = 'abcdefghjkmnpqrstuvwxyz';
+const DIGITS = '23456789';
+
+/**
+ * 生成 4 位验证码：强制至少 1 个大写 + 1 个小写 + 1 个数字，
+ * 剩余一位从三类中随机，避免全是同一类字符。
+ */
+function pickAnswer(len = 4) {
+  const rnd = (s) => s[crypto.randomInt(s.length)];
+  const chars = [rnd(UPPER), rnd(LOWER), rnd(DIGITS)];
+  const pools = [UPPER, LOWER, DIGITS];
+  while (chars.length < len) chars.push(rnd(pools[crypto.randomInt(pools.length)]));
+  // 随机打乱位置，避免固定「大写-小写-数字」顺序被猜中
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = crypto.randomInt(i + 1);
+    [chars[i], chars[j]] = [chars[j], chars[i]];
+  }
+  return chars.join('');
+}
 
 export function createCaptcha(ip = '') {
   sweepCaptchas();
-  const len = 4;
-  let answer = '';
-  const bytes = crypto.randomBytes(len * 2);
-  for (let i = 0; i < len; i++) answer += CAPTCHA_CHARS[bytes[i] % CAPTCHA_CHARS.length];
+  const answer = pickAnswer(4);
 
   const id = crypto.randomBytes(16).toString('hex');
   captchas.set(id, { answer, exp: Date.now() + CAPTCHA_TTL_MS, ip });
@@ -180,7 +197,7 @@ export function createCaptcha(ip = '') {
 
   // 每个字符独立旋转/偏移，防止被简单切割识别
   let glyphs = '';
-  for (let i = 0; i < len; i++) {
+  for (let i = 0; i < answer.length; i++) {
     const x = 16 + i * 28 + rand(-3, 3);
     const y = 30 + rand(-4, 4);
     const rot = rand(-26, 26).toFixed(1);
@@ -218,18 +235,24 @@ export function createCaptcha(ip = '') {
 }
 
 /**
- * 校验验证码：大小写不敏感，忽略空格。
+ * 校验验证码：**大小写敏感**，字母大小写必须与图中一致（空格忽略）。
  * 无论对错都立即销毁该 id（防重放）。
  */
 export function verifyCaptcha(id, input, ip = '') {
   sweepCaptchas();
   const rec = captchas.get(String(id || ''));
-  if (!rec) return { ok: false, error: '验证码已过期，请点击刷新' };
+  if (!rec) return { ok: false, error: '验证码已过期，请点击图片刷新' };
   captchas.delete(String(id));
   if (rec.ip && ip && rec.ip !== ip) return { ok: false, error: '验证码与当前设备不匹配，请刷新重试' };
-  const norm = (s) => String(s || '').replace(/\s+/g, '').toUpperCase();
+  const norm = (s) => String(s || '').replace(/\s+/g, '');
   if (!norm(input)) return { ok: false, error: '请输入图形验证码' };
-  if (norm(input) !== norm(rec.answer)) return { ok: false, error: '验证码不正确' };
+  if (norm(input) !== norm(rec.answer)) {
+    // 大小写写错时给出明确提示，避免用户以为是 bug
+    if (norm(input).toUpperCase() === norm(rec.answer).toUpperCase()) {
+      return { ok: false, error: '验证码大小写不正确，请输入已保存的验证码重试' };
+    }
+    return { ok: false, error: '验证码不正确' };
+  }
   return { ok: true };
 }
 

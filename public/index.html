@@ -6,7 +6,7 @@
 <title>广东中考英语听说考试 · 在线模拟练习</title>
 <meta name="description" content="严格按照广东省江门市中考英语听说考试（人机对话）官方题型与评分标准设计的在线模拟练习系统，AI 自动组卷、录音作答、满分 30 分智能评分。" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%233538cd'/%3E%3Ctext x='50' y='68' font-size='54' text-anchor='middle' fill='white' font-family='sans-serif' font-weight='bold'%3E%E5%90%AC%3C/text%3E%3C/svg%3E" />
-<link rel="stylesheet" href="/styles.css" />
+<link rel="stylesheet" href="/styles.css?v=20251024b" />
 </head>
 <body>
 
@@ -145,6 +145,15 @@
             <span class="muted">本部分满分</span>
             <b id="nav-max">—</b>
           </div>
+          <div class="row between" style="font-size:13px;margin-top:10px">
+            <span class="muted">播报倍速</span>
+            <select id="inp-speed" class="speed-select">
+              <option value="0.75">0.75×</option>
+              <option value="1" selected>1.0×</option>
+              <option value="1.25">1.25×</option>
+              <option value="1.5">1.5×</option>
+            </select>
+          </div>
           <button class="btn ghost sm" id="btn-quit" style="width:100%;margin-top:12px">结束并评分</button>
         </div>
       </aside>
@@ -231,8 +240,8 @@
         <input type="password" id="li-pass" placeholder="至少 6 位" autocomplete="current-password" />
         <div class="row captcha-row" style="margin-top:12px;align-items:flex-end">
           <div style="flex:1;min-width:120px">
-            <label class="muted">验证码</label>
-            <input type="text" id="li-captcha" placeholder="输入图中字符" autocomplete="off" maxlength="6" style="text-transform:uppercase" />
+            <label class="muted">验证码（区分大小写）</label>
+            <input type="text" id="li-captcha" placeholder="照图中大小写输入" autocomplete="off" maxlength="6" autocapitalize="off" spellcheck="false" />
           </div>
           <div class="captcha-img" id="li-captcha-img" title="点击刷新"></div>
         </div>
@@ -254,8 +263,8 @@
         <input type="password" id="rg-pass" placeholder="至少 6 位" autocomplete="new-password" />
         <div class="row captcha-row" style="margin-top:12px;align-items:flex-end">
           <div style="flex:1;min-width:120px">
-            <label class="muted">验证码</label>
-            <input type="text" id="rg-captcha" placeholder="输入图中字符" autocomplete="off" maxlength="6" style="text-transform:uppercase" />
+            <label class="muted">验证码（区分大小写）</label>
+            <input type="text" id="rg-captcha" placeholder="照图中大小写输入" autocomplete="off" maxlength="6" autocapitalize="off" spellcheck="false" />
           </div>
           <div class="captcha-img" id="rg-captcha-img" title="点击刷新"></div>
         </div>
@@ -339,7 +348,7 @@
         登录后即可在「AI 接口配置」里填写 <b>v1 接口地址、API Key、选择模型</b>（全部保存在网站数据库，保存即生效，不依赖部署平台环境变量）。
       </p>
       <div class="row">
-        <input type="password" id="ad-pass" placeholder="请输入密码" style="flex:1;min-width:220px" />
+        <input type="password" id="cfg-pass" placeholder="请输入密码" style="flex:1;min-width:220px" />
         <button class="btn" id="btn-admin-login">确认</button>
       </div>
     </div>
@@ -350,46 +359,48 @@
         <p class="muted">
           v1 接口地址、API 密钥、模型选择全部在网站后台完成并保存到数据库，<b>不依赖部署平台的环境变量</b>，保存后立即生效。
         </p>
-        <div id="ad-env-source" class="muted" style="font-size:12.5px;margin-bottom:14px"></div>
+        <div id="cfg-env-source" class="muted" style="font-size:12.5px;margin-bottom:14px"></div>
         <div class="row">
           <div style="flex:1;min-width:260px">
             <label class="muted">v1 接口地址（Base URL，漏填 /v1 会自动补全）</label>
-            <input type="text" id="ad-base" placeholder="https://api.hcnsec.cn/v1" />
+            <input type="text" id="cfg-base" placeholder="https://api.hcnsec.cn/v1"
+                   style="display:block;width:100%;height:42px;visibility:visible;opacity:1" />
           </div>
         </div>
         <div class="row" style="margin-top:12px">
           <div style="flex:1;min-width:260px">
             <label class="muted">API Key（留空则保持当前 Key 不变）</label>
-            <input type="password" id="ad-key" placeholder="sk-..." />
+            <input type="password" id="cfg-key" placeholder="sk-..."
+                   style="display:block;width:100%;height:42px;visibility:visible;opacity:1" />
           </div>
         </div>
         <div class="row" style="margin-top:14px">
           <button class="btn ghost" id="btn-admin-models">拉取模型列表</button>
           <button class="btn ghost" id="btn-admin-test">测试连通性</button>
-          <span class="muted" id="ad-model-hint"></span>
+          <span class="muted" id="cfg-model-hint"></span>
         </div>
         <div style="margin-top:14px">
           <label class="muted">模型（可下拉选择，也可直接输入模型名）</label>
-          <input type="text" id="ad-model" list="ad-model-list" style="width:100%;margin-top:6px" placeholder="先点「拉取模型列表」，或直接输入模型名" />
-          <datalist id="ad-model-list"></datalist>
+          <input type="text" id="cfg-model" list="ad-model-list" style="width:100%;margin-top:6px" placeholder="先点「拉取模型列表」，或直接输入模型名" />
+          <datalist id="cfg-model-list"></datalist>
         </div>
         <div class="row" style="margin-top:14px">
           <div style="min-width:150px">
             <label class="muted">组卷温度</label>
-            <input type="number" id="ad-tpaper" step="0.05" min="0" max="2" />
+            <input type="number" id="cfg-tpaper" step="0.05" min="0" max="2" />
           </div>
           <div style="min-width:150px">
             <label class="muted">评分温度</label>
-            <input type="number" id="ad-tscore" step="0.05" min="0" max="2" />
+            <input type="number" id="cfg-tscore" step="0.05" min="0" max="2" />
           </div>
           <div style="min-width:150px">
             <label class="muted">默认考区</label>
-            <select id="ad-region"></select>
+            <select id="cfg-region"></select>
           </div>
         </div>
         <div class="row" style="margin-top:16px">
           <button class="btn" id="btn-admin-save">保存接口配置</button>
-          <span class="muted" id="ad-save-hint"></span>
+          <span class="muted" id="cfg-save-hint"></span>
         </div>
       </div>
 
@@ -405,38 +416,38 @@
         <h2>定价设置</h2>
         <p class="muted">这里的定价会实时展示在网站「收费标准」页面。</p>
         <div class="row">
-          <div style="min-width:150px"><label class="muted">新用户免费次数</label><input type="number" id="ad-free" min="0" /></div>
-          <div style="min-width:150px"><label class="muted">次卡单价（元/次）</label><input type="number" id="ad-peruse" step="0.1" min="0" /></div>
-          <div style="min-width:150px"><label class="muted">月卡单价（元）</label><input type="number" id="ad-monthly" step="0.1" min="0" /></div>
-          <div style="min-width:150px"><label class="muted">月卡天数</label><input type="number" id="ad-days" min="1" /></div>
+          <div style="min-width:150px"><label class="muted">新用户免费次数</label><input type="number" id="cfg-free" min="0" /></div>
+          <div style="min-width:150px"><label class="muted">次卡单价（元/次）</label><input type="number" id="cfg-peruse" step="0.1" min="0" /></div>
+          <div style="min-width:150px"><label class="muted">月卡单价（元）</label><input type="number" id="cfg-monthly" step="0.1" min="0" /></div>
+          <div style="min-width:150px"><label class="muted">月卡天数</label><input type="number" id="cfg-days" min="1" /></div>
         </div>
         <div style="margin-top:12px">
-          <label class="muted">次卡说明</label><input type="text" id="ad-peruse-desc" />
+          <label class="muted">次卡说明</label><input type="text" id="cfg-peruse-desc" />
         </div>
         <div style="margin-top:12px">
-          <label class="muted">月卡说明</label><input type="text" id="ad-monthly-desc" />
+          <label class="muted">月卡说明</label><input type="text" id="cfg-monthly-desc" />
         </div>
         <div style="margin-top:12px">
-          <label class="muted">免费赠送说明</label><input type="text" id="ad-free-note" />
+          <label class="muted">免费赠送说明</label><input type="text" id="cfg-free-note" />
         </div>
         <div style="margin-top:12px">
-          <label class="muted">定价来源 / 说明（展示在收费页）</label><textarea id="ad-source" rows="3"></textarea>
+          <label class="muted">定价来源 / 说明（展示在收费页）</label><textarea id="cfg-source" rows="3"></textarea>
         </div>
 
         <div style="margin-top:14px">
           <label class="muted">定价说明配图（可选，展示在收费页底部）</label>
           <div class="row" style="margin-top:8px">
-            <input type="file" id="ad-img-file" accept="image/png,image/jpeg,image/webp,image/gif" />
+            <input type="file" id="cfg-img-file" accept="image/png,image/jpeg,image/webp,image/gif" />
             <button class="btn ghost sm" id="btn-admin-img-upload">上传图片</button>
             <button class="btn ghost sm" id="btn-admin-img-clear">清除图片</button>
-            <span class="muted" id="ad-img-hint">支持 PNG / JPG / WebP，≤3MB</span>
+            <span class="muted" id="cfg-img-hint">支持 PNG / JPG / WebP，≤3MB</span>
           </div>
-          <img id="ad-img-preview" class="ad-img-preview" alt="" style="display:none" />
+          <img id="cfg-img-preview" class="cfg-img-preview" alt="" style="display:none" />
         </div>
 
         <div class="row" style="margin-top:16px">
           <button class="btn" id="btn-admin-save-price">保存定价</button>
-          <span class="muted" id="ad-price-hint"></span>
+          <span class="muted" id="cfg-price-hint"></span>
         </div>
       </div>
 
@@ -446,23 +457,23 @@
         <div class="row">
           <div style="min-width:170px">
             <label class="muted">类型</label>
-            <select id="ad-code-type">
+            <select id="cfg-code-type">
               <option value="credits">次卡次数</option>
               <option value="monthly">月卡天数</option>
             </select>
           </div>
-          <div style="min-width:130px"><label class="muted">额度</label><input type="number" id="ad-code-value" value="5" min="1" /></div>
-          <div style="min-width:130px"><label class="muted">生成数量</label><input type="number" id="ad-code-count" value="10" min="1" max="500" /></div>
-          <div style="min-width:130px"><label class="muted">前缀</label><input type="text" id="ad-code-prefix" value="JMKT" maxlength="8" /></div>
-          <div style="flex:1;min-width:180px"><label class="muted">备注</label><input type="text" id="ad-code-note" placeholder="例如：朋友圈推广" /></div>
+          <div style="min-width:130px"><label class="muted">额度</label><input type="number" id="cfg-code-value" value="5" min="1" /></div>
+          <div style="min-width:130px"><label class="muted">生成数量</label><input type="number" id="cfg-code-count" value="10" min="1" max="500" /></div>
+          <div style="min-width:130px"><label class="muted">前缀</label><input type="text" id="cfg-code-prefix" value="JMKT" maxlength="8" /></div>
+          <div style="flex:1;min-width:180px"><label class="muted">备注</label><input type="text" id="cfg-code-note" placeholder="例如：朋友圈推广" /></div>
         </div>
         <div class="row" style="margin-top:16px">
           <button class="btn" id="btn-admin-gen">生成兑换码</button>
           <button class="btn ghost" id="btn-admin-export">导出未使用兑换码（CSV）</button>
-          <span class="muted" id="ad-code-hint"></span>
+          <span class="muted" id="cfg-code-hint"></span>
         </div>
         <div style="margin-top:14px;max-height:340px;overflow:auto">
-          <table class="spec" id="ad-code-table">
+          <table class="spec" id="cfg-code-table">
             <thead><tr><th>兑换码</th><th>类型</th><th>额度</th><th>状态</th><th>使用人</th><th>备注</th><th></th></tr></thead>
             <tbody></tbody>
           </table>
@@ -474,12 +485,12 @@
         <div class="row" style="margin-bottom:12px;gap:8px">
           <button class="btn ghost sm" id="btn-admin-export">⬇️ 导出用户数据</button>
           <button class="btn ghost sm" id="btn-admin-import">⬆️ 导入用户数据</button>
-          <input type="file" id="ad-import-file" accept="application/json,.json" style="display:none" />
+          <input type="file" id="cfg-import-file" accept="application/json,.json" style="display:none" />
           <button class="btn danger sm" id="btn-admin-clear">🗑 一键清空用户</button>
-          <span class="muted" id="ad-user-hint"></span>
+          <span class="muted" id="cfg-user-hint"></span>
         </div>
         <div style="max-height:360px;overflow:auto">
-          <table class="spec" id="ad-user-table">
+          <table class="spec" id="cfg-user-table">
             <thead><tr><th>邮箱</th><th>额度</th><th>免费余</th><th>会员到期</th><th>已考</th><th>操作</th></tr></thead>
             <tbody></tbody>
           </table>
@@ -489,7 +500,7 @@
       <div class="card">
         <h2>流水日志</h2>
         <div style="max-height:280px;overflow:auto">
-          <table class="spec" id="ad-log-table">
+          <table class="spec" id="cfg-log-table">
             <thead><tr><th style="width:160px">时间</th><th style="width:120px">动作</th><th>详情</th></tr></thead>
             <tbody></tbody>
           </table>
@@ -537,7 +548,7 @@
 
 <div id="toast"></div>
 
-<script type="module" src="/js/app.js"></script>
-<script type="module" src="/js/admin.js"></script>
+<script type="module" src="/js/app.js?v=20251024b"></script>
+<script type="module" src="/js/admin.js?v=20251024b"></script>
 </body>
 </html>

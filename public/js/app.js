@@ -9,7 +9,7 @@
  *   三、信息转述及询问 第二节 询问信息 每题 准备 15s → 提问 8s
  */
 
-import { Tts, Recorder, openMic, micTest, startCue, stopCue, audioCtx, listMicrophones } from './audio.js';
+import { Tts, Recorder, openMic, micTest, startCue, stopCue, audioCtx, listMicrophones, countdownBeeps } from './audio.js';
 import { Asr, AsrStatus, isAsrSupported, alignWords } from './speech.js';
 import { drawWave, bindWavePlayer } from './wave.js';
 
@@ -416,13 +416,25 @@ async function runEnvCheck() {
     ok: typeof window.MediaRecorder !== 'undefined',
   });
 
-  const hasTts = Tts.available();
-  const voice = hasTts ? Tts.pickVoice() : null;
+  // 语音合成：自动降级链（浏览器原生 → 服务端 edge-tts）
   items.push({
     k: '语音合成（播放考试录音）',
-    v: hasTts ? (voice ? `可用 · ${voice.name}` : '可用（未找到英语发音人，音质可能不佳）') : '不支持',
-    ok: hasTts && Boolean(voice),
+    v: Tts.statusText(),
+    ok: Tts.mode() !== 'none',
   });
+  const pillTts = $('#pill-tts');
+  if (pillTts) {
+    if (Tts.mode() === 'native') {
+      pillTts.textContent = 'TTS：本地语音';
+      pillTts.className = 'pill ok';
+    } else if (Tts.mode() === 'server') {
+      pillTts.textContent = 'TTS：服务端音频';
+      pillTts.className = 'pill ok';
+    } else {
+      pillTts.textContent = 'TTS：不可用';
+      pillTts.className = 'pill bad';
+    }
+  }
 
   let asrNote;
   if (!isAsrSupported()) asrNote = '不支持 —— 将启用「纯声学评分」模式';
@@ -619,6 +631,22 @@ async function recordAnswer({ seconds, key, label = '录音中', note = '', canF
 
   // 关键：确保上一段考试录音彻底停下，绝不与录音作答重叠
   await Tts.stopNow();
+
+  // ① 3.5 秒「滴滴」提示音 + 倒计时进度条
+  await countdownBeeps({
+    totalMs: 3500,
+    onTick: (p) => {
+      const box = $('#playstate');
+      if (box) {
+        box.innerHTML =
+          `<b>请准备录音…</b><div class="progress-bar countdown" style="margin-top:8px">` +
+          `<div class="fill" style="width:${Math.round(p * 100)}%"></div></div>`;
+      }
+    },
+  });
+
+  // ② 语音播报「开始录音」，播报结束才开启麦克风采集
+  await Tts.speak('Please start recording now.', { rate: Tts.getSpeed() });
   await startCue();
 
   if (!S.micStream) throw new Error('麦克风未就绪');
@@ -665,20 +693,44 @@ async function recordAnswer({ seconds, key, label = '录音中', note = '', canF
 
   setRecState(false, result === 'cancelled' ? '已提前结束' : '录音结束');
   await stopCue();
+  // ④ 录音结束语音播报
+  await Tts.speak('Recording finished.', { rate: Tts.getSpeed() });
 
   const asrText = asr.stop();
-  const { blobUrl, metrics, envelope } = await rec.stop();
+  const { blob, blobUrl, metrics, envelope } = await rec.stop();
   S.recording = null;
 
   markKey(key, 'done');
 
+  // 原生识别没拿到文字（不支持/被拒/网络不可达）→ 上传录音走服务端转写兜底
+  let transcript = asrText || '';
+  if (!transcript && blob && blob.size > 2000) {
+    transcript = await transcribeOnServer(blob);
+  }
+
   return {
-    transcript: asrText || '',
+    transcript: transcript || '',
     metrics,
     envelope,
     audioUrl: blobUrl,
     endedEarly: result === 'cancelled',
   };
+}
+
+/** 服务端转写兜底：失败时静默返回空串，交卷仍可走纯声学评分 */
+async function transcribeOnServer(blob) {
+  try {
+    const r = await fetch('/api/asr', {
+      method: 'POST',
+      headers: { 'Content-Type': blob.type || 'audio/webm' },
+      body: blob,
+    });
+    if (!r.ok) return '';
+    const j = await r.json().catch(() => null);
+    return (j && j.ok && j.text) || '';
+  } catch {
+    return '';
+  }
 }
 
 const recMountHtml = () => `
@@ -713,6 +765,41 @@ async function playListening(text, times, { label = '正在播放录音', asLine
 }
 
 /* ==================================================================
+ *  题干播报（真实考场也是语音播报题目要求）
+ * ================================================================== */
+
+/**
+ * 朗读大题题干与作答要求（英文），走 TTS 降级链并受全局倍速控制。
+ * @param {string} text 英文播报内容
+ */
+async function announceRequirement(text, { label = '正在播报题目要求' } = {}) {
+  if (!text) return;
+  setPhase(label, 'brand');
+  const box = $('#playstate');
+  if (box) box.innerHTML = `<b>正在播报题目要求…</b>`;
+  await Tts.speak(text, { rate: Tts.getSpeed() });
+}
+
+/** 供各小节使用的播报文案 */
+const SAY = {
+  p1: (prepareSec, recordSec) =>
+    `Part one. Read aloud. Listen to the passage twice, then you will have ${prepareSec} seconds to prepare, ` +
+    `and ${recordSec} seconds to read it aloud. Please read clearly and fluently.`,
+  p2: (n) =>
+    `Part two. Listen and choose the correct information. Question ${n}. ` +
+    `You have ten seconds to read the question, and eight seconds to answer.`,
+  p3: () =>
+    `Part three. Listen and answer the questions. You will hear the recording twice. ` +
+    `You have fifteen seconds to read the four questions. Short answers are fine.`,
+  p4: (recordSec) =>
+    `Part four. Retell the information. You will hear the passage twice. ` +
+    `Please retell it with all the key points in ${recordSec} seconds. You have fifteen seconds to read the outline.`,
+  p5: () =>
+    `Part five. Ask a question. Please ask one question in English. ` +
+    `You have fifteen seconds to prepare, and eight seconds to ask.`,
+};
+
+/* ==================================================================
  *  第一部分：模仿朗读
  * ================================================================== */
 
@@ -742,6 +829,9 @@ async function runReadAloud() {
   markKey('p1', 'active');
   $('#nav-current').textContent = '模仿朗读';
   $('#nav-max').textContent = '6 分';
+
+  // 每大题开始前自动播报题干与作答要求
+  await announceRequirement(SAY.p1(cfg.prepareSec, cfg.recordSec));
 
   await playListening(p, cfg.playTimes, { label: '正在播放范文录音' });
 
@@ -835,6 +925,8 @@ async function runChooseInfo() {
     $('#nav-current').textContent = `听选信息（第 ${si + 1} 段）`;
     $('#nav-max').textContent = '9 分';
 
+    await announceRequirement(SAY.p2(si * 2 + 1));
+
     setPhase('阅题中', 'warn');
     renderRecPanel('#rec-mount', { timerText: 10, note: '阅题时间：看清 3 个备选答案' });
     setRecState(false, '阅题中');
@@ -893,6 +985,8 @@ async function runAnswerQuestions() {
   $('#nav-current').textContent = '回答问题';
   $('#nav-max').textContent = '6 分';
 
+  await announceRequirement(SAY.p3());
+
   setPhase('读题中', 'warn');
   renderRecPanel('#rec-mount', { timerText: 15, note: '读题时间：抓住每个疑问词' });
   setRecState(false, '读题中');
@@ -948,6 +1042,8 @@ async function runRetell() {
   $('#nav-current').textContent = '信息转述';
   $('#nav-max').textContent = '6 分';
 
+  await announceRequirement(SAY.p4(cfg.recordSec));
+
   setPhase('读题中', 'warn');
   renderRecPanel('#rec-mount', { timerText: 15, note: '读题时间：把 5 个要点串成一条线' });
   setRecState(false, '读题中');
@@ -1000,6 +1096,8 @@ async function runAskQuestions() {
     $('#nav-current').textContent = `询问信息（第 ${i + 1} 题）`;
     $('#nav-max').textContent = '3 分';
     markKey(`k${n}`, 'active');
+
+    await announceRequirement(SAY.p5());
 
     setPhase('准备中', 'warn');
     renderRecPanel('#rec-mount', { timerText: 15, note: '注意疑问词和语序' });
@@ -1678,6 +1776,24 @@ function bind() {
   $('#li-pass')?.addEventListener('keydown', (e) => e.key === 'Enter' && doLogin());
   $('#rg-pass')?.addEventListener('keydown', (e) => e.key === 'Enter' && doRegister());
   $('#rd-code')?.addEventListener('keydown', (e) => e.key === 'Enter' && doRedeem());
+
+  // 全局播报倍速：原生语音用 rate，服务端音频用 playbackRate，两条通路都生效
+  const speedSel = $('#inp-speed');
+  if (speedSel) {
+    const saved = Number(localStorage.getItem('jmkt-speed') || 1);
+    const init = [0.75, 1, 1.25, 1.5].includes(saved) ? saved : 1;
+    speedSel.value = String(init);
+    Tts.setSpeed(init);
+    const applySpeed = (v) => {
+      Tts.setSpeed(v);
+      localStorage.setItem('jmkt-speed', String(v));
+      // 已存在的回放音频同步调速
+      $$('audio').forEach((a) => {
+        try { a.playbackRate = v; } catch {}
+      });
+    };
+    speedSel.addEventListener('change', () => applySpeed(Number(speedSel.value) || 1));
+  }
 
   $('#auth-tabs')?.addEventListener('click', (e) => {
     const btn = e.target.closest('.tab');
