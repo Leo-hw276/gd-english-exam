@@ -7,7 +7,11 @@
  */
 
 /* ==================================================================
- *  1. 语音合成 —— 播放考试录音
+ *  1. 语音合成 —— TTS 自动降级
+ *
+ *  优先：浏览器原生 speechSynthesis（en-US / en-GB 音色）
+ *  降级：服务端 /api/tts（Edge-TTS），用户无感知
+ *  自检时分别标注状态。
  * ================================================================== */
 
 const PREFERRED_VOICES = [
@@ -24,22 +28,56 @@ const PREFERRED_VOICES = [
 
 export const Tts = {
   _voices: [],
+  _mode: 'unknown',     // 'native' | 'server' | 'none'
+  _speed: 1,            // 全局倍速
 
   init() {
-    if (!('speechSynthesis' in window)) return;
-    const load = () => {
-      this._voices = window.speechSynthesis.getVoices() || [];
-    };
-    load();
-    window.speechSynthesis.onvoiceschanged = load;
+    if ('speechSynthesis' in window) {
+      const load = () => {
+        this._voices = window.speechSynthesis.getVoices() || [];
+        this._detectMode();
+      };
+      load();
+      window.speechSynthesis.onvoiceschanged = load;
+    }
+    this._detectMode();
   },
 
+  _detectMode() {
+    if ('speechSynthesis' in window) {
+      const v = this.pickVoice();
+      if (v) {
+        this._mode = 'native';
+        return;
+      }
+    }
+    // 无原生 → 回退服务端
+    this._mode = 'server';
+  },
+
+  /** 当前模式 */
+  mode() { return this._mode; },
+
+  /** 设置全局语速（0.5~2.0） */
+  setSpeed(s) { this._speed = Math.max(0.25, Math.min(3, Number(s) || 1)); },
+  getSpeed() { return this._speed; },
+
   available() {
-    return 'speechSynthesis' in window;
+    return this._mode !== 'none';
+  },
+
+  /** 自检描述 */
+  statusText() {
+    if (this._mode === 'native') {
+      const v = this.pickVoice();
+      return `语音合成 ✅ 使用浏览器本地语音（${v?.name || 'en-US'}）`;
+    }
+    if (this._mode === 'server') return '语音合成 ✅ 使用服务端音频播放';
+    return '语音合成 ❌ 不可用';
   },
 
   voices() {
-    if (!this._voices.length) this._voices = window.speechSynthesis.getVoices() || [];
+    if (!this._voices.length) this._voices = window.speechSynthesis?.getVoices() || [];
     return this._voices;
   },
 
@@ -54,6 +92,7 @@ export const Tts = {
     const en = all.filter((v) => /^en([-_]|$)/i.test(v.lang || ''));
     return (
       en.find((v) => /en[-_]US/i.test(v.lang)) ||
+      en.find((v) => /en[-_]GB/i.test(v.lang)) ||
       en[0] ||
       all.find((v) => /en/i.test(v.lang || '')) ||
       null
@@ -62,22 +101,20 @@ export const Tts = {
 
   /**
    * 朗读一段英文，返回 Promise（真正读完才 resolve）
-   *
-   * 注意：部分浏览器 speechSynthesis 的 onend 事件不可靠（有时不触发），
-   * 而录音一旦开始、朗读却还在继续，就会出现「我已经开始答题了它还在读」的串音。
-   * 因此这里用三重保险确保「读完才返回」：
-   *   ① onend / onerror
-   *   ② 轮询 synth.speaking / synth.pending 连续两次空闲
-   *   ③ 按词数估算的硬上限兜底
-   * 并且每次开始前都先 cancel()，杜绝多条语音叠着读。
+   * 自动选择原生 or 服务端通路。
    */
-  speak(text, { rate = 0.95, pitch = 1 } = {}) {
+  speak(text, { rate, pitch = 1, voice } = {}) {
+    const speed = rate ?? this._speed;
+    if (this._mode === 'native') return this._speakNative(text, { rate: speed, pitch });
+    return this._speakServer(text, { speed });
+  },
+
+  /** 原生 speechSynthesis 朗读（三重保险确保读完才返回） */
+  _speakNative(text, { rate = 0.95, pitch = 1 } = {}) {
     return new Promise((resolve) => {
-      if (!this.available() || !text) return resolve();
+      if (!('speechSynthesis' in window) || !text) return resolve();
       const synth = window.speechSynthesis;
-      try {
-        synth.cancel();
-      } catch {}
+      try { synth.cancel(); } catch {}
 
       const str = String(text);
       const words = str.trim().split(/\s+/).filter(Boolean).length;
@@ -107,36 +144,62 @@ export const Tts = {
       };
 
       u.onend = finish;
-      u.onerror = finish;
+      u.onerror = (e) => {
+        // 原生失败 → 降级到服务端
+        if (!settled) {
+          settled = true;
+          clearInterval(poll);
+          clearTimeout(hardCap);
+          this._mode = 'server';
+          this._speakServer(text, { speed: rate }).then(resolve);
+        }
+      };
 
-      // 硬上限：英文朗读约 400ms/词（rate=1），留足余量
       hardCap = setTimeout(finish, Math.max(12000, words * 620 + 8000));
 
-      // 轮询兜底：连续两次确认引擎已空闲即视为读完
       poll = setInterval(() => {
         if (settled) return;
-        if (synth.speaking || synth.pending) {
-          idle = 0;
-        } else if (++idle >= 2) {
-          finish();
-        }
+        if (synth.speaking || synth.pending) { idle = 0; }
+        else if (++idle >= 2) finish();
       }, 250);
 
+      try { synth.speak(u); } catch { finish(); }
+    });
+  },
+
+  /** 服务端 edge-tts 朗读 */
+  _speakServer(text, { speed = 1, voice = 'en-US-AriaNeural' } = {}) {
+    return new Promise(async (resolve) => {
+      if (!text) return resolve();
       try {
-        synth.speak(u);
-      } catch {
-        finish();
+        const r = await fetch('/api/tts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text, voice, speed }),
+        });
+        if (!r.ok) {
+          console.warn('[tts] 服务端合成失败:', r.status);
+          this._mode = 'none';
+          return resolve();
+        }
+        const blob = await r.blob();
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        audio.playbackRate = speed;
+        audio.onended = () => { URL.revokeObjectURL(url); resolve(); };
+        audio.onerror = () => { URL.revokeObjectURL(url); resolve(); };
+        await audio.play();
+      } catch (e) {
+        console.warn('[tts] 服务端请求失败:', e.message);
+        resolve();
       }
     });
   },
 
   cancel() {
-    try {
-      window.speechSynthesis?.cancel();
-    } catch {}
+    try { window.speechSynthesis?.cancel(); } catch {}
   },
 
-  /** 立刻停止朗读并等待引擎真正静音（录音前务必调用） */
   async stopNow() {
     this.cancel();
     const synth = window.speechSynthesis;
@@ -186,6 +249,44 @@ export function beep({ freq = 880, durMs = 130, gain = 0.09 } = {}) {
 
 export const startCue = () => beep({ freq: 920, durMs: 140 });
 export const stopCue = () => beep({ freq: 620, durMs: 180 });
+
+/**
+ * 播放 3~4 秒的「滴滴」提示音序列（模拟考场倒计时），
+ * 每 500ms 滴一声，最后一声频率升高表示开始。
+ * @param {(progress01:number) => void} [onTick] 进度回调（0→1）
+ * @param {number} [totalMs=3500] 总时长
+ */
+export async function countdownBeeps({ onTick, totalMs = 3500 } = {}) {
+  const INTERVAL = 500;
+  const count = Math.round(totalMs / INTERVAL);
+  for (let i = 0; i < count; i++) {
+    const isLast = i === count - 1;
+    await beep({ freq: isLast ? 1200 : 800, durMs: isLast ? 200 : 110, gain: 0.1 });
+    onTick?.((i + 1) / count);
+    if (!isLast) await new Promise((r) => setTimeout(r, INTERVAL - 140));
+  }
+}
+
+/**
+ * 完整录音前准备序列：
+ *  1. 滴滴倒计时（3.5s）+ 进度条
+ *  2. TTS 播报 "Please start recording now."
+ *  3. 播报结束后 resolve → 调用方打开麦克风
+ */
+export async function recordingPrepare({ onProgress } = {}) {
+  await countdownBeeps({ onTick: (p) => onProgress?.(p * 0.7), totalMs: 3500 });
+  onProgress?.(0.75);
+  await Tts.speak('Please start recording now.', { rate: Tts.getSpeed() });
+  onProgress?.(1);
+}
+
+/**
+ * 录音结束后的播报序列
+ */
+export async function recordingFinish() {
+  await stopCue();
+  await Tts.speak('Recording finished.', { rate: Tts.getSpeed() });
+}
 
 /* ==================================================================
  *  3. 麦克风 & 录音

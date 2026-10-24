@@ -29,11 +29,56 @@ import {
   FALLBACK_PAPER,
 } from './data/exam-spec.mjs';
 
+import {
+  clientIp,
+  ipPrefix,
+  parseUa,
+  rateLimit,
+  isBanned,
+  banKey,
+  createCaptcha,
+  verifyCaptcha,
+  riskScore,
+  makeActivityStore,
+} from './data/security.mjs';
+
+import { synthesize as edgeTts, rateStr as ttsRateStr, setCacheDir as setTtsCacheDir, VOICES as TTS_VOICES } from './data/edge-tts.mjs';
+
 import { CITY_PROFILES, DEFAULT_CITY, cityProfile } from './data/exam-spec.mjs';
 import * as DB from './data/store.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, 'public');
+
+/* ---------- 活动审计日志（登录/注册/朗读/风控事件）---------- */
+const Activity = makeActivityStore((events) => {
+  try {
+    const db0 = DB.data();
+    db0.activity = events;
+    DB.save();
+  } catch {}
+});
+// 从持久化数据中恢复
+try { Activity.load(DB.data().activity); } catch {}
+
+/* ---------- Edge-TTS 缓存目录 ---------- */
+try { setTtsCacheDir(path.join(__dirname, 'data', 'tts-cache')); } catch {}
+
+/* ---------- 限流预设 ---------- */
+const RL = {
+  // 注册：每 IP 每 10 分钟最多 5 次
+  register: (ip) => rateLimit(`reg:${ip}`, { windowMs: 10 * 60_000, max: 5 }),
+  // 登录：每 IP 每 5 分钟最多 10 次
+  login: (ip) => rateLimit(`login:${ip}`, { windowMs: 5 * 60_000, max: 10 }),
+  // 验证码请求：每 IP 每分钟最多 20 次
+  captcha: (ip) => rateLimit(`cap:${ip}`, { windowMs: 60_000, max: 20 }),
+  // 组卷：每用户每分钟 3 次
+  paper: (uid) => rateLimit(`paper:${uid}`, { windowMs: 60_000, max: 3 }),
+  // 通用 API：每 IP 每分钟 120 次
+  api: (ip) => rateLimit(`api:${ip}`, { windowMs: 60_000, max: 120 }),
+  // TTS：每 IP 每分钟 40 次
+  tts: (ip) => rateLimit(`tts:${ip}`, { windowMs: 60_000, max: 40 }),
+};
 
 /* ---------------------------- 配置 ---------------------------- */
 
@@ -1221,19 +1266,43 @@ async function jsonBody(req) {
 /* ---------------- 用户认证 ---------------- */
 
 async function handleRegister(req, res) {
+  const ip = clientIp(req);
+  const ua = req.headers['user-agent'] || '';
+
+  // 限流
+  if (isBanned(ip)) return sendJson(res, 429, { ok: false, error: '操作过于频繁，请稍后再试' });
+  const rl = RL.register(ip);
+  if (!rl.ok) return sendJson(res, 429, { ok: false, error: `注册过于频繁，请 ${rl.retryAfterSec} 秒后重试` });
+
   const b = await jsonBody(req);
   const email = String(b.email || '').trim().toLowerCase();
   const password = String(b.password || '');
   const name = String(b.name || '').trim();
 
+  // 验证码校验
+  const cap = verifyCaptcha(b.captchaId, b.captchaCode, ip);
+  if (!cap.ok) return sendJson(res, 400, { ok: false, error: cap.error });
+
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return sendJson(res, 400, { ok: false, error: '邮箱格式不正确' });
   if (password.length < 6) return sendJson(res, 400, { ok: false, error: '密码至少 6 位' });
   if (DB.findUserByEmail(email)) return sendJson(res, 409, { ok: false, error: '该邮箱已注册，请直接登录' });
+
+  // 风控评分
+  const recent = Activity.query({ kind: 'register', ip, since: Date.now() - 30 * 60_000 });
+  const risk = riskScore({ ip, ua, email, recentSameIp: recent.length });
+  if (risk.score >= 70) {
+    banKey(ip, 10 * 60_000);
+    Activity.push({ kind: 'blocked', action: 'register', ip, ua: parseUa(ua).raw, email, detail: risk.reasons.join('；') });
+    return sendJson(res, 403, { ok: false, error: '检测到异常注册行为，请稍后重试或联系管理员' });
+  }
 
   const user = DB.createUser({ email, password, name });
   const token = DB.createSession(user.id, 'user');
   setSessionCookie(res, token);
   const p = DB.getSettings().pricing;
+
+  Activity.push({ kind: 'register', action: 'ok', userId: user.id, email, ip, ...parseUa(ua), riskScore: risk.score });
+
   sendJson(res, 200, {
     ok: true,
     token,
@@ -1243,20 +1312,38 @@ async function handleRegister(req, res) {
 }
 
 async function handleLogin(req, res) {
+  const ip = clientIp(req);
+  const ua = req.headers['user-agent'] || '';
+
+  if (isBanned(ip)) return sendJson(res, 429, { ok: false, error: '操作过于频繁，请稍后再试' });
+  const rl = RL.login(ip);
+  if (!rl.ok) return sendJson(res, 429, { ok: false, error: `登录过于频繁，请 ${rl.retryAfterSec} 秒后重试` });
+
   const b = await jsonBody(req);
   const email = String(b.email || '').trim().toLowerCase();
   const password = String(b.password || '');
+
+  // 验证码校验
+  const cap = verifyCaptcha(b.captchaId, b.captchaCode, ip);
+  if (!cap.ok) return sendJson(res, 400, { ok: false, error: cap.error });
+
   const user = DB.findUserByEmail(email);
   if (!user || !DB.verifyPassword(password, user.passHash)) {
+    Activity.push({ kind: 'login', action: 'fail', ip, ...parseUa(ua), email, detail: '密码错误' });
+    // 连续失败 5 次 → 临时封 3 分钟
+    const fails = Activity.query({ kind: 'login', action: 'fail', ip, since: Date.now() - 3 * 60_000 });
+    if (fails.length >= 5) banKey(ip, 3 * 60_000);
     return sendJson(res, 401, { ok: false, error: '邮箱或密码错误' });
   }
   if (user.disabled) return sendJson(res, 403, { ok: false, error: '账号已被停用，请联系管理员' });
   user.lastLoginAt = Date.now();
   DB.save();
 
-  // 管理员会话独立于用户会话（不同 Cookie），互不覆盖
   const token = DB.createSession(user.id, 'user');
   setSessionCookie(res, token, 'user');
+
+  Activity.push({ kind: 'login', action: 'ok', userId: user.id, email, ip, ...parseUa(ua) });
+
   sendJson(res, 200, { ok: true, token, admin: false, user: DB.publicUser(user) });
 }
 
@@ -1719,6 +1806,79 @@ async function handleAdminUsersLegacyRemoved() {
   /* 旧实现已合并到上面的 handleAdminUsers */
 }
 
+/* ---------------- 验证码 ---------------- */
+
+function handleCaptcha(req, res) {
+  const ip = clientIp(req);
+  const rl = RL.captcha(ip);
+  if (!rl.ok) return sendJson(res, 429, { ok: false, error: '验证码请求过于频繁' });
+  const cap = createCaptcha(ip);
+  sendJson(res, 200, { ok: true, id: cap.id, svg: cap.svg, ttlSec: cap.ttlSec });
+}
+
+/* ---------------- Edge-TTS 语音合成 ---------------- */
+
+async function handleTts(req, res) {
+  const ip = clientIp(req);
+  const rl = RL.tts(ip);
+  if (!rl.ok) {
+    res.writeHead(429, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ ok: false, error: '语音合成请求过于频繁' }));
+  }
+  const b = await jsonBody(req);
+  const text = String(b.text || '').trim().slice(0, 2000);
+  if (!text) return sendJson(res, 400, { ok: false, error: '文本不能为空' });
+  const voice = TTS_VOICES[b.voice] ? b.voice : 'en-US-AriaNeural';
+  const rate = ttsRateStr(b.speed || 1);
+  try {
+    const mp3 = await edgeTts(text, { voice, rate });
+    res.writeHead(200, {
+      'Content-Type': 'audio/mpeg',
+      'Content-Length': mp3.length,
+      'Cache-Control': 'public, max-age=86400',
+    });
+    res.end(mp3);
+  } catch (e) {
+    console.warn('[tts]', e.message);
+    sendJson(res, 502, { ok: false, error: '语音合成失败：' + e.message });
+  }
+}
+
+function handleTtsVoices(req, res) {
+  sendJson(res, 200, { ok: true, voices: TTS_VOICES });
+}
+
+/* ---------------- 管理员活动日志 ---------------- */
+
+async function handleAdminActivity(req, res) {
+  if (!requireAdmin(req, res)) return;
+  if (req.method === 'POST') {
+    const b = await jsonBody(req);
+    if (b.action === 'clear') {
+      const n = Activity.clear();
+      return sendJson(res, 200, { ok: true, cleared: n });
+    }
+    if (b.action === 'stats') {
+      return sendJson(res, 200, { ok: true, stats: Activity.stats({ since: Number(b.since) || 0 }) });
+    }
+    // 筛选查询
+    const list = Activity.query({
+      kind: b.kind || '',
+      userId: b.userId || '',
+      ip: b.ip || '',
+      q: b.q || '',
+      since: Number(b.since) || 0,
+      until: Number(b.until) || 0,
+      limit: Number(b.limit) || 200,
+    });
+    return sendJson(res, 200, { ok: true, events: list, total: list.length });
+  }
+  // GET: 返回最近 200 条 + 统计
+  const events = Activity.query({ limit: 200 });
+  const stats = Activity.stats({ since: Date.now() - 24 * 3600_000 });
+  sendJson(res, 200, { ok: true, events, stats });
+}
+
 
 /* ---------------------------- 启动 ---------------------------- */
 
@@ -1741,11 +1901,24 @@ const server = http.createServer((req, res) => {
 
   const route = async () => {
     const cfg = getCfg();
+    const ip = clientIp(req);
+
+    // 全局限流（每 IP 每分钟 120 次 API 调用）
+    if (p.startsWith('/api/')) {
+      if (isBanned(ip)) return sendJson(res, 429, { ok: false, error: '请求过于频繁，已临时限制访问' });
+      const rl = RL.api(ip);
+      if (!rl.ok) return sendJson(res, 429, { ok: false, error: `请求过于频繁，请 ${rl.retryAfterSec} 秒后重试` });
+    }
 
     // ---------- 公开 ----------
     if (p === '/api/health') return handleHealth(req, res, cfg);
     if (p === '/api/pricing') return sendJson(res, 200, { ok: true, pricing: DB.getSettings().pricing });
     if (p === '/api/spec') return sendJson(res, 200, { ok: true, exam: EXAM, cities: CITY_PROFILES });
+    if (p === '/api/captcha') return handleCaptcha(req, res);
+
+    // ---------- TTS（语音合成，公开但限流）----------
+    if (p === '/api/tts' && req.method === 'POST') return handleTts(req, res);
+    if (p === '/api/tts/voices') return handleTtsVoices(req, res);
 
     // ---------- 认证 ----------
     if (p === '/api/auth/register' && req.method === 'POST') return handleRegister(req, res);
@@ -1775,6 +1948,7 @@ const server = http.createServer((req, res) => {
     if (p === '/api/admin/upload' && req.method === 'POST') return handleAdminUpload(req, res);
     if (p === '/api/admin/codes') return handleAdminCodes(req, res);
     if (p === '/api/admin/users') return handleAdminUsers(req, res);
+    if (p === '/api/admin/activity') return handleAdminActivity(req, res);
 
     // 已上传的图片（定价说明配图等）
     if (p.startsWith('/uploads/')) return serveUpload(res, p);

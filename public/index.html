@@ -229,6 +229,14 @@
         <input type="email" id="li-email" placeholder="you@example.com" autocomplete="username" />
         <label class="muted" style="margin-top:12px">密码</label>
         <input type="password" id="li-pass" placeholder="至少 6 位" autocomplete="current-password" />
+        <div class="row captcha-row" style="margin-top:12px;align-items:flex-end">
+          <div style="flex:1;min-width:120px">
+            <label class="muted">验证码</label>
+            <input type="text" id="li-captcha" placeholder="输入图中字符" autocomplete="off" maxlength="6" style="text-transform:uppercase" />
+          </div>
+          <div class="captcha-img" id="li-captcha-img" title="点击刷新"></div>
+        </div>
+        <input type="hidden" id="li-captcha-id" />
         <div class="row" style="margin-top:16px">
           <button class="btn" id="btn-login">登录</button>
           <span class="muted">还没有账号？点上方「注册」，新用户送 <b id="li-free">2</b> 次免费听说模拟</span>
@@ -244,6 +252,14 @@
         <input type="email" id="rg-email" placeholder="you@example.com" autocomplete="username" />
         <label class="muted" style="margin-top:12px">密码</label>
         <input type="password" id="rg-pass" placeholder="至少 6 位" autocomplete="new-password" />
+        <div class="row captcha-row" style="margin-top:12px;align-items:flex-end">
+          <div style="flex:1;min-width:120px">
+            <label class="muted">验证码</label>
+            <input type="text" id="rg-captcha" placeholder="输入图中字符" autocomplete="off" maxlength="6" style="text-transform:uppercase" />
+          </div>
+          <div class="captcha-img" id="rg-captcha-img" title="点击刷新"></div>
+        </div>
+        <input type="hidden" id="rg-captcha-id" />
         <div class="row" style="margin-top:16px">
           <button class="btn" id="btn-register">注册并领取免费次数</button>
         </div>
@@ -329,15 +345,7 @@
     </div>
 
     <div id="admin-panel" style="display:none">
-      <div class="card">
-        <div class="row between">
-          <h2 style="margin:0">数据概览</h2>
-          <button class="btn ghost sm" id="btn-admin-refresh">刷新</button>
-        </div>
-        <div class="stat-grid" id="admin-stats" style="margin-top:14px"></div>
-      </div>
-
-      <div class="card">
+      <div class="card" id="card-ai-config">
         <h2>AI 接口配置</h2>
         <p class="muted">
           v1 接口地址、API 密钥、模型选择全部在网站后台完成并保存到数据库，<b>不依赖部署平台的环境变量</b>，保存后立即生效。
@@ -383,6 +391,14 @@
           <button class="btn" id="btn-admin-save">保存接口配置</button>
           <span class="muted" id="ad-save-hint"></span>
         </div>
+      </div>
+
+      <div class="card">
+        <div class="row between">
+          <h2 style="margin:0">数据概览</h2>
+          <button class="btn ghost sm" id="btn-admin-refresh">刷新</button>
+        </div>
+        <div class="stat-grid" id="admin-stats" style="margin-top:14px"></div>
       </div>
 
       <div class="card">
@@ -475,6 +491,41 @@
         <div style="max-height:280px;overflow:auto">
           <table class="spec" id="ad-log-table">
             <thead><tr><th style="width:160px">时间</th><th style="width:120px">动作</th><th>详情</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card" id="card-activity">
+        <div class="row between" style="margin-bottom:10px">
+          <h2 style="margin:0">安全审计日志</h2>
+          <div class="row" style="gap:6px">
+            <select id="act-kind" style="font-size:13px;padding:3px 8px;border-radius:6px;border:1px solid #d0d5dd">
+              <option value="">全部类型</option>
+              <option value="login">登录</option>
+              <option value="register">注册</option>
+              <option value="read">朗读</option>
+              <option value="blocked">被拦截</option>
+            </select>
+            <input type="text" id="act-search" placeholder="搜 IP / 邮箱 / 关键字" style="width:180px;font-size:13px" />
+            <button class="btn ghost sm" id="btn-act-query">查询</button>
+            <button class="btn ghost sm" id="btn-act-stats">统计</button>
+            <button class="btn danger sm" id="btn-act-clear">清空</button>
+          </div>
+        </div>
+        <div id="act-stats-box" style="display:none;margin-bottom:10px;font-size:13px;color:var(--ink-2);"></div>
+        <div style="max-height:400px;overflow:auto">
+          <table class="spec" id="act-table">
+            <thead><tr>
+              <th style="width:140px">时间</th>
+              <th style="width:70px">类型</th>
+              <th style="width:60px">结果</th>
+              <th>邮箱 / 用户</th>
+              <th style="width:120px">IP</th>
+              <th style="width:90px">浏览器</th>
+              <th style="width:70px">系统</th>
+              <th>详情</th>
+            </tr></thead>
             <tbody></tbody>
           </table>
         </div>

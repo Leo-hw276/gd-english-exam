@@ -42,14 +42,33 @@ const fmtDate = (t) => (t ? new Date(t).toLocaleDateString('zh-CN') : '—');
 async function adminLogin() {
   const pw = $('#ad-pass').value;
   if (!pw) return toast('请输入密码', 'warn');
+  const btn = $('#btn-admin-login');
+  const old = btn ? btn.textContent : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '登录中…';
+  }
   try {
-    const d = await api('/api/admin/login', { account: 'admin', password: pw });
-    toast('已进入后台', 'ok');
+    await api('/api/admin/login', { account: 'admin', password: pw });
     $('#ad-pass').value = '';
-    await loadOverview();
+    // 登录已成功：先把面板打开（配置卡片是静态 HTML，立刻可见可用），
+    // 再去读数据。这样即使部署平台冷启动慢、读取超时，也不会看不到接口配置。
+    $('#admin-login-card').style.display = 'none';
+    $('#admin-panel').style.display = '';
     adminReady = true;
+    toast('已进入后台', 'ok');
+    await loadOverview();
   } catch (e) {
-    toast('登录失败：' + e.message, 'bad', 5000);
+    if (e.status === 401 || e.status === 403) {
+      toast('密码不正确', 'bad', 5000);
+    } else {
+      toast('登录请求失败：' + e.message + '（部署平台首次访问较慢，请稍后重试）', 'bad', 7000);
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = old || '确认';
+    }
   }
 }
 
@@ -529,6 +548,78 @@ function renderLogs(logs) {
 }
 
 /* ------------------------------------------------------------------ *
+ *  安全审计日志
+ * ------------------------------------------------------------------ */
+
+const fmtKind = (k) => ({ login: '登录', register: '注册', read: '朗读', blocked: '拦截' }[k] || k);
+
+function renderActivity(events) {
+  const tb = $('#act-table tbody');
+  if (!tb) return;
+  if (!events || !events.length) {
+    tb.innerHTML = '<tr><td colspan="8" class="muted" style="text-align:center">暂无记录</td></tr>';
+    return;
+  }
+  tb.innerHTML = events.map((e) => {
+    const cls = e.action === 'fail' ? ' style="color:#ef4444"' : e.kind === 'blocked' ? ' style="color:#f59e0b"' : '';
+    return `<tr>
+      <td>${fmtTime(e.at)}</td>
+      <td>${esc(fmtKind(e.kind))}</td>
+      <td${cls}>${esc(e.action || '')}</td>
+      <td>${esc(e.email || e.userId || '')}</td>
+      <td>${esc(e.ip || '')}</td>
+      <td>${esc(e.browser || '')}</td>
+      <td>${esc(e.os || '')}</td>
+      <td>${esc(e.detail || e.text || '').slice(0, 60)}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function queryActivity() {
+  try {
+    const d = await api('/api/admin/activity', {
+      kind: $('#act-kind')?.value || '',
+      q: $('#act-search')?.value?.trim() || '',
+      limit: 300,
+    });
+    renderActivity(d.events || []);
+    toast(`查询到 ${(d.events || []).length} 条记录`, 'ok', 2000);
+  } catch (e) {
+    toast('查询失败：' + e.message, 'bad');
+  }
+}
+
+async function activityStats() {
+  try {
+    const d = await api('/api/admin/activity', { action: 'stats', since: Date.now() - 24 * 3600_000 });
+    const s = d.stats || {};
+    const box = $('#act-stats-box');
+    if (!box) return;
+    box.style.display = '';
+    let html = `<b>24 小时统计</b>：共 ${s.total} 条 · 登录 ${s.logins} · 注册 ${s.registers} · 朗读 ${s.reads} · 疑似机器人 ${s.bots}`;
+    if (s.topIps?.length) {
+      html += '<br>高频 IP：' + s.topIps.slice(0, 5).map((x) => `${esc(x.key)}（${x.count} 次${x.bots ? '，含 ' + x.bots + ' 次机器人' : ''}）`).join('、');
+    }
+    box.innerHTML = html;
+  } catch (e) {
+    toast('统计失败：' + e.message, 'bad');
+  }
+}
+
+async function clearActivity() {
+  if (!confirm('确定清空全部审计日志？此操作不可恢复。')) return;
+  try {
+    const d = await api('/api/admin/activity', { action: 'clear' });
+    toast(`已清空 ${d.cleared} 条日志`, 'ok');
+    renderActivity([]);
+    const box = $('#act-stats-box');
+    if (box) box.style.display = 'none';
+  } catch (e) {
+    toast('清空失败：' + e.message, 'bad');
+  }
+}
+
+/* ------------------------------------------------------------------ *
  *  绑定
  * ------------------------------------------------------------------ */
 
@@ -554,6 +645,12 @@ function bind() {
   });
   $('#btn-admin-gen')?.addEventListener('click', genCodes);
   $('#btn-admin-export')?.addEventListener('click', exportCodes);
+
+  // 活动日志
+  $('#btn-act-query')?.addEventListener('click', queryActivity);
+  $('#btn-act-stats')?.addEventListener('click', activityStats);
+  $('#btn-act-clear')?.addEventListener('click', clearActivity);
+  $('#act-search')?.addEventListener('keydown', (e) => e.key === 'Enter' && queryActivity());
 }
 
 bind();

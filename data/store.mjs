@@ -115,6 +115,7 @@ const EMPTY_DB = () => ({
   codes: [],
   logs: [],
   orders: [],
+  activity: [],   // 登录 / 注册 / 朗读等活动审计（含 IP、浏览器）
 });
 
 let db = null;

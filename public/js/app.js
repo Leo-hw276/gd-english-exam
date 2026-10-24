@@ -62,6 +62,7 @@ export function showScreen(id) {
   $$('.topnav a').forEach((a) => a.classList.toggle('active', a.dataset.goto === id));
   if (id === 'screen-account') renderAccount();
   if (id === 'screen-pricing') renderPricing();
+  if (id === 'screen-auth') refreshAllCaptchas();
 }
 
 /* ==================================================================
@@ -191,12 +192,32 @@ function renderQuotaHint() {
   }
 }
 
+/* ---------- 验证码 ---------- */
+
+async function loadCaptcha(imgEl, idEl) {
+  try {
+    const d = await api('/api/captcha', undefined, 'GET');
+    if (imgEl) imgEl.innerHTML = d.svg || '';
+    if (idEl) idEl.value = d.id || '';
+  } catch {
+    if (imgEl) imgEl.innerHTML = '<span style="font-size:11px;color:#888">加载失败，点击重试</span>';
+  }
+}
+
+function refreshAllCaptchas() {
+  loadCaptcha($('#li-captcha-img'), $('#li-captcha-id'));
+  loadCaptcha($('#rg-captcha-img'), $('#rg-captcha-id'));
+}
+
 export async function doLogin() {
   const email = $('#li-email').value.trim();
   const password = $('#li-pass').value;
+  const captchaId = $('#li-captcha-id')?.value || '';
+  const captchaCode = $('#li-captcha')?.value?.trim() || '';
   if (!email || !password) return toast('请填写邮箱和密码', 'warn');
+  if (!captchaCode) return toast('请输入验证码', 'warn');
   try {
-    const d = await api('/api/auth/login', { email, password });
+    const d = await api('/api/auth/login', { email, password, captchaId, captchaCode });
     S.user = d.user;
     S.isAdmin = Boolean(d.admin);
     await refreshMe();
@@ -204,6 +225,8 @@ export async function doLogin() {
     showScreen('screen-intro');
   } catch (e) {
     toast('登录失败：' + e.message, 'bad', 5000);
+    loadCaptcha($('#li-captcha-img'), $('#li-captcha-id'));
+    if ($('#li-captcha')) $('#li-captcha').value = '';
   }
 }
 
@@ -211,16 +234,21 @@ export async function doRegister() {
   const email = $('#rg-email').value.trim();
   const password = $('#rg-pass').value;
   const name = $('#rg-name').value.trim();
+  const captchaId = $('#rg-captcha-id')?.value || '';
+  const captchaCode = $('#rg-captcha')?.value?.trim() || '';
   if (!email || !password) return toast('请填写邮箱和密码', 'warn');
   if (password.length < 6) return toast('密码至少 6 位', 'warn');
+  if (!captchaCode) return toast('请输入验证码', 'warn');
   try {
-    const d = await api('/api/auth/register', { email, password, name });
+    const d = await api('/api/auth/register', { email, password, name, captchaId, captchaCode });
     S.user = d.user;
     await refreshMe();
     toast(d.message || '注册成功！', 'ok', 5000);
     showScreen('screen-intro');
   } catch (e) {
     toast('注册失败：' + e.message, 'bad', 5000);
+    loadCaptcha($('#rg-captcha-img'), $('#rg-captcha-id'));
+    if ($('#rg-captcha')) $('#rg-captcha').value = '';
   }
 }
 
@@ -1465,10 +1493,49 @@ async function startExam({ offline = false } = {}) {
 
   showScreen('screen-exam');
   renderStage({ idx: '—', title: '正在组卷', body: '', phase: '生成中' });
-  busy(offline ? '正在载入内置示例卷…' : 'DeepSeek 正在按官方题型自动命题…', '三大题 · 五小节 · 14 小题 · 满分 30 分');
+
+  // 百分比进度条覆层
+  const progressOverlay = showOverlay(
+    `<div class="spinner"></div>
+     <h3 style="margin-bottom:8px">${esc(offline ? '正在载入内置示例卷…' : 'DeepSeek 正在按官方题型自动命题…')}</h3>
+     <p class="muted" style="margin:0 0 12px">三大题 · 五小节 · 14 小题 · 满分 30 分</p>
+     <div class="progress-bar"><div class="fill" id="paper-progress-fill"></div></div>
+     <div class="progress-text" id="paper-progress-text">准备中…</div>`);
+
+  // 模拟进度（实际请求是单次 API，用定时器平滑推进到 90%，收到响应后跳到 100%）
+  let pct = 0;
+  const fill = () => document.getElementById('paper-progress-fill');
+  const txt = () => document.getElementById('paper-progress-text');
+  const setProgress = (p, label) => {
+    pct = p;
+    const f = fill(); if (f) f.style.width = `${Math.round(p)}%`;
+    const t = txt(); if (t) t.textContent = label || `${Math.round(p)}%`;
+  };
+  const stages = [
+    [8, '正在连接 AI 模型…'],
+    [18, '正在分析题型要求…'],
+    [32, '正在生成模仿朗读材料…'],
+    [46, '正在生成听选信息题…'],
+    [58, '正在生成回答问题…'],
+    [70, '正在生成信息转述…'],
+    [82, '正在生成询问信息…'],
+    [90, '正在校验试卷结构…'],
+  ];
+  let si = 0;
+  const ticker = setInterval(() => {
+    if (si < stages.length) {
+      setProgress(stages[si][0], stages[si][1]);
+      si++;
+    } else if (pct < 92) {
+      setProgress(pct + 0.3, '正在等待 AI 响应…');
+    }
+  }, offline ? 200 : 2800);
 
   try {
     const data = await api('/api/paper', { topic, difficulty, offline });
+    clearInterval(ticker);
+    setProgress(100, '组卷完成 ✓');
+    await new Promise((r) => setTimeout(r, 400));
     hideOverlay();
     if (!data.paper) throw new Error('未取得试卷');
     S.paper = data.paper;
@@ -1476,6 +1543,7 @@ async function startExam({ offline = false } = {}) {
     toast(`组卷完成：话题「${S.paper.topic}」`, 'ok');
     await runFullExam();
   } catch (e) {
+    clearInterval(ticker);
     hideOverlay();
     if (e.status === 401) {
       toast('请先登录后再开始考试', 'warn', 4500);
@@ -1597,6 +1665,11 @@ function bind() {
   $('#btn-register').onclick = doRegister;
   $('#btn-logout').onclick = doLogout;
   $('#btn-redeem').onclick = doRedeem;
+
+  // 验证码：点击图片刷新 + 切换 tab 时刷新
+  $('#li-captcha-img')?.addEventListener('click', () => loadCaptcha($('#li-captcha-img'), $('#li-captcha-id')));
+  $('#rg-captcha-img')?.addEventListener('click', () => loadCaptcha($('#rg-captcha-img'), $('#rg-captcha-id')));
+  $('#li-captcha')?.addEventListener('keydown', (e) => e.key === 'Enter' && doLogin());
   $('#brand-home').onclick = (e) => {
     e.preventDefault();
     showScreen('screen-intro');
