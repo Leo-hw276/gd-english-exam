@@ -1,121 +1,78 @@
-/**
- * 评分链路实测：用一份「高分考生」的模拟作答调用 /api/score
- * 目的：验证三路并行 AI 评分 → 30 分制换算 → 档位判定是否合理。
- */
-const BASE = 'http://127.0.0.1:8777';
-const fs = await import('node:fs');
+/** 验证评分：转写为空但确实完整朗读时，不应给 0-1 分 */
+const BASE = process.env.SITE || 'http://127.0.0.1:8777';
+const j = async (u, opt) => {
+  const r = await fetch(BASE + u, opt);
+  const t = await r.text();
+  let d = null;
+  try { d = JSON.parse(t); } catch { d = { raw: t.slice(0, 300) }; }
+  return { status: r.status, d };
+};
 
-// ---- 1. 建号并登录 ----
-const email = `score${Date.now()}@example.com`;
-const reg = await fetch(BASE + '/api/auth/register', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ email, password: 'score123456', name: '高分考生' }),
+async function captcha() {
+  const { d } = await j('/api/captcha');
+  const glyphs = [...String(d.svg || '').matchAll(/<text[^>]*>([^<]+)<\/text>/g)].map((m) => m[1]);
+  return { id: d.id, code: glyphs.join('') };
+}
+
+const email = `score_test_${Date.now()}@example.com`;
+const c1 = await captcha();
+const reg = await j('/api/auth/register', {
+  method: 'POST', headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ email, password: 'test123456', captchaId: c1.id, captchaCode: c1.code }),
 });
-const { token } = await reg.json();
-const H = { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token };
-console.log('账号:', email);
+if (reg.status !== 200) { console.log('注册失败', reg.status, JSON.stringify(reg.d).slice(0, 300)); process.exit(1); }
+const token = reg.d.token;
+console.log('注册成功:', email);
 
-// ---- 2. 取试卷（内置示例卷，内容稳定）----
-const pr = await fetch(BASE + '/api/paper', { method: 'POST', headers: H, body: JSON.stringify({ offline: true }) });
-const { paper } = await pr.json();
-console.log('话题:', paper.topic);
-
-// ---- 3. 构造「高分考生」作答 ----
-const now = Date.now();
-function goodMetrics(sec) {
-  return {
-    durationMs: sec * 1000,
-    speechMs: Math.round(sec * 780),
-    voicedRatio: 0.78,
-    pauseCount: 1,
-    longestPauseMs: 400,
-    meanPauseMs: 400,
-    meanRms: 0.05,
-    peakRms: 0.2,
-    noiseFloor: 0.002,
-    wordsPerMinute: 128,
-  };
-}
-
-// 朗读：直接用范文原文（满分内容）
-const readAloudAns = { transcript: paper.readAloud.passage, metrics: goodMetrics(48) };
-
-// 听选信息：选正确选项（题目结构为 { q, options, answerIndex, evidence }）
-const chooseInfo = paper.chooseInfo.map((seg) =>
-  seg.questions.map((q) => ({
-    transcript: q.options?.[q.answerIndex] || q.options?.[0] || '',
-    metrics: goodMetrics(5),
-  }))
-);
-
-// 回答问题：用 answer / keyPoints 字段
-const answerQuestions = paper.answerQuestions.questions.map((q) => ({
-  transcript: [q.answer, ...(q.keyPoints || [])].filter(Boolean).join(' '),
-  metrics: goodMetrics(6),
-}));
-
-// 信息转述：直接用独白原文（内容覆盖满分）
-const retellAns = { transcript: paper.retell.script, metrics: goodMetrics(55) };
-
-// 询问信息：用参考问句
-const askQuestions = paper.askQuestions.map((a) => ({ transcript: a.reference || a.en || '', metrics: goodMetrics(6) }));
-
-console.log('\n作答准备完毕，开始调用 /api/score（三路并行 AI 评分，约需 40–90 秒）…\n');
-const t0 = Date.now();
-
-const sr = await fetch(BASE + '/api/score', {
-  method: 'POST',
-  headers: H,
-  body: JSON.stringify({
-    paper: {
-      topic: paper.topic,
-      readAloud: paper.readAloud,
-      chooseInfo: paper.chooseInfo,
-      answerQuestions: paper.answerQuestions,
-      retell: paper.retell,
-      askQuestions: paper.askQuestions,
-    },
-    answers: { readAloud: readAloudAns, chooseInfo, answerQuestions, retell: retellAns, askQuestions },
-  }),
+const paper = await j('/api/paper', {
+  method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+  body: JSON.stringify({ topic: '', difficulty: '标准', offline: true }),
 });
+if (paper.status !== 200) { console.log('组卷失败', paper.status, JSON.stringify(paper.d).slice(0, 300)); process.exit(1); }
+const P = paper.d.paper;
+const words = String(P.readAloud.passage || '').trim().split(/\s+/).filter(Boolean).length;
+const expectSec = Math.round((words / 130) * 60);
+console.log(`试卷来源=${P.source} 朗读短文 ${words} 词，正常读完约 ${expectSec} 秒`);
 
-const text = await sr.text();
-let r;
-try {
-  r = JSON.parse(text);
-} catch {
-  console.log('非 JSON 响应:', text.slice(0, 500));
-  process.exit(1);
+const metrics = {
+  durationMs: 58000,
+  speechMs: 52000,
+  voicedRatio: 0.9,
+  pauseCount: 4,
+  longestPauseMs: 900,
+  meanPauseMs: 450,
+  meanRms: 0.05,
+  peakRms: 0.18,
+};
+const answers = {
+  readAloud: { transcript: '', metrics },
+  chooseInfo: P.chooseInfo.map((s) => s.questions.map(() => ({ transcript: '', metrics }))),
+  answerQuestions: P.answerQuestions.questions.map(() => ({ transcript: '', metrics })),
+  retell: { transcript: '', metrics },
+  askQuestions: P.askQuestions.map(() => ({ transcript: '', metrics })),
+};
+
+const sc = await j('/api/score', {
+  method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+  body: JSON.stringify({ paper: P, answers }),
+});
+console.log('\n评分 HTTP', sc.status);
+if (sc.status !== 200) { console.log(JSON.stringify(sc.d).slice(0, 800)); process.exit(1); }
+
+const r = sc.d;
+console.log('返回字段:', Object.keys(r).join(', '));
+console.log('总分:', r.total, '/', r.maxTotal, ' 评分模式:', r.scoringMode);
+console.log('breakdown:', JSON.stringify(r.breakdown));
+console.log('warnings:', JSON.stringify(r.warnings || []).slice(0, 300));
+const ra = r.detail?.readAloud || r.detail?.['模仿朗读'] || null;
+if (ra) {
+  console.log('朗读得分:', ra.score, '/', ra.max, '  档位:', ra.band);
+  console.log('朗读评语:', String(ra.overall || '').slice(0, 160));
+} else {
+  console.log('detail keys:', Object.keys(r.detail || {}).join(', '));
+  console.log('detail 预览:', JSON.stringify(r.detail).slice(0, 500));
 }
-
-if (r.ok === false) {
-  console.log('FAIL 评分接口:', r.error);
-  process.exit(1);
-}
-
-console.log(`PASS  评分完成（${((Date.now() - t0) / 1000).toFixed(1)}s）`);
-console.log('  总分 :', r.total, '/ 30   →', r.grade?.label);
-console.log('  模型 :', r.model);
-console.log('  分部 :', JSON.stringify(r.breakdown));
-
-const sum = Object.values(r.breakdown || {}).reduce((a, b) => a + b, 0);
-console.log(`  算术校验: 各分部之和 = ${sum.toFixed(1)}，总分 = ${r.total} → ${Math.abs(sum - r.total) < 0.11 ? 'PASS 一致' : 'FAIL 不一致'}`);
-
-// 关键结论
-const checks = [
-  ['总分在 0–30 之间', r.total >= 0 && r.total <= 30],
-  ['朗读得分为正（满分内容）', (r.breakdown?.readAloud || 0) > 3],
-  ['听选信息得分为正', (r.breakdown?.chooseInfo || 0) > 4],
-  ['信息转述得分为正', (r.breakdown?.retell || 0) > 3],
-  ['朗读有分档', Boolean(r.detail?.readAloud?.band)],
-  ['转述有三维度', Boolean(r.detail?.retell?.content && r.detail?.retell?.fluency)],
-  ['询问信息有参考问句', Boolean(r.detail?.askQuestions?.[0]?.reference)],
-];
-console.log('');
-checks.forEach(([n, ok]) => console.log(`${ok ? 'PASS' : 'FAIL'}  ${n}`));
-
-if (r.warnings?.length) console.log('\n  提示:', r.warnings.join('；'));
-
-fs.writeFileSync('scratch/score-report.json', JSON.stringify(r, null, 2), 'utf8');
-console.log('\n完整报告已存至 scratch/score-report.json');
+const raScore = ra?.score ?? r.breakdown?.readAloud ?? 0;
+const ok = raScore >= 3;
+console.log(ok ? '\n通过：完整朗读（即使无转写）拿到了合理分数' : '\n未通过：分数仍然偏低');
+process.exit(ok ? 0 : 1);

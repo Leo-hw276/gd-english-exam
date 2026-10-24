@@ -70,8 +70,9 @@ const RL = {
   register: (ip) => rateLimit(`reg:${ip}`, { windowMs: 10 * 60_000, max: 5 }),
   // 登录：每 IP 每 5 分钟最多 10 次
   login: (ip) => rateLimit(`login:${ip}`, { windowMs: 5 * 60_000, max: 10 }),
-  // 验证码请求：每 IP 每分钟最多 30 次（用户可能反复刷新）
-  captcha: (ip) => rateLimit(`cap:${ip}`, { windowMs: 60_000, max: 30 }),
+  // 验证码请求：每 IP 每分钟最多 120 次
+  // 学校机房多台设备共用一个出口 IP，限得太死会导致整班同学都刷不出验证码
+  captcha: (ip) => rateLimit(`cap:${ip}`, { windowMs: 60_000, max: 120 }),
   // 组卷：每用户每分钟 3 次
   paper: (uid) => rateLimit(`paper:${uid}`, { windowMs: 60_000, max: 3 }),
   // 通用 API：每 IP 每分钟 120 次
@@ -797,9 +798,31 @@ function localReadAloud(paper, answers) {
   const transcript = answers?.readAloud?.transcript || '';
   const metrics = answers?.readAloud?.metrics || null;
 
+  const words = wordList(passage).length;
+  const speechMs = num(metrics?.speechMs, 0);
+  const voicedRatio = num(metrics?.voicedRatio, 0);
+  const pauseCount = num(metrics?.pauseCount, 0);
+  const expectMs = words ? Math.round((words / 130) * 60000) : 0;
+  const durRatio = expectMs ? speechMs / expectMs : 0;
+  // 没有转写，但确实持续朗读了一段合理时长 → 属于识别不可用，不是没读
+  const spokeWithoutAsr = !transcript && voicedRatio >= 0.3 && durRatio >= 0.5;
+
   const acc = transcript ? seqAccuracy(passage, transcript) : 0;
   const aq = transcript ? acousticQuality(metrics) : 0;
-  const ratio = clamp(acc * 0.65 + aq * 0.35, 0, 1);
+
+  let ratio;
+  if (transcript) {
+    ratio = clamp(acc * 0.65 + aq * 0.35, 0, 1);
+  } else if (spokeWithoutAsr) {
+    // 仅凭声学指标估分：读完整篇 + 发声连贯 + 停顿少
+    const durScore = clamp(durRatio, 0, 1);
+    const fluency = clamp(voicedRatio / 0.75, 0, 1);
+    const pausePenalty = clamp(1 - pauseCount / Math.max(6, Math.round(words / 12)), 0, 1);
+    ratio = clamp(0.5 * durScore + 0.3 * fluency + 0.2 * pausePenalty, 0, 1) * 0.8;
+  } else {
+    ratio = 0;
+  }
+
   const score = round1(clamp(ratio * SCORE_TABLE.readAloud, 0, SCORE_TABLE.readAloud));
 
   const band = bandOf(score, 6, [
@@ -825,15 +848,27 @@ function localReadAloud(paper, answers) {
       ? `逐词比对正确率约 ${Math.round(acc * 100)}%，发声占比 ${Math.round((metrics?.voicedRatio || 0) * 100)}%。${
           missed.length ? `有 ${missed.length} 个实词疑似漏读。` : '全文覆盖完整。'
         }`
-      : '本次未识别到有效朗读内容，请确认麦克风正常并靠近麦克风清晰朗读。',
+      : spokeWithoutAsr
+      ? `本次未能获取语音转写，按音频特征评分：发声 ${Math.round(speechMs / 1000)} 秒、发声占比 ${Math.round(
+          voicedRatio * 100
+        )}%、停顿 ${pauseCount} 次。`
+      : '本次未检测到有效朗读，请确认麦克风正常并靠近麦克风清晰朗读。',
     dimensions: {
-      pronunciation: { score: round1(clamp(acc * 3, 0, 3)), max: 3, comment: '依据逐词比对计算的音素命中率' },
+      pronunciation: {
+        score: round1(clamp(transcript ? acc * 3 : ratio * 3, 0, 3)),
+        max: 3,
+        comment: transcript ? '依据逐词比对计算的音素命中率' : '未获得转写，按发声连贯度估算',
+      },
       intonation: { score: round1(intonation), max: 1.5, comment: '依据停顿密度估计的节奏表现' },
-      fluency: { score: round1(clamp(aq * 1.5, 0, 1.5)), max: 1.5, comment: '依据语速与停顿次数估计' },
+      fluency: {
+        score: round1(clamp((transcript ? aq : clamp(voicedRatio / 0.75, 0, 1)) * 1.5, 0, 1.5)),
+        max: 1.5,
+        comment: '依据语速与停顿次数估计',
+      },
     },
     wordAnalysis: { accuracy: round1(acc * 100) / 100, mispronounced: [], missed },
     suggestions: [
-      transcript ? '' : '全程没有识别到语音，先做一次麦克风试音，确认设备正常。',
+      transcript || spokeWithoutAsr ? '' : '没有检测到朗读声音，请先做一次麦克风试音，确认设备正常。',
       missed.length ? `重点补练这些词：${missed.slice(0, 8).join(', ')}` : '',
       metrics && (metrics.pauseCount || 0) > 3 ? '停顿偏多，建议先默读两遍再开口，减少中途卡壳。' : '',
     ].filter(Boolean),
@@ -1847,7 +1882,9 @@ async function handleTts(req, res) {
   const b = await jsonBody(req);
   const text = String(b.text || '').trim().slice(0, 2000);
   if (!text) return sendJson(res, 400, { ok: false, error: '文本不能为空' });
-  const voice = TTS_VOICES[b.voice] ? b.voice : 'en-US-AriaNeural';
+  // 未指定/不支持的音色时，按文本语种自动选（中文指令用中文音色）
+  const fallback = /[\u4e00-\u9fff]/.test(text) ? 'zh-CN-XiaoxiaoNeural' : 'en-US-AriaNeural';
+  const voice = TTS_VOICES[b.voice] ? b.voice : fallback;
   const rate = ttsRateStr(b.speed || 1);
   try {
     const mp3 = await edgeTts(text, { voice, rate });

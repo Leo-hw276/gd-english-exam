@@ -44,6 +44,8 @@ export const VOICES = {
   'en-US-GuyNeural': { name: 'Guy', gender: 'Male', locale: 'en-US' },
   'en-GB-SoniaNeural': { name: 'Sonia', gender: 'Female', locale: 'en-GB' },
   'en-GB-RyanNeural': { name: 'Ryan', gender: 'Male', locale: 'en-GB' },
+  'zh-CN-XiaoxiaoNeural': { name: '晓晓', gender: 'Female', locale: 'zh-CN' },
+  'zh-CN-YunxiNeural': { name: '云希', gender: 'Male', locale: 'zh-CN' },
 };
 
 const DEFAULT_VOICE = 'en-US-AriaNeural';

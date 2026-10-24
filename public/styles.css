@@ -1093,6 +1093,28 @@ textarea:disabled {
   cursor: pointer;
 }
 
+/* 管理后台模式：隐藏考生导航与登录入口，只保留「返回首页」 */
+.admin-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 18px 0 12px;
+  font-size: 15px;
+  color: var(--ink, #101828);
+}
+.admin-only { display: none !important; }
+body.admin-mode .admin-only {
+  display: inline-flex !important;
+  align-items: center;
+}
+body.admin-mode .topnav,
+body.admin-mode #btn-auth-open,
+body.admin-mode #user-chip,
+body.admin-mode #pill-model,
+body.admin-mode #pill-api,
+body.admin-mode #pill-asr,
+body.admin-mode #pill-tts { display: none !important; }
+
 /* AI 接口配置：强制显示（防止浏览器插件把这些输入框当广告位隐藏） */
 #card-ai-config input,
 #card-ai-config select {

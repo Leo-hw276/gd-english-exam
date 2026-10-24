@@ -14,7 +14,7 @@
  *  自检时分别标注状态。
  * ================================================================== */
 
-const PREFERRED_VOICES = [
+const PREFERRED_EN = [
   'Microsoft Aria Online (Natural) - English (United States)',
   'Microsoft Jenny Online (Natural) - English (United States)',
   'Microsoft Guy Online (Natural) - English (United States)',
@@ -26,151 +26,227 @@ const PREFERRED_VOICES = [
   'Daniel',
 ];
 
+const PREFERRED_ZH = [
+  'Microsoft Xiaoxiao Online (Natural) - Chinese (Mainland)',
+  'Microsoft Yunxi Online (Natural) - Chinese (Mainland)',
+  'Microsoft Huihui - Chinese (Simplified, PRC)',
+  'Microsoft Yaoyao - Chinese (Simplified, PRC)',
+  'Google 普通话（中国大陆）',
+  'Tingting',
+  'Mei-Jia',
+  'Sinji',
+];
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
 export const Tts = {
   _voices: [],
-  _mode: 'unknown',     // 'native' | 'server' | 'none'
-  _speed: 1,            // 全局倍速
+  _mode: 'unknown', // 'native' | 'server' | 'none'（仅用于状态展示）
+  _speed: 1,        // 全局倍速
+  _audio: null,     // 服务端音频对象（必须能被 stopNow 中止）
+  _token: 0,        // 中止令牌：每次 stopNow 自增，旧朗读自动作废
 
   init() {
-    if ('speechSynthesis' in window) {
-      const load = () => {
-        this._voices = window.speechSynthesis.getVoices() || [];
-        this._detectMode();
-      };
-      load();
-      window.speechSynthesis.onvoiceschanged = load;
+    const synth = window.speechSynthesis;
+    if (!synth) {
+      this._mode = 'server';
+      return;
     }
-    this._detectMode();
+    const load = () => {
+      this._voices = synth.getVoices() || [];
+      // 音量列表异步加载：加载到就绪后重新判定模式
+      if (this._voices.length && this._mode !== 'native') this._mode = 'native';
+    };
+    load();
+    synth.onvoiceschanged = load;
+    // 有些浏览器首帧拿不到音色，稍后再取一次
+    setTimeout(load, 400);
+    setTimeout(load, 1500);
+    if (this._voices.length) this._mode = 'native';
   },
 
-  _detectMode() {
-    if ('speechSynthesis' in window) {
-      const v = this.pickVoice();
-      if (v) {
-        this._mode = 'native';
-        return;
-      }
-    }
-    // 无原生 → 回退服务端
-    this._mode = 'server';
+  mode() {
+    return this._mode;
   },
 
-  /** 当前模式 */
-  mode() { return this._mode; },
-
-  /** 设置全局语速（0.5~2.0） */
-  setSpeed(s) { this._speed = Math.max(0.25, Math.min(3, Number(s) || 1)); },
-  getSpeed() { return this._speed; },
+  setSpeed(s) {
+    this._speed = Math.max(0.25, Math.min(3, Number(s) || 1));
+  },
+  getSpeed() {
+    return this._speed;
+  },
 
   available() {
     return this._mode !== 'none';
   },
 
-  /** 自检描述 */
   statusText() {
     if (this._mode === 'native') {
-      const v = this.pickVoice();
-      return `语音合成 ✅ 使用浏览器本地语音（${v?.name || 'en-US'}）`;
+      return `语音合成：浏览器本地语音（${this._enVoice()?.name || 'en-US'}）`;
     }
-    if (this._mode === 'server') return '语音合成 ✅ 使用服务端音频播放';
-    return '语音合成 ❌ 不可用';
+    if (this._mode === 'server') return '语音合成：服务端音频';
+    return '语音合成：不可用';
   },
 
   voices() {
-    if (!this._voices.length) this._voices = window.speechSynthesis?.getVoices() || [];
+    if (!this._voices.length) {
+      try {
+        this._voices = window.speechSynthesis?.getVoices() || [];
+      } catch {}
+    }
     return this._voices;
   },
 
-  pickVoice() {
+  _enVoice() {
+    return this._pickFrom(PREFERRED_EN, 'en');
+  },
+  _zhVoice() {
+    return this._pickFrom(PREFERRED_ZH, 'zh');
+  },
+
+  _pickFrom(preferred, prefix) {
     const all = this.voices();
     if (!all.length) return null;
-    const byName = (n) => all.find((v) => v.name === n);
-    for (const n of PREFERRED_VOICES) {
-      const v = byName(n);
+    for (const n of preferred) {
+      const v = all.find((x) => x.name === n);
       if (v) return v;
     }
-    const en = all.filter((v) => /^en([-_]|$)/i.test(v.lang || ''));
-    return (
-      en.find((v) => /en[-_]US/i.test(v.lang)) ||
-      en.find((v) => /en[-_]GB/i.test(v.lang)) ||
-      en[0] ||
-      all.find((v) => /en/i.test(v.lang || '')) ||
-      null
-    );
+    const hit = all.filter((v) => new RegExp(`^${prefix}([-_]|$)`, 'i').test(v.lang || ''));
+    return hit[0] || all.find((v) => new RegExp(prefix, 'i').test(v.lang || '')) || null;
+  },
+
+  /** 兼容旧调用 */
+  pickVoice() {
+    return this._enVoice();
+  },
+
+  /** 文本是否含中文 */
+  isZh(text) {
+    return /[\u4e00-\u9fff]/.test(String(text || ''));
   },
 
   /**
-   * 朗读一段英文，返回 Promise（真正读完才 resolve）
-   * 自动选择原生 or 服务端通路。
+   * 朗读一段文本，真正读完才 resolve。
+   * 降级链：浏览器原生 → 服务端 /api/tts → 静默跳过（不阻塞考试流程）
+   * 中文用中文音色，英文用英文音色。
    */
-  speak(text, { rate, pitch = 1, voice } = {}) {
+  async speak(text, { rate, pitch = 1, lang } = {}) {
+    if (!text) return;
     const speed = rate ?? this._speed;
-    if (this._mode === 'native') return this._speakNative(text, { rate: speed, pitch });
-    return this._speakServer(text, { speed });
+    const useLang = lang || (this.isZh(text) ? 'zh' : 'en');
+    const token = this._token;
+
+    // 1) 原生
+    if (window.speechSynthesis) {
+      const ok = await this._speakNative(text, { rate: speed, pitch, lang: useLang, token });
+      if (ok) {
+        this._mode = 'native';
+        return;
+      }
+      if (token !== this._token) return; // 已被中止
+    }
+
+    // 2) 服务端（Edge-TTS）
+    const ok2 = await this._speakServer(text, { speed, lang: useLang, token });
+    if (ok2) {
+      this._mode = 'server';
+      return;
+    }
+    if (token === this._token) {
+      // 两条通路都失败：本次跳过，但下次仍会重新先试原生（不永久降级）
+      this._mode = window.speechSynthesis ? 'native' : 'none';
+    }
   },
 
-  /** 原生 speechSynthesis 朗读（三重保险确保读完才返回） */
-  _speakNative(text, { rate = 0.95, pitch = 1 } = {}) {
+  /**
+   * 原生 speechSynthesis 朗读
+   * @returns {Promise<boolean>} 是否真的播放成功
+   */
+  _speakNative(text, { rate = 0.95, pitch = 1, lang = 'en', token = 0 } = {}) {
     return new Promise((resolve) => {
-      if (!('speechSynthesis' in window) || !text) return resolve();
       const synth = window.speechSynthesis;
-      try { synth.cancel(); } catch {}
+      if (!synth || !text) return resolve(false);
 
       const str = String(text);
       const words = str.trim().split(/\s+/).filter(Boolean).length;
+      // 中文按字数估时长
+      const estMs = lang === 'zh' ? Math.max(4000, str.length * 320) : Math.max(6000, words * 600);
 
-      const u = new SpeechSynthesisUtterance(str);
-      u.lang = 'en-US';
-      u.rate = rate;
-      u.pitch = pitch;
-      u.volume = 1;
-      const v = this.pickVoice();
-      if (v) {
-        u.voice = v;
-        u.lang = v.lang || 'en-US';
-      }
-
-      let settled = false;
-      let idle = 0;
-      let poll = null;
+      let done = false;
+      let started = false;
       let hardCap = null;
-
-      const finish = () => {
-        if (settled) return;
-        settled = true;
+      let poll = null;
+      const finish = (ok) => {
+        if (done) return;
+        done = true;
         clearInterval(poll);
         clearTimeout(hardCap);
-        resolve();
+        resolve(ok);
       };
 
-      u.onend = finish;
-      u.onerror = (e) => {
-        // 原生失败 → 降级到服务端
-        if (!settled) {
-          settled = true;
-          clearInterval(poll);
-          clearTimeout(hardCap);
-          this._mode = 'server';
-          this._speakServer(text, { speed: rate }).then(resolve);
+      const go = () => {
+        const u = new SpeechSynthesisUtterance(str);
+        const voice = lang === 'zh' ? this._zhVoice() : this._enVoice();
+        if (voice) u.voice = voice;
+        u.lang = voice?.lang || (lang === 'zh' ? 'zh-CN' : 'en-US');
+        u.rate = rate;
+        u.pitch = pitch;
+        u.volume = 1;
+
+        u.onstart = () => {
+          started = true;
+        };
+        u.onend = () => finish(true);
+        u.onerror = () => finish(false);
+
+        try {
+          synth.speak(u);
+        } catch {
+          finish(false);
+          return;
         }
+
+        // 看门狗：800ms 内既没开始也没排队 → 视为失败，触发降级
+        setTimeout(() => {
+          if (done || started) return;
+          if (synth.speaking || synth.pending) return;
+          try {
+            synth.resume();
+          } catch {}
+          setTimeout(() => {
+            if (done || started) return;
+            if (synth.speaking || synth.pending) return;
+            finish(false);
+          }, 500);
+        }, 800);
       };
 
-      hardCap = setTimeout(finish, Math.max(12000, words * 620 + 8000));
-
+      hardCap = setTimeout(() => finish(started), estMs + 15000);
       poll = setInterval(() => {
-        if (settled) return;
-        if (synth.speaking || synth.pending) { idle = 0; }
-        else if (++idle >= 2) finish();
+        if (done) return;
+        if (token !== this._token) return finish(false); // 被 stopNow 中止
+        if (synth.speaking || synth.pending) return;
+        // 已开始且结束 → 正常收尾
+        if (started) return finish(true);
       }, 250);
 
-      try { synth.speak(u); } catch { finish(); }
+      // Chrome 已知问题：cancel() 紧跟 speak() 会丢句，先等一下
+      if (synth.speaking || synth.pending) {
+        try {
+          synth.cancel();
+        } catch {}
+        setTimeout(go, 120);
+      } else {
+        go();
+      }
     });
   },
 
   /** 服务端 edge-tts 朗读 */
-  _speakServer(text, { speed = 1, voice = 'en-US-AriaNeural' } = {}) {
+  _speakServer(text, { speed = 1, lang = 'en', token = 0 } = {}) {
     return new Promise(async (resolve) => {
-      if (!text) return resolve();
+      if (!text) return resolve(false);
+      const voice = lang === 'zh' ? 'zh-CN-XiaoxiaoNeural' : 'en-US-AriaNeural';
       try {
         const r = await fetch('/api/tts', {
           method: 'POST',
@@ -179,34 +255,69 @@ export const Tts = {
         });
         if (!r.ok) {
           console.warn('[tts] 服务端合成失败:', r.status);
-          this._mode = 'none';
-          return resolve();
+          return resolve(false);
         }
         const blob = await r.blob();
+        if (token !== this._token) return resolve(false);
         const url = URL.createObjectURL(blob);
         const audio = new Audio(url);
+        this._audio = audio;
         audio.playbackRate = speed;
-        audio.onended = () => { URL.revokeObjectURL(url); resolve(); };
-        audio.onerror = () => { URL.revokeObjectURL(url); resolve(); };
+        const cleanup = () => {
+          URL.revokeObjectURL(url);
+          if (this._audio === audio) this._audio = null;
+        };
+        audio.onended = () => {
+          cleanup();
+          resolve(true);
+        };
+        audio.onerror = () => {
+          cleanup();
+          resolve(false);
+        };
         await audio.play();
+        if (token !== this._token) {
+          try {
+            audio.pause();
+          } catch {}
+          cleanup();
+          resolve(false);
+        }
       } catch (e) {
         console.warn('[tts] 服务端请求失败:', e.message);
-        resolve();
+        resolve(false);
       }
     });
   },
 
   cancel() {
-    try { window.speechSynthesis?.cancel(); } catch {}
+    this._token++;
+    try {
+      window.speechSynthesis?.cancel();
+    } catch {}
   },
 
+  /** 立刻停止所有朗读（含服务端音频），供提前交卷/切屏使用 */
   async stopNow() {
-    this.cancel();
+    this._token++;
     const synth = window.speechSynthesis;
+    try {
+      synth?.cancel();
+    } catch {}
+    if (this._audio) {
+      try {
+        this._audio.pause();
+        this._audio.currentTime = 0;
+      } catch {}
+      this._audio = null;
+    }
     if (!synth) return;
-    for (let i = 0; i < 24; i++) {
+    for (let i = 0; i < 12; i++) {
       if (!synth.speaking && !synth.pending) return;
-      await new Promise((r) => setTimeout(r, 60));
+      try {
+        synth.cancel();
+      } catch {}
+      await sleep(60);
     }
   },
 };

@@ -60,6 +60,11 @@ export function showScreen(id) {
   window.scrollTo(0, 0);
   // 顶栏高亮当前页
   $$('.topnav a').forEach((a) => a.classList.toggle('active', a.dataset.goto === id));
+
+  // 管理后台是独立入口：隐藏面向考生的导航与登录入口，只保留返回首页
+  const adminMode = id === 'screen-admin';
+  document.body.classList.toggle('admin-mode', adminMode);
+
   if (id === 'screen-account') renderAccount();
   if (id === 'screen-pricing') renderPricing();
   if (id === 'screen-auth') refreshAllCaptchas();
@@ -93,6 +98,7 @@ export const S = {
   startedRecording: false,
   marks: {},
   lastReport: null,
+  examAborted: false, // 考生主动结束考试 → 立刻中断所有播报与录音
 };
 
 const PART_META = [
@@ -338,7 +344,11 @@ function renderPricing() {
         <li>逐题发音诊断与波形回看</li>
         <li>共 ${free} 次</li>
       </ul>
-      <button class="btn lg" data-goto="screen-auth" data-tab="register">注册领取</button>
+      ${
+        S.user
+          ? `<button class="btn lg" data-goto="screen-account">进入我的账户</button>`
+          : `<button class="btn lg" data-goto="screen-auth" data-tab="register">注册领取</button>`
+      }
     </div>
     <div class="price-card">
       <div class="pc-tag">按次付费</div>
@@ -609,7 +619,7 @@ function countdown(seconds, { onTick, cancelRef } = {}) {
     const total = seconds * 1000;
     const t0 = performance.now();
     const step = () => {
-      if (cancelRef?.cancelled) return resolve('cancelled');
+      if (cancelRef?.cancelled || S.examAborted) return resolve('cancelled');
       const left = Math.max(0, total - (performance.now() - t0));
       onTick?.(Math.ceil(left / 1000), 1 - left / total);
       if (left <= 0) return resolve('done');
@@ -625,6 +635,12 @@ function countdown(seconds, { onTick, cancelRef } = {}) {
 
 async function recordAnswer({ seconds, key, label = '录音中', note = '', canFinishEarly = true }) {
   const cancelRef = { cancelled: false };
+
+  // 考生已提前交卷：不再开录音，直接返回空作答
+  if (S.examAborted) {
+    markKey(key, 'done');
+    return { transcript: '', metrics: null, envelope: null, audioUrl: null, endedEarly: true };
+  }
 
   renderRecPanel('#rec-mount', { timerText: seconds, note, stoppable: canFinishEarly });
   setPhase(label, 'brand');
@@ -646,7 +662,14 @@ async function recordAnswer({ seconds, key, label = '录音中', note = '', canF
   });
 
   // ② 语音播报「开始录音」，播报结束才开启麦克风采集
-  await Tts.speak('Please start recording now.', { rate: Tts.getSpeed() });
+  await Tts.speak(SAY.startRecord, { rate: Tts.getSpeed() });
+
+  // 播报期间考生可能已交卷，此时不能再开录音
+  if (S.examAborted) {
+    markKey(key, 'done');
+    return { transcript: '', metrics: null, envelope: null, audioUrl: null, endedEarly: true };
+  }
+
   await startCue();
 
   if (!S.micStream) throw new Error('麦克风未就绪');
@@ -694,7 +717,7 @@ async function recordAnswer({ seconds, key, label = '录音中', note = '', canF
   setRecState(false, result === 'cancelled' ? '已提前结束' : '录音结束');
   await stopCue();
   // ④ 录音结束语音播报
-  await Tts.speak('Recording finished.', { rate: Tts.getSpeed() });
+  await Tts.speak(SAY.endRecord, { rate: Tts.getSpeed() });
 
   const asrText = asr.stop();
   const { blob, blobUrl, metrics, envelope } = await rec.stop();
@@ -749,15 +772,18 @@ async function playListening(text, times, { label = '正在播放录音', asLine
   setPhase(label, 'brand');
   const box = $('#playstate');
   for (let t = 1; t <= times; t++) {
+    if (S.examAborted) return;
     if (box) box.innerHTML = `<b>第 ${t} 遍 / 共 ${times} 遍</b> 正在播放录音……请仔细听。`;
     setPhase(`${label}（${t}/${times}）`, 'brand');
     if (asLines && asLines.length) {
       for (const line of asLines) {
+        if (S.examAborted) return;
         await Tts.speak(line.en, { rate: 0.92, pitch: line.spk === 'W' ? 1.08 : 0.92 });
       }
     } else {
       await Tts.speak(text, { rate: 0.92 });
     }
+    if (S.examAborted) return;
     if (t < times) await sleep(700);
   }
   await Tts.stopNow();
@@ -773,30 +799,32 @@ async function playListening(text, times, { label = '正在播放录音', asLine
  * @param {string} text 英文播报内容
  */
 async function announceRequirement(text, { label = '正在播报题目要求' } = {}) {
-  if (!text) return;
+  if (!text || S.examAborted) return;
   setPhase(label, 'brand');
   const box = $('#playstate');
   if (box) box.innerHTML = `<b>正在播报题目要求…</b>`;
   await Tts.speak(text, { rate: Tts.getSpeed() });
 }
 
-/** 供各小节使用的播报文案 */
+/** 供各小节使用的播报文案（考试指令用中文，只有题目内容本身是英文） */
 const SAY = {
-  p1: (prepareSec, recordSec) =>
-    `Part one. Read aloud. Listen to the passage twice, then you will have ${prepareSec} seconds to prepare, ` +
-    `and ${recordSec} seconds to read it aloud. Please read clearly and fluently.`,
+  p1: (playTimes, prepareSec, recordSec) =>
+    `第一部分，模仿朗读。请听短文${playTimes}遍。听完后有${prepareSec}秒钟准备时间，` +
+    `然后请在${recordSec}秒钟内模仿朗读。听到开始录音的提示音后开始朗读。`,
   p2: (n) =>
-    `Part two. Listen and choose the correct information. Question ${n}. ` +
-    `You have ten seconds to read the question, and eight seconds to answer.`,
+    `第二部分，听选信息。请听第${n}题的录音，录音播放两遍。` +
+    `请根据所听到的问题和括号内的提示，在8秒钟内选择正确的信息并口头回答。`,
   p3: () =>
-    `Part three. Listen and answer the questions. You will hear the recording twice. ` +
-    `You have fifteen seconds to read the four questions. Short answers are fine.`,
-  p4: (recordSec) =>
-    `Part four. Retell the information. You will hear the passage twice. ` +
-    `Please retell it with all the key points in ${recordSec} seconds. You have fifteen seconds to read the outline.`,
+    `第二部分第二节，回答问题。请听录音，录音播放两遍。` +
+    `请根据所听内容回答第七到第十题，简短回答即可。现在有15秒钟阅读这四个问题。`,
+  p4: (prepareSec, recordSec) =>
+    `第三部分第一节，信息转述。请听一段独白，录音播放两遍。` +
+    `请根据所听内容和要点提示，在${prepareSec}秒钟准备后，用${recordSec}秒钟说一段话，要包含全部要点。`,
   p5: () =>
-    `Part five. Ask a question. Please ask one question in English. ` +
-    `You have fifteen seconds to prepare, and eight seconds to ask.`,
+    `第三部分第二节，询问信息。请根据提示用英语提出一个问题，` +
+    `你有15秒钟的准备时间和8秒钟的提问时间。`,
+  startRecord: '开始录音。',
+  endRecord: '录音结束。',
 };
 
 /* ==================================================================
@@ -821,7 +849,6 @@ async function runReadAloud() {
     <div class="passage" id="passage-body">${words.map((w, i) => `<span class="w" data-w="${i}">${esc(w)}</span>`).join(' ')}</div>
     <div class="row" style="margin-top:14px">
       <button class="btn ghost sm" id="btn-replay-p1">重听范文录音</button>
-      <span class="muted">共 ${words.length} 词 · 建议语速 110–150 词/分</span>
     </div>
     ${recMountHtml()}`,
   });
@@ -831,7 +858,7 @@ async function runReadAloud() {
   $('#nav-max').textContent = '6 分';
 
   // 每大题开始前自动播报题干与作答要求
-  await announceRequirement(SAY.p1(cfg.prepareSec, cfg.recordSec));
+  await announceRequirement(SAY.p1(cfg.playTimes, cfg.prepareSec, cfg.recordSec));
 
   await playListening(p, cfg.playTimes, { label: '正在播放范文录音' });
 
@@ -1042,7 +1069,7 @@ async function runRetell() {
   $('#nav-current').textContent = '信息转述';
   $('#nav-max').textContent = '6 分';
 
-  await announceRequirement(SAY.p4(cfg.recordSec));
+  await announceRequirement(SAY.p4(cfg.prepareSec, cfg.recordSec));
 
   setPhase('读题中', 'warn');
   renderRecPanel('#rec-mount', { timerText: 15, note: '读题时间：把 5 个要点串成一条线' });
@@ -1130,6 +1157,7 @@ async function runFullExam() {
     askQuestions: [],
   };
   S.startedRecording = false;
+  S.examAborted = false;
   renderNav();
   showScreen('screen-exam');
 
@@ -1145,13 +1173,18 @@ async function runFullExam() {
 
   try {
     await runReadAloud();
+    if (S.examAborted) return;
     await runChooseInfo();
+    if (S.examAborted) return;
     await runAnswerQuestions();
+    if (S.examAborted) return;
     await runRetell();
+    if (S.examAborted) return;
     await runAskQuestions();
+    if (S.examAborted) return;
   } catch (e) {
     console.error(e);
-    toast('考试过程出错：' + e.message, 'bad', 6000);
+    if (!S.examAborted) toast('考试过程出错：' + e.message, 'bad', 6000);
   }
 
   await doScore();
@@ -1183,6 +1216,17 @@ function collectPayload() {
 }
 
 async function doScore() {
+  // 评分期间不允许任何播报或录音残留
+  S.examAborted = true;
+  await Tts.stopNow();
+  if (S.recording) {
+    try {
+      S.recording.asr?.stop();
+    } catch {}
+    await S.recording.rec.stop().catch(() => {});
+    S.recording = null;
+  }
+  setRecState(false, '已结束');
   busy('AI 正在按官方评分标准评卷…', '逐题比对语音内容 · 结合声学指标定档 · 合成 30 分总分');
   try {
     const report = await api('/api/score', collectPayload());
@@ -1632,7 +1676,7 @@ async function startExam({ offline = false } = {}) {
   try {
     const data = await api('/api/paper', { topic, difficulty, offline });
     clearInterval(ticker);
-    setProgress(100, '组卷完成 ✓');
+    setProgress(100, '组卷完成');
     await new Promise((r) => setTimeout(r, 400));
     hideOverlay();
     if (!data.paper) throw new Error('未取得试卷');
@@ -1808,12 +1852,27 @@ function bind() {
     const a = e.target.closest('[data-goto]');
     if (!a) return;
     e.preventDefault();
-    if (a.dataset.goto === 'screen-auth') {
+    const target = a.dataset.goto;
+
+    // 已登录用户点击「登录/注册」入口：不再跳登录页，明确提示已登录
+    if (target === 'screen-auth' && S.user) {
+      toast(`您已登录（${S.user.email}）`, 'ok', 3000);
+      showScreen('screen-account');
+      return;
+    }
+
+    if (target === 'screen-auth') {
       showScreen('screen-auth');
       if (a.dataset.tab) $(`#auth-tabs .tab[data-tab="${a.dataset.tab}"]`)?.click();
       return;
     }
-    showScreen(a.dataset.goto);
+    // 离开后台时清掉 #admin，避免下次刷新又进后台
+    if (target !== 'screen-admin' && location.hash === '#admin') {
+      try {
+        history.replaceState(null, '', location.pathname + location.search);
+      } catch {}
+    }
+    showScreen(target);
   });
 
   $('#inp-city')?.addEventListener('change', (e) => {
@@ -1824,12 +1883,19 @@ function bind() {
 
   $('#btn-quit').onclick = async () => {
     if (!confirm('确定要结束考试并立即评分吗？未作答的题目将按 0 分计算。')) return;
+    // 1) 先立中止标记：后续所有 await 点都会立刻退出，不再继续播报/录音
+    S.examAborted = true;
+    // 2) 停掉正在播放的录音（原生语音 + 服务端音频）
     await Tts.stopNow();
+    // 3) 停掉正在进行的录音
     if (S.recording) {
-      S.recording.asr?.stop();
+      try {
+        S.recording.asr?.stop();
+      } catch {}
       await S.recording.rec.stop().catch(() => {});
       S.recording = null;
     }
+    setRecState(false, '已结束');
     Object.keys(S.marks).forEach((k) => {
       if (S.marks[k] !== 'done') S.marks[k] = 'done';
     });
@@ -1853,12 +1919,19 @@ function bind() {
     S.micStream?.getTracks().forEach((t) => t.stop());
   });
 
-  if (location.hash === '#admin') setTimeout(() => showScreen('screen-admin'), 200);
+  // 支持直接访问 /#admin 进入后台（含已在站内切换 hash 的情况）
+  const openAdminIfHash = () => {
+    if (location.hash === '#admin') showScreen('screen-admin');
+  };
+  window.addEventListener('hashchange', openAdminIfHash);
+  if (location.hash === '#admin') setTimeout(openAdminIfHash, 200);
 }
 
 (async function init() {
   Tts.init();
   bind();
+  // 调试/自动化测试入口
+  window.__exam = { Tts, S, showScreen };
   await runEnvCheck();
   await refreshMe();
 

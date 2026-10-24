@@ -23,6 +23,7 @@
       <a href="#" data-goto="screen-account">我的账户</a>
     </nav>
     <div class="spacer"></div>
+    <a href="#" data-goto="screen-intro" class="btn sm ghost admin-only" id="btn-admin-back">返回首页</a>
     <span class="pill brand" id="pill-model">—</span>
     <span class="pill" id="pill-api">检查中…</span>
     <span class="pill" id="pill-asr">语音识别</span>
@@ -42,11 +43,7 @@
 
     <div class="hero">
       <h1>广东省江门市中考英语听说考试 · 全真模拟</h1>
-      <p>
-        严格依据广东省教育考试院考试大纲及江门市教育局「人机对话」考试实施方案设计：
-        <b>三大题 · 五小节 · 14 小题 · 满分 30 分 · 约 20 分钟</b>。
-        由 <b>DeepSeek</b> 实时自动组卷，全程录音作答，考后按官方评分标准给出 30 分总分与逐题诊断。
-      </p>
+      <p>三大题 · 五小节 · 14 小题 · 满分 30 分 · 约 20 分钟。全程录音作答，考后按官方标准评分。</p>
       <div class="stat-grid">
         <div class="stat"><div class="k">满分</div><div class="v">30 分</div></div>
         <div class="stat"><div class="k">小题数</div><div class="v">14 题</div></div>
@@ -66,11 +63,6 @@
           <tr><td colspan="3">全卷</td><td class="num">14</td><td class="num">30</td></tr>
         </tfoot>
       </table>
-      <p class="muted" style="margin-top:14px">
-        依据：广东省《初中学业水平考试英语听说考试说明》及江门、东莞、珠海、茂名等市教育局发布的考试方案。
-        信息获取每小题 1.5 分；信息转述从「内容／准确性／流畅性」三方面定档评分；
-        询问信息从「内容完整性 0.75 分 + 语言准确性 0.75 分」两方面评分。
-      </p>
     </div>
 
     <div class="card">
@@ -342,35 +334,34 @@
 <!-- ============================ 管理后台 ============================ -->
 <section id="screen-admin" class="screen">
   <div class="wrap">
+    <div class="admin-head">
+      <b>管理后台</b>
+      <a href="#" data-goto="screen-intro" class="btn sm ghost">返回首页</a>
+    </div>
     <div class="card" id="admin-login-card">
       <h2>管理员登录</h2>
-      <p class="muted" style="margin-top:0">
-        登录后即可在「AI 接口配置」里填写 <b>v1 接口地址、API Key、选择模型</b>（全部保存在网站数据库，保存即生效，不依赖部署平台环境变量）。
-      </p>
+      <p class="muted" style="margin-top:0">登录后可配置接口地址、密钥与模型。</p>
       <div class="row">
-        <input type="password" id="cfg-pass" placeholder="请输入密码" style="flex:1;min-width:220px" />
-        <button class="btn" id="btn-admin-login">确认</button>
+        <input type="password" id="cfg-pass" placeholder="管理员密码" style="flex:1;min-width:220px" />
+        <button class="btn" id="btn-admin-login">登录</button>
       </div>
     </div>
 
     <div id="admin-panel" style="display:none">
       <div class="card" id="card-ai-config">
         <h2>AI 接口配置</h2>
-        <p class="muted">
-          v1 接口地址、API 密钥、模型选择全部在网站后台完成并保存到数据库，<b>不依赖部署平台的环境变量</b>，保存后立即生效。
-        </p>
         <div id="cfg-env-source" class="muted" style="font-size:12.5px;margin-bottom:14px"></div>
         <div class="row">
           <div style="flex:1;min-width:260px">
-            <label class="muted">v1 接口地址（Base URL，漏填 /v1 会自动补全）</label>
-            <input type="text" id="cfg-base" placeholder="https://api.hcnsec.cn/v1"
+            <label class="muted">v1 接口地址</label>
+            <input type="text" id="cfg-base" placeholder="https://api.example.com/v1"
                    style="display:block;width:100%;height:42px;visibility:visible;opacity:1" />
           </div>
         </div>
         <div class="row" style="margin-top:12px">
           <div style="flex:1;min-width:260px">
-            <label class="muted">API Key（留空则保持当前 Key 不变）</label>
-            <input type="password" id="cfg-key" placeholder="sk-..."
+            <label class="muted">API Key</label>
+            <input type="password" id="cfg-key" placeholder="留空则不修改"
                    style="display:block;width:100%;height:42px;visibility:visible;opacity:1" />
           </div>
         </div>
@@ -380,8 +371,8 @@
           <span class="muted" id="cfg-model-hint"></span>
         </div>
         <div style="margin-top:14px">
-          <label class="muted">模型（可下拉选择，也可直接输入模型名）</label>
-          <input type="text" id="cfg-model" list="ad-model-list" style="width:100%;margin-top:6px" placeholder="先点「拉取模型列表」，或直接输入模型名" />
+          <label class="muted">模型</label>
+          <input type="text" id="cfg-model" list="cfg-model-list" style="width:100%;margin-top:6px" placeholder="选择或直接输入模型名" />
           <datalist id="cfg-model-list"></datalist>
         </div>
         <div class="row" style="margin-top:14px">
@@ -483,8 +474,8 @@
       <div class="card">
         <h2>用户管理</h2>
         <div class="row" style="margin-bottom:12px;gap:8px">
-          <button class="btn ghost sm" id="btn-admin-export">⬇️ 导出用户数据</button>
-          <button class="btn ghost sm" id="btn-admin-import">⬆️ 导入用户数据</button>
+          <button class="btn ghost sm" id="btn-admin-export">导出用户数据</button>
+          <button class="btn ghost sm" id="btn-admin-import">导入用户数据</button>
           <input type="file" id="cfg-import-file" accept="application/json,.json" style="display:none" />
           <button class="btn danger sm" id="btn-admin-clear">🗑 一键清空用户</button>
           <span class="muted" id="cfg-user-hint"></span>

@@ -369,8 +369,11 @@ export const SCORE_SYSTEM_PROMPT = `你是广东省中考英语听说考试（�
   * durationMs 录音总时长；speechMs 实际发声时长；voicedRatio = speechMs/durationMs 为发声占比（过低说明长时间沉默或未作答）。
   * pauseCount 停顿次数（≥300ms 的静音段）；longestPauseMs 最长停顿；meanPauseMs 平均停顿。
   * wordsPerMinute 语速（初中生正常朗读 110–150 wpm；转述 90–130 wpm 属正常）。
-  * 若 transcript 为空或 voicedRatio 极低（<0.1），应判定为"未作答/一言不发"，按官方标准给 0 分或最低档。
-- 学生如果只是简单回答（不需要完整句），只要信息正确就要给满分，不得因句子不完整扣分。
+  * 若 transcript 为空或 voicedRatio 极低（<0.1），应判定为"未作答/一言不发"，按官方标准给 0 分或最低档。- 学生如果只是简单回答（不需要完整句），只要信息正确就要给满分，不得因句子不完整扣分。
+- **重要：识别服务不可用时的判定规则。** 当 transcript 为空、但 voicedRatio 较高（≥0.3）且 speechMs 接近正常作答所需时长时，
+  说明这是「语音识别服务不可用」而不是「考生没开口」。此时不得按 0 分处理，应当只依据声学指标评定流畅度与节奏：
+  时长与语速正常、停顿少、发声连贯 → 给 C 档及以上（朗读 3–4.5 分）；并说明「本次未能获取语音转写，评分仅依据音频特征」。
+  只有在 voicedRatio 极低（<0.1）且 speechMs 很短时，才判定为未作答给 0 分。
 - 不影响意思表达的语法错误不扣分；出现比较大的语法错误或发音错误酌情扣 0.5 分。
 - 回答信息错误得零分。
 
@@ -392,14 +395,29 @@ function fmtMetrics(m) {
 }
 
 export function buildReadAloudScorePrompt({ passage, transcript, metrics }) {
+  const wordCount = passage.trim().split(/\s+/).filter(Boolean).length;
+  // 正常朗读 110–150 wpm → 估计读完这篇应耗时多久
+  const expectMs = Math.round((wordCount / 130) * 60000);
+  const speechMs = Number(metrics?.speechMs) || 0;
+  const voicedRatio = Number(metrics?.voicedRatio) || 0;
+  const durRatio = expectMs ? speechMs / expectMs : 0;
+  const asrMissing =
+    !String(transcript || '').trim() && voicedRatio >= 0.3 && durRatio >= 0.55;
+  const asrNote = asrMissing
+    ? `\n【识别服务提示】转写为空，但考生实际发声 ${Math.round(speechMs / 1000)} 秒、发声占比 ${Math.round(
+        voicedRatio * 100
+      )}%，与正常读完本文约需 ${Math.round(expectMs / 1000)} 秒相当 —— 这属于「语音识别不可用」，不是「未开口」。` +
+      `请按声学指标评定流畅度与节奏，给出 C 档及以上的合理分数，不要判 0 分。`
+    : '';
+
   return `【第一部分：模仿朗读（满分 6 分）】
 
-朗读原文（考生屏幕上看到并应模仿朗读的短文，共 ${passage.trim().split(/\s+/).length} 词）：
+朗读原文（考生屏幕上看到并应模仿朗读的短文，共 ${wordCount} 词）：
 """${passage}"""
 
 考生语音识别转写（transcript）：
-"""${transcript?.trim() || '（识别结果为空——考生可能未开口，或发音完全无法识别）'}"""
-
+"""${transcript?.trim() || '（识别结果为空）'}"""
+${asrNote}
 音频声学指标：${fmtMetrics(metrics)}
 
 【官方评分标准（档次分）】

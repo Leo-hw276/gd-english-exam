@@ -106,10 +106,10 @@ async function loadOverview() {
 
     const srcBox = $('#cfg-env-source');
     if (srcBox) {
-      const label = { db: '网站后台保存 ✓', none: '未配置' };
-      srcBox.textContent =
-        `当前配置来源 —— v1 地址：${label[sources.apiBase] || '—'} ｜ API Key：${label[sources.apiKey] || '—'} ｜ 模型：${label[sources.model] || '—'}` +
-        ` ｜ 数据文件：${sources.dbFile === 'env' ? 'EXAM_DB_FILE 指定' : '默认 data/db.json'}（环境变量仅作首次初始值，不锁定后台）`;
+      const done = (v) => (v === 'db' ? '已配置' : '未配置');
+      srcBox.textContent = `接口地址：${done(sources.apiBase)}　密钥：${done(sources.apiKey)}　模型：${done(
+        sources.model
+      )}`;
     }
 
     // 定价
@@ -217,7 +217,7 @@ async function saveApi() {
   if (key) body.apiKey = key;
   try {
     await api('/api/admin/settings', body);
-    hint.textContent = '已保存 ✓';
+    hint.textContent = '已保存';
     toast('接口配置已保存', 'ok');
     $('#cfg-key').value = '';
     await loadOverview();
@@ -243,7 +243,7 @@ async function savePricing() {
         sourceImage: currentImage || '',
       },
     });
-    hint.textContent = '已保存 ✓';
+    hint.textContent = '已保存';
     toast('定价已更新，前台收费页立即生效', 'ok');
     // 同步到本地状态，前台收费页立刻刷新
     const h = await api('/api/health', undefined, 'GET');
@@ -361,7 +361,7 @@ async function importUsers(e) {
 async function clearUsers() {
   const hint = $('#cfg-user-hint');
   const first = confirm(
-    '⚠️ 危险操作\n\n这会删除【所有注册用户】以及他们的登录状态，且不可撤销。\n\n建议先点「导出用户数据」做个备份。\n\n确定继续吗？'
+    '危险操作\n\n这会删除【所有注册用户】以及他们的登录状态，且不可撤销。\n\n建议先点「导出用户数据」做个备份。\n\n确定继续吗？'
   );
   if (!first) return;
   const typed = prompt('请输入 CLEAR（全大写）以确认清空所有用户：');

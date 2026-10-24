@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex, nofollow" />
+<title>专项测评报告（演示数据）· 广东中考英语听说模拟考场</title>
+<style>
+  :root{
+    --bg:#f4f5f9; --card:#fff; --ink:#1b2130; --muted:#6b7385; --line:#e4e7ef;
+    --brand:#2f5bd7; --brand-soft:#eaf0ff; --ok:#1f9d6b; --warn:#c9861a; --bad:#d24b4b;
+    --demo:#b8842a; --demo-soft:#fdf6e6;
+    --radius:14px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg); color:var(--ink);
+    font:15px/1.7 "Segoe UI","Microsoft YaHei","PingFang SC",system-ui,-apple-system,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  /* 全页水印：任何截图都会带上 */
+  body::before{
+    content:"演示数据 DEMO · 非真实用户反馈 · 演示数据 DEMO · 非真实用户反馈 · 演示数据 DEMO · 非真实用户反馈 · 演示数据 DEMO · 非真实用户反馈 · 演示数据 DEMO · 非真实用户反馈 · 演示数据 DEMO · 非真实用户反馈 · 演示数据 DEMO · 非真实用户反馈 · 演示数据 DEMO · 非真实用户反馈 · 演示数据 DEMO · 非真实用户反馈 · ";
+    position:fixed; inset:-20% -20%; z-index:0; pointer-events:none;
+    font-size:26px; line-height:2.2; font-weight:700; letter-spacing:2px;
+    color:rgba(184,132,42,.075); transform:rotate(-28deg); white-space:pre-wrap;
+    overflow:hidden;
+  }
+  .wrap{position:relative; z-index:1; max-width:1180px; margin:0 auto; padding:22px 20px 64px}
+
+  /* 顶部演示警示条 */
+  .demobar{
+    background:repeating-linear-gradient(135deg,#fdf0d1 0 14px,#fbe7bd 14px 28px);
+    border:1px solid #e6c680; border-left:6px solid var(--demo);
+    border-radius:10px; padding:12px 16px; margin-bottom:16px;
+    font-size:13.5px; line-height:1.65; color:#6c4d12;
+  }
+  .demobar b{color:#8a5d0a}
+  .demobar .tag{
+    display:inline-block; background:var(--demo); color:#fff; font-weight:700;
+    font-size:12px; letter-spacing:.5px; padding:2px 9px; border-radius:999px; margin-right:8px;
+    vertical-align:1px;
+  }
+
+  header.head{
+    background:linear-gradient(135deg,#2f5bd7,#1f3f9e); color:#fff;
+    border-radius:var(--radius); padding:22px 24px; margin-bottom:16px;
+    box-shadow:0 10px 26px rgba(31,63,158,.22);
+  }
+  header.head .ribbon{
+    display:inline-block; background:rgba(255,255,255,.18); border:1px solid rgba(255,255,255,.4);
+    font-size:12px; letter-spacing:1px; padding:3px 10px; border-radius:999px; margin-bottom:10px;
+  }
+  header.head h1{margin:0 0 6px; font-size:23px; letter-spacing:.5px}
+  header.head p{margin:0; opacity:.92; font-size:13.5px}
+  header.head .facts{margin-top:14px; display:flex; flex-wrap:wrap; gap:8px}
+  header.head .facts span{
+    background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.22);
+    border-radius:8px; padding:5px 11px; font-size:12.5px;
+  }
+
+  .grid{display:grid; gap:14px}
+  .kpis{grid-template-columns:repeat(auto-fit,minmax(178px,1fr)); margin-bottom:16px}
+  .kpi{
+    background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:15px 16px;
+  }
+  .kpi .k{font-size:12.5px; color:var(--muted); display:flex; justify-content:space-between; align-items:center}
+  .kpi .k em{font-style:normal; font-size:11px; color:var(--demo); border:1px solid #e6c680; background:var(--demo-soft); border-radius:5px; padding:1px 6px}
+  .kpi .v{font-size:27px; font-weight:700; letter-spacing:.5px; margin-top:4px}
+  .kpi .v small{font-size:13px; font-weight:400; color:var(--muted); margin-left:3px}
+  .kpi .s{font-size:12px; color:var(--muted)}
+
+  section.card{
+    background:var(--card); border:1px solid var(--line); border-radius:var(--radius);
+    padding:18px 18px 16px; margin-bottom:16px;
+  }
+  section.card > h2{
+    margin:0 0 4px; font-size:16px; display:flex; align-items:center; gap:9px; flex-wrap:wrap;
+  }
+  section.card > h2 .n{
+    background:var(--brand-soft); color:var(--brand); font-size:12px; font-weight:700;
+    border-radius:6px; padding:2px 8px;
+  }
+  section.card > .desc{color:var(--muted); font-size:13px; margin:0 0 14px}
+
+  table{width:100%; border-collapse:collapse; font-size:13.2px}
+  th,td{text-align:left; padding:9px 10px; border-bottom:1px solid var(--line); vertical-align:top}
+  th{background:#f8f9fc; color:var(--muted); font-weight:600; font-size:12.5px; white-space:nowrap}
+  tbody tr:hover{background:#fbfcff}
+  td.num{text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap}
+  .mono{font-family:Consolas,"Cascadia Mono",monospace; font-size:12.2px}
+  .chip{
+    display:inline-block; font-size:11.5px; padding:1px 8px; border-radius:999px;
+    border:1px solid var(--line); background:#f7f8fc; color:var(--muted); white-space:nowrap;
+  }
+  .chip.k-comment{background:#eef4ff; border-color:#cddcff; color:#2b4ecc}
+  .chip.k-assessment{background:#eefaf3; border-color:#c6ecd9; color:#16805a}
+  .chip.k-suggestion{background:#fdf4e9; border-color:#f2ddc0; color:#a96a12}
+  .chip.band-A{background:#e9f8f0; border-color:#bfe9d3; color:#12724e; font-weight:700}
+  .chip.band-B{background:#eef4ff; border-color:#cddcff; color:#2b4ecc; font-weight:700}
+  .chip.band-C{background:#fff7e6; border-color:#f0dcb4; color:#9a6a10; font-weight:700}
+  .chip.band-D{background:#fdeeee; border-color:#f3cccc; color:#b83b3b; font-weight:700}
+  .chip.prio-P0{background:#fdeeee; border-color:#f3cccc; color:#b83b3b; font-weight:700}
+  .chip.prio-P1{background:#fff7e6; border-color:#f0dcb4; color:#9a6a10; font-weight:700}
+  .chip.prio-P2{background:#f4f5f9; border-color:#e0e3ec; color:#6b7385; font-weight:700}
+  .chip.demo{background:var(--demo-soft); border-color:#e6c680; color:#8a5d0a; font-weight:600}
+  .stars{color:#e0a12a; letter-spacing:1px; white-space:nowrap}
+  .muted{color:var(--muted)}
+  .small{font-size:12.2px}
+  ul.tight{margin:4px 0 0; padding-left:18px}
+  ul.tight li{margin:1px 0}
+
+  .tabs{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px}
+  .tabs button{
+    font:inherit; font-size:13.5px; cursor:pointer; border-radius:10px;
+    border:1px solid var(--line); background:#fff; color:var(--ink); padding:8px 15px;
+  }
+  .tabs button[aria-selected="true"]{background:var(--brand); border-color:var(--brand); color:#fff; font-weight:600}
+  .panel[hidden]{display:none}
+
+  .bars{display:grid; gap:8px}
+  .bar{display:grid; grid-template-columns:150px 1fr 78px; gap:10px; align-items:center; font-size:12.8px}
+  .bar .track{background:#eef0f6; border-radius:999px; height:10px; overflow:hidden}
+  .bar .fill{height:100%; background:linear-gradient(90deg,#4a74e6,#2f5bd7); border-radius:999px}
+  .bar .fill.warn{background:linear-gradient(90deg,#e8b455,#c9861a)}
+  .bar .val{text-align:right; color:var(--muted); font-variant-numeric:tabular-nums}
+
+  .audit{display:grid; gap:6px; font-size:13px}
+  .audit .row{display:flex; gap:10px; align-items:center}
+  .audit .ok{color:var(--ok); font-weight:700; width:18px}
+  .audit .fail{color:var(--bad); font-weight:700; width:18px}
+  .audit code{background:#f5f6fa; border:1px solid var(--line); border-radius:5px; padding:1px 6px; font-size:12.2px}
+
+  footer.foot{
+    margin-top:8px; border-top:1px dashed var(--line); padding-top:14px;
+    color:var(--muted); font-size:12.4px; line-height:1.75;
+  }
+  .stamp{
+    display:inline-block; border:2px solid rgba(184,132,42,.55); color:rgba(160,113,26,.9);
+    font-weight:800; letter-spacing:3px; font-size:12.5px; padding:5px 12px; border-radius:8px;
+    transform:rotate(-3deg); margin-bottom:10px;
+  }
+  @media print{
+    body::before{color:rgba(184,132,42,.14)}
+    .demobar{background:#fdf0d1 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact}
+  }
+  @media (max-width:720px){
+    .bar{grid-template-columns:110px 1fr 62px}
+    table{font-size:12.4px}
+    th,td{padding:7px 6px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="demobar">
+    <span class="tag">演示数据 DEMO</span>
+    本页所有「参与者 / 评分 / 评论 / 建议」均为<b>程序合成的示例数据</b>，<b>不对应任何真实用户、真实测评或真实反馈</b>；
+    仅用于界面与数据形态演示，<b>不得作为真实用户评价证据对外发布、投放或引用</b>。
+    数据由固定随机种子生成，可复现；如需真实数据，请接入真实测评流水后由后台导出。
+  </div>
+
+  <header class="head">
+    <div class="ribbon">INTERNAL PROTOTYPE · DEMO DATA ONLY</div>
+    <h1>专项测评报告 · 广东中考英语听说在线模拟考场</h1>
+    <p id="subtitle"></p>
+    <div class="facts" id="facts"></div>
+  </header>
+
+  <div class="grid kpis" id="kpis"></div>
+
+  <section class="card">
+    <h2><span class="n">00</span>数据自校验</h2>
+    <p class="desc">页面载入时按原始记录重新统计，逐项核对与需求是否一致；任一项不符会显示为红色。</p>
+    <div class="audit" id="audit"></div>
+  </section>
+
+  <section class="card">
+    <h2><span class="n">01</span>一周记录分布</h2>
+    <p class="desc">同一批 20 人在 7 天内产生的记录条数（仅日期，不含具体时间点）。</p>
+    <div class="bars" id="dayBars"></div>
+  </section>
+
+  <section class="card">
+    <h2><span class="n">02</span>五个题块表现（来自 20 条测评记录）</h2>
+    <p class="desc">按江门考区 30 分制分块统计平均得分；柱条越短代表该题块越需要改动。</p>
+    <div class="bars" id="partBars"></div>
+  </section>
+
+  <section class="card">
+    <h2><span class="n">03</span>72 条记录明细</h2>
+    <p class="desc">每条记录都带 <span class="chip demo">演示数据</span> 角标，并标注归属参与者与产生日期。</p>
+    <div class="tabs" role="tablist">
+      <button role="tab" id="tab-comment" aria-selected="true" data-panel="panel-comment">学员评论</button>
+      <button role="tab" id="tab-assessment" aria-selected="false" data-panel="panel-assessment">测评记录</button>
+      <button role="tab" id="tab-suggestion" aria-selected="false" data-panel="panel-suggestion">建议修改</button>
+    </div>
+    <div class="panel" id="panel-comment"></div>
+    <div class="panel" id="panel-assessment" hidden></div>
+    <div class="panel" id="panel-suggestion" hidden></div>
+  </section>
+
+  <section class="card">
+    <h2><span class="n">04</span>参与者名册（演示身份）</h2>
+    <p class="desc">20 位演示参与者，姓名一律使用编号占位，不含任何真实个人身份信息。</p>
+    <div id="roster"></div>
+  </section>
+
+  <footer class="foot">
+    <div class="stamp">演示数据 · 禁止外发</div>
+    <p id="footwarning"></p>
+    <p>数据类型：合成示例（synthetic）｜参与者 20 人（演示编号）｜周期 <span id="weekRange"></span>（7 天）｜记录合计 <b>72</b> 条（评论 <span id="cntC"></span> + 测评 <span id="cntA"></span> + 建议 <span id="cntS"></span>）</p>
+    <p>试卷模型：江门考区人机对话 · 三大题五小节 · 14 小题 · 满分 30 分 · 约 20 分钟。页面为单文件离线原型，不连接 englishtest.up.railway.app 的生产接口，也不写入任何后端数据。</p>
+    <p id="genline"></p>
+  </footer>
+</div>
+
+<script id="demo-data" type="application/json">{"meta":{"title":"专项测评报告（演示数据）","subtitle":"广东中考英语听说 · 在线模拟考场 —— 内部原型页","isSynthetic":true,"warning":"本文件与配套 HTML 页面中的全部参与者、评分、评论、建议均为程序合成的演示数据，不对应任何真实用户、真实测评或真实反馈；禁止作为真实用户评价证据对外发布。","generatedBy":"gd-english/scratch/build-demo-eval.mjs（固定随机种子 20240517，可复现）","targetDeployment":"englishtest.up.railway.app（本项目的 Railway 部署示例）","weekStart":"2025-03-02","weekEnd":"2025-03-08","participantCount":20,"recordCount":72,"counts":{"comment":25,"assessment":20,"suggestion":27},"examModel":{"name":"江门考区人机对话","totalScore":30,"questionCount":14,"minutes":20}},"participants":[{"id":"DEMO-P01","label":"演示参与者 01","grade":"九年级","region":"示例考区","device":"macOS 14 · Chrome 126","synthetic":true,"attempts":12,"total":22.6,"band":"C"},{"id":"DEMO-P02","label":"演示参与者 02","grade":"九年级","region":"示例考区","device":"Android · Chrome 126","synthetic":true,"attempts":9,"total":24.9,"band":"B"},{"id":"DEMO-P03","label":"演示参与者 03","grade":"九年级","region":"示例考区","device":"Windows 10 · Edge 126","synthetic":true,"attempts":2,"total":18.3,"band":"C"},{"id":"DEMO-P04","label":"演示参与者 04","grade":"九年级","region":"示例考区","device":"macOS 14 · Chrome 126","synthetic":true,"attempts":5,"total":22.7,"band":"C"},{"id":"DEMO-P05","label":"演示参与者 05","grade":"九年级","region":"示例考区","device":"Windows 10 · Edge 126","synthetic":true,"attempts":1,"total":20.1,"band":"C"},{"id":"DEMO-P06","label":"演示参与者 06","grade":"九年级","region":"示例考区","device":"Windows 10 · Edge 126","synthetic":true,"attempts":13,"total":22.3,"band":"C"},{"id":"DEMO-P07","label":"演示参与者 07","grade":"九年级","region":"示例考区","device":"macOS 14 · Chrome 126","synthetic":true,"attempts":5,"total":20.1,"band":"C"},{"id":"DEMO-P08","label":"演示参与者 08","grade":"八年级","region":"示例考区","device":"HarmonyOS · 浏览器 12","synthetic":true,"attempts":8,"total":18.6,"band":"C"},{"id":"DEMO-P09","label":"演示参与者 09","grade":"八年级","region":"示例考区","device":"Android · Chrome 126","synthetic":true,"attempts":3,"total":15.5,"band":"D"},{"id":"DEMO-P10","label":"演示参与者 10","grade":"八年级","region":"示例考区","device":"Windows 11 · Chrome 126","synthetic":true,"attempts":5,"total":13.2,"band":"D"},{"id":"DEMO-P11","label":"演示参与者 11","grade":"八年级","region":"示例考区","device":"macOS 14 · Chrome 126","synthetic":true,"attempts":2,"total":21.1,"band":"C"},{"id":"DEMO-P12","label":"演示参与者 12","grade":"八年级","region":"示例考区","device":"HarmonyOS · 浏览器 12","synthetic":true,"attempts":3,"total":21.8,"band":"C"},{"id":"DEMO-P13","label":"演示参与者 13","grade":"八年级","region":"示例考区","device":"Windows 11 · Chrome 126","synthetic":true,"attempts":8,"total":16.2,"band":"D"},{"id":"DEMO-P14","label":"演示参与者 14","grade":"八年级","region":"示例考区","device":"Windows 11 · Chrome 126","synthetic":true,"attempts":11,"total":18,"band":"C"},{"id":"DEMO-P15","label":"演示参与者 15","grade":"八年级","region":"示例考区","device":"HarmonyOS · 浏览器 12","synthetic":true,"attempts":8,"total":17,"band":"D"},{"id":"DEMO-P16","label":"演示参与者 16","grade":"八年级","region":"示例考区","device":"Windows 10 · Edge 126","synthetic":true,"attempts":6,"total":17.7,"band":"D"},{"id":"DEMO-P17","label":"演示参与者 17","grade":"八年级","region":"示例考区","device":"Windows 10 · Edge 126","synthetic":true,"attempts":8,"total":17.9,"band":"D"},{"id":"DEMO-P18","label":"演示参与者 18","grade":"七年级","region":"示例考区","device":"macOS 14 · Chrome 126","synthetic":true,"attempts":6,"total":15.8,"band":"D"},{"id":"DEMO-P19","label":"演示参与者 19","grade":"七年级","region":"示例考区","device":"Android · Chrome 126","synthetic":true,"attempts":11,"total":22.8,"band":"C"},{"id":"DEMO-P20","label":"演示参与者 20","grade":"七年级","region":"示例考区","device":"macOS 14 · Chrome 126","synthetic":true,"attempts":4,"total":23.9,"band":"C"}],"records":[{"id":"RV-ASSESSMENT-001","day":"2025-03-02","kind":"assessment","participantId":"DEMO-P01","participantLabel":"演示参与者 01","synthetic":true,"source":"demo-fixture","total":22.6,"band":"C","bandText":"及格","marginToNextBand":4.6,"items":[{"name":"一、模仿朗读","score":5.2,"max":6},{"name":"二·第一节 听选信息","score":7,"max":9},{"name":"二·第二节 回答问题","score":3.2,"max":6},{"name":"三·第一节 信息转述","score":5.5,"max":6},{"name":"三·第二节 询问信息","score":1.7,"max":3}],"metrics":{"coverage":88,"grammarErrors":1,"missedPoints":2,"readSec":197},"issues":[{"part":"二·第二节 回答问题","text":"有 2 个问题未覆盖到答案信息点"},{"part":"三·第二节 询问信息","text":"问句结构不完整，内容完整性得分偏低"}],"device":"macOS 14 · Chrome 126","micCheck":"正常","diagnose":"本周共完成 12 套（26 分钟机时），主要失分集中在回答问题；二·第二节 回答问题：有 2 个问题未覆盖到答案信息点。","seq":1,"dayIndex":1},{"id":"RV-COMMENT-001","day":"2025-03-04","kind":"comment","participantId":"DEMO-P01","participantLabel":"演示参与者 01","synthetic":true,"source":"demo-fixture","rating":4,"title":"用了一周的想法","content":"时间流程跟学校组织的那次很接近，AI 组卷每次的短文都不一样，背答案没用。倒计时最后 3 秒闪了一下、跳过了两帧。希望一直免费开放基础练习。","seq":2,"dayIndex":3},{"id":"RV-SUGGESTION-001","day":"2025-03-07","kind":"suggestion","participantId":"DEMO-P01","participantLabel":"演示参与者 01","synthetic":true,"source":"demo-fixture","priority":"P0","effort":"S","part":"二·第一节 听选信息","issue":"第二段对话语速偏快、只播一遍","evidence":"有 2 个问题未覆盖到答案信息点","change":"把第二段对话的播放速度按 0.9× 提供一档「练习语速」开关，并在该小节增加一次「重听一遍」的额度（正式模式关闭）。","impact":"预计该小节平均分 7.2 → 8.1（+0.9）","metric":"该小节平均分","seq":3,"dayIndex":6},{"id":"RV-ASSESSMENT-002","day":"2025-03-02","kind":"assessment","participantId":"DEMO-P02","participantLabel":"演示参与者 02","synthetic":true,"source":"demo-fixture","total":24.9,"band":"B","bandText":"良好","marginToNextBand":0.9,"items":[{"name":"一、模仿朗读","score":5.5,"max":6},{"name":"二·第一节 听选信息","score":7.4,"max":9},{"name":"二·第二节 回答问题","score":4.3,"max":6},{"name":"三·第一节 信息转述","score":5.8,"max":6},{"name":"三·第二节 询问信息","score":1.9,"max":3}],"metrics":{"coverage":94,"grammarErrors":5,"missedPoints":4,"readSec":209},"issues":[{"part":"一、模仿朗读","text":"语音语调扣分，逐词比对发现 5 处读错"},{"part":"二·第二节 回答问题","text":"有 4 个问题未覆盖到答案信息点"}],"device":"Android · Chrome 126","micCheck":"2 次中断","diagnose":"本周共完成 9 套（30 分钟机时），主要失分集中在询问信息；一、模仿朗读：语音语调扣分，逐词比对发现 5 处读错。","seq":4,"dayIndex":1},{"id":"RV-COMMENT-002","day":"2025-03-04","kind":"comment","participantId":"DEMO-P02","participantLabel":"演示参与者 02","synthetic":true,"source":"demo-fixture","rating":4,"title":"用了一周的想法","content":"用手机练的时候也挺顺的，成绩报告把扣分点直接指到具体小题，比自己对着答案猜有用。安静环境下出现过一次识别空白，重录后正常。报告页刷新后要重新翻一次。如果能出个错题回顾就更好。","seq":5,"dayIndex":3},{"id":"RV-COMMENT-003","day":"2025-03-08","kind":"comment","participantId":"DEMO-P02","participantLabel":"演示参与者 02","synthetic":true,"source":"demo-fixture","rating":4,"title":"还想说两点","content":"题量和时间安排跟正式考试对得上，漏读的词会标黄，一眼能看出问题在哪儿。安静环境下出现过一次识别空白，重录后正常。总体用下来愿意继续用。","seq":6,"dayIndex":7},{"id":"RV-SUGGESTION-002","day":"2025-03-07","kind":"suggestion","participantId":"DEMO-P02","participantLabel":"演示参与者 02","synthetic":true,"source":"demo-fixture","priority":"P1","effort":"M","part":"二·第二节 回答问题","issue":"8 秒作答窗口不够组织语言","evidence":"有 4 个问题未覆盖到答案信息点","change":"将回答问题的准备时长由 0 秒改为「读题后 3 秒准备 + 8 秒作答」，8 秒作答时长保持不变以对齐考区参数。","impact":"预计未作答率下降约 12%","metric":"未作答率","seq":7,"dayIndex":6},{"id":"RV-ASSESSMENT-003","day":"2025-03-02","kind":"assessment","participantId":"DEMO-P03","participantLabel":"演示参与者 03","synthetic":true,"source":"demo-fixture","total":18.3,"band":"C","bandText":"及格","marginToNextBand":0.3,"items":[{"name":"一、模仿朗读","score":2.9,"max":6},{"name":"二·第一节 听选信息","score":3.7,"max":9},{"name":"二·第二节 回答问题","score":4.7,"max":6},{"name":"三·第一节 信息转述","score":4.7,"max":6},{"name":"三·第二节 询问信息","score":2.3,"max":3}],"metrics":{"coverage":91,"grammarErrors":0,"missedPoints":0,"readSec":107},"issues":[{"part":"二·第一节 听选信息","text":"选项信息抓取不全，错误主要集中在第二段对话"}],"device":"Windows 10 · Edge 126","micCheck":"正常","diagnose":"本周共完成 2 套（30 分钟机时），主要失分集中在听选信息；二·第一节 听选信息：选项信息抓取不全，错误主要集中在第二段对话。","seq":8,"dayIndex":1},{"id":"RV-COMMENT-004","day":"2025-03-04","kind":"comment","participantId":"DEMO-P03","participantLabel":"演示参与者 03","synthetic":true,"source":"demo-fixture","rating":3,"title":"用了一周的想法","content":"和我在学校机房里考的流程一样，每道题的作答时间都给得很准，练多了就不慌了。第二段对话只播放了一遍，刷新后恢复正常。我的总分只有 18.3 分，主要丢在听选信息。希望多提供几套不同难度的卷子。","seq":9,"dayIndex":3},{"id":"RV-SUGGESTION-003","day":"2025-03-07","kind":"suggestion","participantId":"DEMO-P03","participantLabel":"演示参与者 03","synthetic":true,"source":"demo-fixture","priority":"P2","effort":"M","part":"三·第一节 信息转述","issue":"要点覆盖不足、缺标准示范","evidence":"选项信息抓取不全，错误主要集中在第二段对话","change":"成绩报告内新增「标准转述示范」音频与要点对照表，转述结束后即可逐条比对漏掉的要点。","impact":"预计要点覆盖率 81% → 92%","metric":"要点覆盖率","seq":10,"dayIndex":6},{"id":"RV-SUGGESTION-004","day":"2025-03-08","kind":"suggestion","participantId":"DEMO-P03","participantLabel":"演示参与者 03","synthetic":true,"source":"demo-fixture","priority":"P1","effort":"S","part":"全卷","issue":"跨设备续练体验不连续","evidence":"补充观察：第二段对话只播放了一遍，刷新后恢复正常","change":"同一账号在同一测评中断后，允许在另一台设备上「继续上次」，已完成的题直接沿用。","impact":"中断放弃率预计下降 18%","metric":"中断放弃率","seq":11,"dayIndex":7},{"id":"RV-ASSESSMENT-004","day":"2025-03-02","kind":"assessment","participantId":"DEMO-P04","participantLabel":"演示参与者 04","synthetic":true,"source":"demo-fixture","total":22.7,"band":"C","bandText":"及格","marginToNextBand":4.7,"items":[{"name":"一、模仿朗读","score":4.6,"max":6},{"name":"二·第一节 听选信息","score":5.6,"max":9},{"name":"二·第二节 回答问题","score":5.7,"max":6},{"name":"三·第一节 信息转述","score":5.8,"max":6},{"name":"三·第二节 询问信息","score":1,"max":3}],"metrics":{"coverage":99,"grammarErrors":0,"missedPoints":4,"readSec":172},"issues":[{"part":"二·第二节 回答问题","text":"有 4 个问题未覆盖到答案信息点"},{"part":"二·第一节 听选信息","text":"选项信息抓取不全，错误主要集中在第二段对话"},{"part":"三·第二节 询问信息","text":"问句结构不完整，内容完整性得分偏低"}],"device":"macOS 14 · Chrome 126","micCheck":"2 次中断","diagnose":"本周共完成 5 套（28 分钟机时），主要失分集中在询问信息；二·第二节 回答问题：有 4 个问题未覆盖到答案信息点。","seq":12,"dayIndex":1},{"id":"RV-COMMENT-005","day":"2025-03-04","kind":"comment","participantId":"DEMO-P04","participantLabel":"演示参与者 04","synthetic":true,"source":"demo-fixture","rating":4,"title":"整体体验","content":"用手机练的时候也挺顺的，每道题的作答时间都给得很准，练多了就不慌了。倒计时最后 3 秒闪了一下、跳过了两帧。信息转述只覆盖到 99% 的要点，希望能看到标准转述示范。总体用下来愿意继续用。","seq":13,"dayIndex":3},{"id":"RV-SUGGESTION-005","day":"2025-03-07","kind":"suggestion","participantId":"DEMO-P04","participantLabel":"演示参与者 04","synthetic":true,"source":"demo-fixture","priority":"P0","effort":"L","part":"一、模仿朗读","issue":"语音语调问题缺少可跟读的示范","evidence":"有 4 个问题未覆盖到答案信息点","change":"在模仿朗读报告里为读错单词加挂「跟读示范」按钮，点击即播放该单词的标准发音并支持慢速。","impact":"预计读错词数下降约 30%","metric":"平均读错词数","seq":14,"dayIndex":6},{"id":"RV-ASSESSMENT-005","day":"2025-03-02","kind":"assessment","participantId":"DEMO-P05","participantLabel":"演示参与者 05","synthetic":true,"source":"demo-fixture","total":20.1,"band":"C","bandText":"及格","marginToNextBand":2.1,"items":[{"name":"一、模仿朗读","score":2.1,"max":6},{"name":"二·第一节 听选信息","score":5.4,"max":9},{"name":"二·第二节 回答问题","score":5.3,"max":6},{"name":"三·第一节 信息转述","score":4.5,"max":6},{"name":"三·第二节 询问信息","score":2.8,"max":3}],"metrics":{"coverage":66,"grammarErrors":0,"missedPoints":0,"readSec":87},"issues":[{"part":"三·第一节 信息转述","text":"要点覆盖 66%，缺 34%"},{"part":"二·第一节 听选信息","text":"选项信息抓取不全，错误主要集中在第二段对话"}],"device":"Windows 10 · Edge 126","micCheck":"1 次中断","diagnose":"本周共完成 1 套（24 分钟机时），主要失分集中在模仿朗读；三·第一节 信息转述：要点覆盖 66%，缺 34%。","seq":15,"dayIndex":1},{"id":"RV-COMMENT-006","day":"2025-03-04","kind":"comment","participantId":"DEMO-P05","participantLabel":"演示参与者 05","synthetic":true,"source":"demo-fixture","rating":4,"title":"用了一周的想法","content":"时间流程跟学校组织的那次很接近，AI 组卷每次的短文都不一样，背答案没用。倒计时最后 3 秒闪了一下、跳过了两帧。希望一直免费开放基础练习。","seq":16,"dayIndex":3},{"id":"RV-SUGGESTION-006","day":"2025-03-07","kind":"suggestion","participantId":"DEMO-P05","participantLabel":"演示参与者 05","synthetic":true,"source":"demo-fixture","priority":"P1","effort":"M","part":"全卷","issue":"个人无横向参照，不知道自己排在哪一档","evidence":"要点覆盖 66%，缺 34%","change":"用户端新增「个人进步曲线」，按档位 A/B/C/D 展示最近 10 次测评的走势与距下一档位的分差。","impact":"预计 7 日内复练率提升约 15%","metric":"复练率","seq":17,"dayIndex":6},{"id":"RV-SUGGESTION-007","day":"2025-03-08","kind":"suggestion","participantId":"DEMO-P05","participantLabel":"演示参与者 05","synthetic":true,"source":"demo-fixture","priority":"P1","effort":"M","part":"全卷","issue":"管理端看不到班级整体短板","evidence":"补充观察：倒计时最后 3 秒闪了一下、跳过了两帧","change":"管理后台新增「5 个题块平均失分」柱状图与班级得分分布，支持按周导出 CSV。","impact":"教师侧配置耗时下降约 50%","metric":"教师侧配置耗时","seq":18,"dayIndex":7},{"id":"RV-ASSESSMENT-006","day":"2025-03-02","kind":"assessment","participantId":"DEMO-P06","participantLabel":"演示参与者 06","synthetic":true,"source":"demo-fixture","total":22.3,"band":"C","bandText":"及格","marginToNextBand":4.3,"items":[{"name":"一、模仿朗读","score":3.6,"max":6},{"name":"二·第一节 听选信息","score":6.5,"max":9},{"name":"二·第二节 回答问题","score":4.7,"max":6},{"name":"三·第一节 信息转述","score":4.7,"max":6},{"name":"三·第二节 询问信息","score":2.8,"max":3}],"metrics":{"coverage":82,"grammarErrors":1,"missedPoints":4,"readSec":146},"issues":[{"part":"三·第一节 信息转述","text":"要点覆盖 82%，缺 18%"},{"part":"二·第二节 回答问题","text":"有 4 个问题未覆盖到答案信息点"}],"device":"Windows 10 · Edge 126","micCheck":"1 次中断","diagnose":"本周共完成 13 套（30 分钟机时），主要失分集中在模仿朗读；三·第一节 信息转述：要点覆盖 82%，缺 18%。","seq":19,"dayIndex":1},{"id":"RV-COMMENT-007","day":"2025-03-04","kind":"comment","participantId":"DEMO-P06","participantLabel":"演示参与者 06","synthetic":true,"source":"demo-fixture","rating":3,"title":"关于成绩报告","content":"题量和时间安排跟正式考试对得上，AI 组卷每次的短文都不一样，背答案没用。中途接电话切后台，回来要继续从头听一遍。一周里我一共练了 13 套，分数从 20 分上下慢慢到了 22.3 分。如果能出个错题回顾就更好。","seq":20,"dayIndex":3},{"id":"RV-COMMENT-008","day":"2025-03-08","kind":"comment","participantId":"DEMO-P06","participantLabel":"演示参与者 06","synthetic":true,"source":"demo-fixture","rating":3,"title":"还想说两点","content":"用手机练的时候也挺顺的，不用等学校统一安排，晚上在家就能练一套。中途接电话切后台，回来要继续从头听一遍。如果能出个错题回顾就更好。","seq":21,"dayIndex":7},{"id":"RV-SUGGESTION-008","day":"2025-03-07","kind":"suggestion","participantId":"DEMO-P06","participantLabel":"演示参与者 06","synthetic":true,"source":"demo-fixture","priority":"P2","effort":"S","part":"三·第二节 询问信息","issue":"问句结构不完整、分值拆分看不懂","evidence":"要点覆盖 82%，缺 18%","change":"把询问信息的 0.75 + 0.75 拆分在报告里显式画出两个小进度条，并给出「参考问句」对照。","impact":"该小节平均分 +0.4","metric":"该小节平均分","seq":22,"dayIndex":6},{"id":"RV-ASSESSMENT-007","day":"2025-03-02","kind":"assessment","participantId":"DEMO-P07","participantLabel":"演示参与者 07","synthetic":true,"source":"demo-fixture","total":20.1,"band":"C","bandText":"及格","marginToNextBand":2.1,"items":[{"name":"一、模仿朗读","score":4.8,"max":6},{"name":"二·第一节 听选信息","score":7.7,"max":9},{"name":"二·第二节 回答问题","score":2.8,"max":6},{"name":"三·第一节 信息转述","score":3.8,"max":6},{"name":"三·第二节 询问信息","score":1,"max":3}],"metrics":{"coverage":60,"grammarErrors":7,"missedPoints":4,"readSec":187},"issues":[{"part":"三·第一节 信息转述","text":"要点覆盖 60%，缺 40%"},{"part":"一、模仿朗读","text":"语音语调扣分，逐词比对发现 7 处读错"},{"part":"二·第二节 回答问题","text":"有 4 个问题未覆盖到答案信息点"},{"part":"三·第二节 询问信息","text":"问句结构不完整，内容完整性得分偏低"}],"device":"macOS 14 · Chrome 126","micCheck":"2 次中断","diagnose":"本周共完成 5 套（17 分钟机时），主要失分集中在询问信息；三·第一节 信息转述：要点覆盖 60%，缺 40%。","seq":23,"dayIndex":1},{"id":"RV-COMMENT-009","day":"2025-03-04","kind":"comment","participantId":"DEMO-P07","participantLabel":"演示参与者 07","synthetic":true,"source":"demo-fixture","rating":4,"title":"整体体验","content":"这套流程和学校机房的模拟考基本一样，AI 组卷每次的短文都不一样，背答案没用。中途接电话切后台，回来要继续从头听一遍。希望多提供几套不同难度的卷子。","seq":24,"dayIndex":3},{"id":"RV-SUGGESTION-009","day":"2025-03-07","kind":"suggestion","participantId":"DEMO-P07","participantLabel":"演示参与者 07","synthetic":true,"source":"demo-fixture","priority":"P1","effort":"M","part":"全卷","issue":"组卷等待时用户不知道还要多久","evidence":"要点覆盖 60%，缺 40%","change":"组卷接口改为流式返回「短文 → 听力 → 转述」三段进度，首屏先给骨架屏，避免长时间白屏。","impact":"组卷等待放弃率预计下降 20%","metric":"等待放弃率","seq":25,"dayIndex":6},{"id":"RV-SUGGESTION-010","day":"2025-03-08","kind":"suggestion","participantId":"DEMO-P07","participantLabel":"演示参与者 07","synthetic":true,"source":"demo-fixture","priority":"P1","effort":"L","part":"全卷","issue":"兑换与扣次说明分散，家长看不懂","evidence":"补充观察：中途接电话切后台，回来要继续从头听一遍","change":"把「本次不扣额度」的判定条件写进计费页与流水页的同一个提示条，失败场景统一显示原因文案。","impact":"计费类咨询量预计下降 35%","metric":"计费类咨询量","seq":26,"dayIndex":7},{"id":"RV-ASSESSMENT-008","day":"2025-03-02","kind":"assessment","participantId":"DEMO-P08","participantLabel":"演示参与者 08","synthetic":true,"source":"demo-fixture","total":18.6,"band":"C","bandText":"及格","marginToNextBand":0.6,"items":[{"name":"一、模仿朗读","score":3.9,"max":6},{"name":"二·第一节 听选信息","score":4,"max":9},{"name":"二·第二节 回答问题","score":4.9,"max":6},{"name":"三·第一节 信息转述","score":3.8,"max":6},{"name":"三·第二节 询问信息","score":2,"max":3}],"metrics":{"coverage":63,"grammarErrors":4,"missedPoints":4,"readSec":150},"issues":[{"part":"三·第一节 信息转述","text":"要点覆盖 63%，缺 37%"},{"part":"一、模仿朗读","text":"语音语调扣分，逐词比对发现 4 处读错"},{"part":"二·第二节 回答问题","text":"有 4 个问题未覆盖到答案信息点"},{"part":"二·第一节 听选信息","text":"选项信息抓取不全，错误主要集中在第二段对话"}],"device":"HarmonyOS · 浏览器 12","micCheck":"2 次中断","diagnose":"本周共完成 8 套（30 分钟机时），主要失分集中在听选信息；三·第一节 信息转述：要点覆盖 63%，缺 37%。","seq":27,"dayIndex":1},{"id":"RV-COMMENT-010","day":"2025-03-04","kind":"comment","participantId":"DEMO-P08","participantLabel":"演示参与者 08","synthetic":true,"source":"demo-fixture","rating":3,"title":"整体体验","content":"题量和时间安排跟正式考试对得上，每道题的作答时间都给得很准，练多了就不慌了。倒计时最后 3 秒闪了一下、跳过了两帧。我的总分只有 18.6 分，主要丢在听选信息。希望一直免费开放基础练习。","seq":28,"dayIndex":3},{"id":"RV-SUGGESTION-011","day":"2025-03-07","kind":"suggestion","participantId":"DEMO-P08","participantLabel":"演示参与者 08","synthetic":true,"source":"demo-fixture","priority":"P1","effort":"M","part":"全卷","issue":"AI 组卷失败时无法答题","evidence":"要点覆盖 63%，缺 37%","change":"内置示例卷提前预热缓存，AI 失败时 1 秒内静默切换兜底卷，并在页脚以小字标注「本次为示例卷」。","impact":"组卷失败导致的不可用时长 → 0","metric":"不可用时长","seq":29,"dayIndex":6},{"id":"RV-ASSESSMENT-009","day":"2025-03-02","kind":"assessment","participantId":"DEMO-P09","participantLabel":"演示参与者 09","synthetic":true,"source":"demo-fixture","total":15.5,"band":"D","bandText":"待提高","marginToNextBand":-2.5,"items":[{"name":"一、模仿朗读","score":2.4,"max":6},{"name":"二·第一节 听选信息","score":3.4,"max":9},{"name":"二·第二节 回答问题","score":4.7,"max":6},{"name":"三·第一节 信息转述","score":3.8,"max":6},{"name":"三·第二节 询问信息","score":1.2,"max":3}],"metrics":{"coverage":72,"grammarErrors":7,"missedPoints":1,"readSec":97},"issues":[{"part":"三·第一节 信息转述","text":"要点覆盖 72%，缺 28%"},{"part":"一、模仿朗读","text":"语音语调扣分，逐词比对发现 7 处读错"},{"part":"二·第一节 听选信息","text":"选项信息抓取不全，错误主要集中在第二段对话"},{"part":"三·第二节 询问信息","text":"问句结构不完整，内容完整性得分偏低"}],"device":"Android · Chrome 126","micCheck":"正常","diagnose":"本周共完成 3 套（28 分钟机时），主要失分集中在听选信息；三·第一节 信息转述：要点覆盖 72%，缺 28%。","seq":30,"dayIndex":1},{"id":"RV-COMMENT-011","day":"2025-03-04","kind":"comment","participantId":"DEMO-P09","participantLabel":"演示参与者 09","synthetic":true,"source":"demo-fixture","rating":3,"title":"用了一周的想法","content":"时间流程跟学校组织的那次很接近，波形回看能看出我在哪一句卡住了。整体没有遇到问题。我的总分只有 15.5 分，主要丢在听选信息。总体用下来愿意继续用。","seq":31,"dayIndex":3},{"id":"RV-SUGGESTION-012","day":"2025-03-07","kind":"suggestion","participantId":"DEMO-P09","participantLabel":"演示参与者 09","synthetic":true,"source":"demo-fixture","priority":"P1","effort":"L","part":"全卷","issue":"成绩报告术语偏多，学生看不懂","evidence":"要点覆盖 72%，缺 28%","change":"报告首屏新增一句「本次最该改的一件事」结论，用日常语言写，专业术语折叠进「评分依据」里。","impact":"预计报告页停留时长 +25%","metric":"报告页停留时长","seq":32,"dayIndex":6},{"id":"RV-SUGGESTION-013","day":"2025-03-08","kind":"suggestion","participantId":"DEMO-P09","participantLabel":"演示参与者 09","synthetic":true,"source":"demo-fixture","priority":"P2","effort":"M","part":"三·第一节 信息转述","issue":"要点覆盖不足、缺标准示范","evidence":"补充观察：整体没有遇到问题","change":"成绩报告内新增「标准转述示范」音频与要点对照表，转述结束后即可逐条比对漏掉的要点。","impact":"预计要点覆盖率 81% → 92%","metric":"要点覆盖率","seq":33,"dayIndex":7},{"id":"RV-ASSESSMENT-010","day":"2025-03-02","kind":"assessment","participantId":"DEMO-P10","participantLabel":"演示参与者 10","synthetic":true,"source":"demo-fixture","total":13.2,"band":"D","bandText":"待提高","marginToNextBand":-4.8,"items":[{"name":"一、模仿朗读","score":2.6,"max":6},{"name":"二·第一节 听选信息","score":3.2,"max":9},{"name":"二·第二节 回答问题","score":3.8,"max":6},{"name":"三·第一节 信息转述","score":2.6,"max":6},{"name":"三·第二节 询问信息","score":1,"max":3}],"metrics":{"coverage":95,"grammarErrors":6,"missedPoints":2,"readSec":100},"issues":[{"part":"一、模仿朗读","text":"语音语调扣分，逐词比对发现 6 处读错"},{"part":"二·第二节 回答问题","text":"有 2 个问题未覆盖到答案信息点"},{"part":"二·第一节 听选信息","text":"选项信息抓取不全，错误主要集中在第二段对话"},{"part":"三·第二节 询问信息","text":"问句结构不完整，内容完整性得分偏低"}],"device":"Windows 11 · Chrome 126","micCheck":"1 次中断","diagnose":"本周共完成 5 套（23 分钟机时），主要失分集中在询问信息；一、模仿朗读：语音语调扣分，逐词比对发现 6 处读错。","seq":34,"dayIndex":1},{"id":"RV-COMMENT-012","day":"2025-03-04","kind":"comment","participantId":"DEMO-P10","participantLabel":"演示参与者 10","synthetic":true,"source":"demo-fixture","rating":3,"title":"练完一套的感受","content":"这套流程和学校机房的模拟考基本一样，不用等学校统一安排，晚上在家就能练一套。第二段对话只播放了一遍，刷新后恢复正常。我的总分只有 13.2 分，主要丢在询问信息。希望多提供几套不同难度的卷子。","seq":35,"dayIndex":3},{"id":"RV-COMMENT-013","day":"2025-03-08","kind":"comment","participantId":"DEMO-P10","participantLabel":"演示参与者 10","synthetic":true,"source":"demo-fixture","rating":2,"title":"还想说两点","content":"用手机练的时候也挺顺的，漏读的词会标黄，一眼能看出问题在哪儿。第二段对话只播放了一遍，刷新后恢复正常。我的总分只有 13.2 分，主要丢在询问信息。如果能出个错题回顾就更好。","seq":36,"dayIndex":7},{"id":"RV-SUGGESTION-014","day":"2025-03-07","kind":"suggestion","participantId":"DEMO-P10","participantLabel":"演示参与者 10","synthetic":true,"source":"demo-fixture","priority":"P0","effort":"M","part":"一、模仿朗读","issue":"朗读时长与停顿缺少量化反馈","evidence":"语音语调扣分，逐词比对发现 6 处读错","change":"波形回看里补上「发声占比 / 停顿次数」两个数字，并在停顿超过 1.5 秒的位置打标记。","impact":"流利度评分预计 +0.3","metric":"流利度评分","seq":37,"dayIndex":6},{"id":"RV-ASSESSMENT-011","day":"2025-03-02","kind":"assessment","participantId":"DEMO-P11","participantLabel":"演示参与者 11","synthetic":true,"source":"demo-fixture","total":21.1,"band":"C","bandText":"及格","marginToNextBand":3.1,"items":[{"name":"一、模仿朗读","score":4.3,"max":6},{"name":"二·第一节 听选信息","score":8.3,"max":9},{"name":"二·第二节 回答问题","score":3.2,"max":6},{"name":"三·第一节 信息转述","score":4.6,"max":6},{"name":"三·第二节 询问信息","score":0.7,"max":3}],"metrics":{"coverage":81,"grammarErrors":1,"missedPoints":3,"readSec":156},"issues":[{"part":"三·第一节 信息转述","text":"要点覆盖 81%，缺 19%"},{"part":"二·第二节 回答问题","text":"有 3 个问题未覆盖到答案信息点"},{"part":"三·第二节 询问信息","text":"问句结构不完整，内容完整性得分偏低"}],"device":"macOS 14 · Chrome 126","micCheck":"2 次中断","diagnose":"本周共完成 2 套（22 分钟机时），主要失分集中在询问信息；三·第一节 信息转述：要点覆盖 81%，缺 19%。","seq":38,"dayIndex":1},{"id":"RV-COMMENT-014","day":"2025-03-04","kind":"comment","participantId":"DEMO-P11","participantLabel":"演示参与者 11","synthetic":true,"source":"demo-fixture","rating":4,"title":"整体体验","content":"和我在学校机房里考的流程一样，成绩报告把扣分点直接指到具体小题，比自己对着答案猜有用。整体没有遇到问题。朗读读错 1 处，希望报告里能给出跟读示范音频。总体用下来愿意继续用。","seq":39,"dayIndex":3},{"id":"RV-SUGGESTION-015","day":"2025-03-07","kind":"suggestion","participantId":"DEMO-P11","participantLabel":"演示参与者 11","synthetic":true,"source":"demo-fixture","priority":"P1","effort":"S","part":"二·第一节 听选信息","issue":"设备差异导致听不清","evidence":"要点覆盖 81%，缺 19%","change":"正式作答前固定插入 5 秒试音，并检测系统音量低于 30% 时给出「音量偏低」提醒。","impact":"设备类问题反馈预计下降 40%","metric":"设备类问题反馈数","seq":40,"dayIndex":6},{"id":"RV-ASSESSMENT-012","day":"2025-03-02","kind":"assessment","participantId":"DEMO-P12","participantLabel":"演示参与者 12","synthetic":true,"source":"demo-fixture","total":21.8,"band":"C","bandText":"及格","marginToNextBand":3.8,"items":[{"name":"一、模仿朗读","score":4.6,"max":6},{"name":"二·第一节 听选信息","score":5.1,"max":9},{"name":"二·第二节 回答问题","score":5.8,"max":6},{"name":"三·第一节 信息转述","score":4.2,"max":6},{"name":"三·第二节 询问信息","score":2.1,"max":3}],"metrics":{"coverage":82,"grammarErrors":0,"missedPoints":0,"readSec":178},"issues":[{"part":"三·第一节 信息转述","text":"要点覆盖 82%，缺 18%"},{"part":"二·第一节 听选信息","text":"选项信息抓取不全，错误主要集中在第二段对话"}],"device":"HarmonyOS · 浏览器 12","micCheck":"正常","diagnose":"本周共完成 3 套（24 分钟机时），主要失分集中在听选信息；三·第一节 信息转述：要点覆盖 82%，缺 18%。","seq":41,"dayIndex":1},{"id":"RV-COMMENT-015","day":"2025-03-04","kind":"comment","participantId":"DEMO-P12","participantLabel":"演示参与者 12","synthetic":true,"source":"demo-fixture","rating":4,"title":"周末练习反馈","content":"和我在学校机房里考的流程一样，不用等学校统一安排，晚上在家就能练一套。中途接电话切后台，回来要继续从头听一遍。中间出现过一次录音中断，重录才正常。希望多提供几套不同难度的卷子。","seq":42,"dayIndex":3},{"id":"RV-SUGGESTION-016","day":"2025-03-07","kind":"suggestion","participantId":"DEMO-P12","participantLabel":"演示参与者 12","synthetic":true,"source":"demo-fixture","priority":"P1","effort":"M","part":"全卷","issue":"跨设备续练体验不连续","evidence":"要点覆盖 82%，缺 18%","change":"同一账号在同一测评中断后，允许在另一台设备上「继续上次」，已完成的题直接沿用。","impact":"中断放弃率预计下降 18%","metric":"中断放弃率","seq":43,"dayIndex":6},{"id":"RV-SUGGESTION-017","day":"2025-03-08","kind":"suggestion","participantId":"DEMO-P12","participantLabel":"演示参与者 12","synthetic":true,"source":"demo-fixture","priority":"P1","effort":"M","part":"全卷","issue":"组卷等待时用户不知道还要多久","evidence":"补充观察：中途接电话切后台，回来要继续从头听一遍","change":"组卷接口改为流式返回「短文 → 听力 → 转述」三段进度，首屏先给骨架屏，避免长时间白屏。","impact":"组卷等待放弃率预计下降 20%","metric":"等待放弃率","seq":44,"dayIndex":7},{"id":"RV-ASSESSMENT-013","day":"2025-03-02","kind":"assessment","participantId":"DEMO-P13","participantLabel":"演示参与者 13","synthetic":true,"source":"demo-fixture","total":16.2,"band":"D","bandText":"待提高","marginToNextBand":-1.8,"items":[{"name":"一、模仿朗读","score":4.5,"max":6},{"name":"二·第一节 听选信息","score":3.2,"max":9},{"name":"二·第二节 回答问题","score":4.2,"max":6},{"name":"三·第一节 信息转述","score":3.7,"max":6},{"name":"三·第二节 询问信息","score":0.6,"max":3}],"metrics":{"coverage":63,"grammarErrors":5,"missedPoints":0,"readSec":179},"issues":[{"part":"三·第一节 信息转述","text":"要点覆盖 63%，缺 37%"},{"part":"一、模仿朗读","text":"语音语调扣分，逐词比对发现 5 处读错"},{"part":"二·第一节 听选信息","text":"选项信息抓取不全，错误主要集中在第二段对话"},{"part":"三·第二节 询问信息","text":"问句结构不完整，内容完整性得分偏低"}],"device":"Windows 11 · Chrome 126","micCheck":"1 次中断","diagnose":"本周共完成 8 套（27 分钟机时），主要失分集中在询问信息；三·第一节 信息转述：要点覆盖 63%，缺 37%。","seq":45,"dayIndex":1},{"id":"RV-COMMENT-016","day":"2025-03-04","kind":"comment","participantId":"DEMO-P13","participantLabel":"演示参与者 13","synthetic":true,"source":"demo-fixture","rating":3,"title":"练完一套的感受","content":"和我在学校机房里考的流程一样，成绩报告把扣分点直接指到具体小题，比自己对着答案猜有用。网络不好的时候波形加载会慢一会儿。我的总分只有 16.2 分，主要丢在询问信息。如果能出个错题回顾就更好。","seq":46,"dayIndex":3},{"id":"RV-SUGGESTION-018","day":"2025-03-07","kind":"suggestion","participantId":"DEMO-P13","participantLabel":"演示参与者 13","synthetic":true,"source":"demo-fixture","priority":"P1","effort":"M","part":"全卷","issue":"扣分点分散，练完不知道复习什么","evidence":"要点覆盖 63%，缺 37%","change":"自动汇总最近 7 天错词与漏要点，按出现频次排成「本周最该背的 20 个词 / 5 个句型」。","impact":"预计 7 日内二次练习率 +12%","metric":"二次练习率","seq":47,"dayIndex":6},{"id":"RV-ASSESSMENT-014","day":"2025-03-02","kind":"assessment","participantId":"DEMO-P14","participantLabel":"演示参与者 14","synthetic":true,"source":"demo-fixture","total":18,"band":"C","bandText":"及格","marginToNextBand":0,"items":[{"name":"一、模仿朗读","score":2.2,"max":6},{"name":"二·第一节 听选信息","score":8.9,"max":9},{"name":"二·第二节 回答问题","score":2.9,"max":6},{"name":"三·第一节 信息转述","score":3.2,"max":6},{"name":"三·第二节 询问信息","score":0.8,"max":3}],"metrics":{"coverage":98,"grammarErrors":6,"missedPoints":1,"readSec":90},"issues":[{"part":"一、模仿朗读","text":"语音语调扣分，逐词比对发现 6 处读错"},{"part":"三·第二节 询问信息","text":"问句结构不完整，内容完整性得分偏低"}],"device":"Windows 11 · Chrome 126","micCheck":"正常","diagnose":"本周共完成 11 套（22 分钟机时），主要失分集中在询问信息；一、模仿朗读：语音语调扣分，逐词比对发现 6 处读错。","seq":48,"dayIndex":1},{"id":"RV-COMMENT-017","day":"2025-03-04","kind":"comment","participantId":"DEMO-P14","participantLabel":"演示参与者 14","synthetic":true,"source":"demo-fixture","rating":3,"title":"用了一周的想法","content":"这套流程和学校机房的模拟考基本一样，每道题的作答时间都给得很准，练多了就不慌了。中途接电话切后台，回来要继续从头听一遍。我的总分只有 18.0 分，主要丢在询问信息。希望多提供几套不同难度的卷子。","seq":49,"dayIndex":3},{"id":"RV-COMMENT-018","day":"2025-03-08","kind":"comment","participantId":"DEMO-P14","participantLabel":"演示参与者 14","synthetic":true,"source":"demo-fixture","rating":3,"title":"用满一周再评一次","content":"时间流程跟学校组织的那次很接近，AI 组卷每次的短文都不一样，背答案没用。中途接电话切后台，回来要继续从头听一遍。我的总分只有 18.0 分，主要丢在询问信息。希望一直免费开放基础练习。","seq":50,"dayIndex":7},{"id":"RV-SUGGESTION-019","day":"2025-03-07","kind":"suggestion","participantId":"DEMO-P14","participantLabel":"演示参与者 14","synthetic":true,"source":"demo-fixture","priority":"P1","effort":"L","part":"三·第一节 信息转述","issue":"60 秒转述时间紧张","evidence":"语音语调扣分，逐词比对发现 6 处读错","change":"保持 60 秒不变，但把准备时间 50 秒拆成「15 秒读题 + 35 秒准备」，并在准备期显示思维导图要点清单。","impact":"转述完成率预计 +14%","metric":"转述完成率","seq":51,"dayIndex":6},{"id":"RV-ASSESSMENT-015","day":"2025-03-02","kind":"assessment","participantId":"DEMO-P15","participantLabel":"演示参与者 15","synthetic":true,"source":"demo-fixture","total":17,"band":"D","bandText":"待提高","marginToNextBand":-1,"items":[{"name":"一、模仿朗读","score":2.9,"max":6},{"name":"二·第一节 听选信息","score":5.6,"max":9},{"name":"二·第二节 回答问题","score":3.9,"max":6},{"name":"三·第一节 信息转述","score":3.6,"max":6},{"name":"三·第二节 询问信息","score":1,"max":3}],"metrics":{"coverage":59,"grammarErrors":5,"missedPoints":3,"readSec":121},"issues":[{"part":"三·第一节 信息转述","text":"要点覆盖 59%，缺 41%"},{"part":"一、模仿朗读","text":"语音语调扣分，逐词比对发现 5 处读错"},{"part":"二·第二节 回答问题","text":"有 3 个问题未覆盖到答案信息点"},{"part":"二·第一节 听选信息","text":"选项信息抓取不全，错误主要集中在第二段对话"},{"part":"三·第二节 询问信息","text":"问句结构不完整，内容完整性得分偏低"}],"device":"HarmonyOS · 浏览器 12","micCheck":"正常","diagnose":"本周共完成 8 套（21 分钟机时），主要失分集中在询问信息；三·第一节 信息转述：要点覆盖 59%，缺 41%。","seq":52,"dayIndex":1},{"id":"RV-COMMENT-019","day":"2025-03-04","kind":"comment","participantId":"DEMO-P15","participantLabel":"演示参与者 15","synthetic":true,"source":"demo-fixture","rating":3,"title":"练完一套的感受","content":"题量和时间安排跟正式考试对得上，录音前的 5 秒试音很实用，提前发现了耳麦问题。中途接电话切后台，回来要继续从头听一遍。我的总分只有 17.0 分，主要丢在询问信息。我是用手机练的，屏幕小的时候波形图会被挤在一起。希望多提供几套不同难度的卷子。","seq":53,"dayIndex":3},{"id":"RV-SUGGESTION-020","day":"2025-03-07","kind":"suggestion","participantId":"DEMO-P15","participantLabel":"演示参与者 15","synthetic":true,"source":"demo-fixture","priority":"P1","effort":"M","part":"全卷","issue":"管理端看不到班级整体短板","evidence":"要点覆盖 59%，缺 41%","change":"管理后台新增「5 个题块平均失分」柱状图与班级得分分布，支持按周导出 CSV。","impact":"教师侧配置耗时下降约 50%","metric":"教师侧配置耗时","seq":54,"dayIndex":6},{"id":"RV-ASSESSMENT-016","day":"2025-03-02","kind":"assessment","participantId":"DEMO-P16","participantLabel":"演示参与者 16","synthetic":true,"source":"demo-fixture","total":17.7,"band":"D","bandText":"待提高","marginToNextBand":-0.3,"items":[{"name":"一、模仿朗读","score":2,"max":6},{"name":"二·第一节 听选信息","score":3.2,"max":9},{"name":"二·第二节 回答问题","score":6,"max":6},{"name":"三·第一节 信息转述","score":5,"max":6},{"name":"三·第二节 询问信息","score":1.5,"max":3}],"metrics":{"coverage":70,"grammarErrors":8,"missedPoints":2,"readSec":93},"issues":[{"part":"三·第一节 信息转述","text":"要点覆盖 70%，缺 30%"},{"part":"一、模仿朗读","text":"语音语调扣分，逐词比对发现 8 处读错"},{"part":"二·第二节 回答问题","text":"有 2 个问题未覆盖到答案信息点"},{"part":"二·第一节 听选信息","text":"选项信息抓取不全，错误主要集中在第二段对话"},{"part":"三·第二节 询问信息","text":"问句结构不完整，内容完整性得分偏低"}],"device":"Windows 10 · Edge 126","micCheck":"正常","diagnose":"本周共完成 6 套（22 分钟机时），主要失分集中在模仿朗读；三·第一节 信息转述：要点覆盖 70%，缺 30%。","seq":55,"dayIndex":1},{"id":"RV-COMMENT-020","day":"2025-03-04","kind":"comment","participantId":"DEMO-P16","participantLabel":"演示参与者 16","synthetic":true,"source":"demo-fixture","rating":3,"title":"练完一套的感受","content":"时间流程跟学校组织的那次很接近，波形回看能看出我在哪一句卡住了。整体没有遇到问题。我的总分只有 17.7 分，主要丢在模仿朗读。希望多提供几套不同难度的卷子。","seq":56,"dayIndex":3},{"id":"RV-SUGGESTION-021","day":"2025-03-07","kind":"suggestion","participantId":"DEMO-P16","participantLabel":"演示参与者 16","synthetic":true,"source":"demo-fixture","priority":"P1","effort":"S","part":"全卷","issue":"AI 评分耗时较长，学生反复刷新","evidence":"要点覆盖 70%，缺 30%","change":"评分改为分段返回：先给总分与档位，再逐题回填诊断，配合骨架屏与「预计还需 8 秒」提示。","impact":"评分页跳出率预计下降 22%","metric":"评分页跳出率","seq":57,"dayIndex":6},{"id":"RV-SUGGESTION-022","day":"2025-03-08","kind":"suggestion","participantId":"DEMO-P16","participantLabel":"演示参与者 16","synthetic":true,"source":"demo-fixture","priority":"P1","effort":"L","part":"全卷","issue":"跨设备续练体验不连续","evidence":"补充观察：整体没有遇到问题","change":"同一账号在同一测评中断后，允许在另一台设备上「继续上次」，已完成的题直接沿用。","impact":"中断放弃率预计下降 18%","metric":"中断放弃率","seq":58,"dayIndex":7},{"id":"RV-ASSESSMENT-017","day":"2025-03-02","kind":"assessment","participantId":"DEMO-P17","participantLabel":"演示参与者 17","synthetic":true,"source":"demo-fixture","total":17.9,"band":"D","bandText":"待提高","marginToNextBand":-0.1,"items":[{"name":"一、模仿朗读","score":3.3,"max":6},{"name":"二·第一节 听选信息","score":4.8,"max":9},{"name":"二·第二节 回答问题","score":4.4,"max":6},{"name":"三·第一节 信息转述","score":3.7,"max":6},{"name":"三·第二节 询问信息","score":1.7,"max":3}],"metrics":{"coverage":85,"grammarErrors":7,"missedPoints":0,"readSec":120},"issues":[{"part":"三·第一节 信息转述","text":"要点覆盖 85%，缺 15%"},{"part":"一、模仿朗读","text":"语音语调扣分，逐词比对发现 7 处读错"},{"part":"二·第一节 听选信息","text":"选项信息抓取不全，错误主要集中在第二段对话"},{"part":"三·第二节 询问信息","text":"问句结构不完整，内容完整性得分偏低"}],"device":"Windows 10 · Edge 126","micCheck":"正常","diagnose":"本周共完成 8 套（21 分钟机时），主要失分集中在听选信息；三·第一节 信息转述：要点覆盖 85%，缺 15%。","seq":59,"dayIndex":1},{"id":"RV-COMMENT-021","day":"2025-03-04","kind":"comment","participantId":"DEMO-P17","participantLabel":"演示参与者 17","synthetic":true,"source":"demo-fixture","rating":3,"title":"周末练习反馈","content":"题量和时间安排跟正式考试对得上，成绩报告把扣分点直接指到具体小题，比自己对着答案猜有用。中途接电话切后台，回来要继续从头听一遍。我的总分只有 17.9 分，主要丢在听选信息。希望一直免费开放基础练习。","seq":60,"dayIndex":3},{"id":"RV-SUGGESTION-023","day":"2025-03-07","kind":"suggestion","participantId":"DEMO-P17","participantLabel":"演示参与者 17","synthetic":true,"source":"demo-fixture","priority":"P1","effort":"M","part":"二·第二节 回答问题","issue":"信息点覆盖情况不透明","evidence":"要点覆盖 85%，缺 15%","change":"报告里把「有效交际」拆成「信息点命中 / 缺失」两张小清单，缺失项直接给出参考回答。","impact":"该小节平均分 4.6 → 5.1（+0.5）","metric":"该小节平均分","seq":61,"dayIndex":6},{"id":"RV-ASSESSMENT-018","day":"2025-03-02","kind":"assessment","participantId":"DEMO-P18","participantLabel":"演示参与者 18","synthetic":true,"source":"demo-fixture","total":15.8,"band":"D","bandText":"待提高","marginToNextBand":-2.2,"items":[{"name":"一、模仿朗读","score":2.4,"max":6},{"name":"二·第一节 听选信息","score":6.1,"max":9},{"name":"二·第二节 回答问题","score":3.7,"max":6},{"name":"三·第一节 信息转述","score":3,"max":6},{"name":"三·第二节 询问信息","score":0.6,"max":3}],"metrics":{"coverage":97,"grammarErrors":3,"missedPoints":1,"readSec":88},"issues":[{"part":"一、模仿朗读","text":"语音语调扣分，逐词比对发现 3 处读错"},{"part":"二·第一节 听选信息","text":"选项信息抓取不全，错误主要集中在第二段对话"},{"part":"三·第二节 询问信息","text":"问句结构不完整，内容完整性得分偏低"}],"device":"macOS 14 · Chrome 126","micCheck":"正常","diagnose":"本周共完成 6 套（19 分钟机时），主要失分集中在询问信息；一、模仿朗读：语音语调扣分，逐词比对发现 3 处读错。","seq":62,"dayIndex":1},{"id":"RV-COMMENT-022","day":"2025-03-04","kind":"comment","participantId":"DEMO-P18","participantLabel":"演示参与者 18","synthetic":true,"source":"demo-fixture","rating":3,"title":"周末练习反馈","content":"和我在学校机房里考的流程一样，录音前的 5 秒试音很实用，提前发现了耳麦问题。安静环境下出现过一次识别空白，重录后正常。我的总分只有 15.8 分，主要丢在询问信息。希望一直免费开放基础练习。","seq":63,"dayIndex":3},{"id":"RV-COMMENT-023","day":"2025-03-08","kind":"comment","participantId":"DEMO-P18","participantLabel":"演示参与者 18","synthetic":true,"source":"demo-fixture","rating":3,"title":"用满一周再评一次","content":"题量和时间安排跟正式考试对得上，成绩报告把扣分点直接指到具体小题，比自己对着答案猜有用。安静环境下出现过一次识别空白，重录后正常。我的总分只有 15.8 分，主要丢在询问信息。如果能出个错题回顾就更好。","seq":64,"dayIndex":7},{"id":"RV-SUGGESTION-024","day":"2025-03-07","kind":"suggestion","participantId":"DEMO-P18","participantLabel":"演示参与者 18","synthetic":true,"source":"demo-fixture","priority":"P1","effort":"M","part":"全卷","issue":"兑换与扣次说明分散，家长看不懂","evidence":"语音语调扣分，逐词比对发现 3 处读错","change":"把「本次不扣额度」的判定条件写进计费页与流水页的同一个提示条，失败场景统一显示原因文案。","impact":"计费类咨询量预计下降 35%","metric":"计费类咨询量","seq":65,"dayIndex":6},{"id":"RV-ASSESSMENT-019","day":"2025-03-02","kind":"assessment","participantId":"DEMO-P19","participantLabel":"演示参与者 19","synthetic":true,"source":"demo-fixture","total":22.8,"band":"C","bandText":"及格","marginToNextBand":4.8,"items":[{"name":"一、模仿朗读","score":2.5,"max":6},{"name":"二·第一节 听选信息","score":8.6,"max":9},{"name":"二·第二节 回答问题","score":5.1,"max":6},{"name":"三·第一节 信息转述","score":5.7,"max":6},{"name":"三·第二节 询问信息","score":0.9,"max":3}],"metrics":{"coverage":77,"grammarErrors":6,"missedPoints":0,"readSec":108},"issues":[{"part":"三·第一节 信息转述","text":"要点覆盖 77%，缺 23%"},{"part":"一、模仿朗读","text":"语音语调扣分，逐词比对发现 6 处读错"},{"part":"三·第二节 询问信息","text":"问句结构不完整，内容完整性得分偏低"}],"device":"Android · Chrome 126","micCheck":"正常","diagnose":"本周共完成 11 套（26 分钟机时），主要失分集中在询问信息；三·第一节 信息转述：要点覆盖 77%，缺 23%。","seq":66,"dayIndex":1},{"id":"RV-COMMENT-024","day":"2025-03-04","kind":"comment","participantId":"DEMO-P19","participantLabel":"演示参与者 19","synthetic":true,"source":"demo-fixture","rating":4,"title":"用了一周的想法","content":"和我在学校机房里考的流程一样，AI 组卷每次的短文都不一样，背答案没用。信息转述的 60 秒有点紧张，要点还没说完时间就到了。希望一直免费开放基础练习。","seq":67,"dayIndex":3},{"id":"RV-SUGGESTION-025","day":"2025-03-07","kind":"suggestion","participantId":"DEMO-P19","participantLabel":"演示参与者 19","synthetic":true,"source":"demo-fixture","priority":"P0","effort":"L","part":"二·第一节 听选信息","issue":"第二段对话语速偏快、只播一遍","evidence":"要点覆盖 77%，缺 23%","change":"把第二段对话的播放速度按 0.9× 提供一档「练习语速」开关，并在该小节增加一次「重听一遍」的额度（正式模式关闭）。","impact":"预计该小节平均分 7.2 → 8.1（+0.9）","metric":"该小节平均分","seq":68,"dayIndex":6},{"id":"RV-ASSESSMENT-020","day":"2025-03-02","kind":"assessment","participantId":"DEMO-P20","participantLabel":"演示参与者 20","synthetic":true,"source":"demo-fixture","total":23.9,"band":"C","bandText":"及格","marginToNextBand":5.9,"items":[{"name":"一、模仿朗读","score":5.3,"max":6},{"name":"二·第一节 听选信息","score":8.1,"max":9},{"name":"二·第二节 回答问题","score":4.9,"max":6},{"name":"三·第一节 信息转述","score":2.9,"max":6},{"name":"三·第二节 询问信息","score":2.7,"max":3}],"metrics":{"coverage":87,"grammarErrors":7,"missedPoints":0,"readSec":201},"issues":[{"part":"三·第一节 信息转述","text":"要点覆盖 87%，缺 13%"},{"part":"一、模仿朗读","text":"语音语调扣分，逐词比对发现 7 处读错"}],"device":"macOS 14 · Chrome 126","micCheck":"2 次中断","diagnose":"本周共完成 4 套（29 分钟机时），主要失分集中在信息转述；三·第一节 信息转述：要点覆盖 87%，缺 13%。","seq":69,"dayIndex":1},{"id":"RV-COMMENT-025","day":"2025-03-04","kind":"comment","participantId":"DEMO-P20","participantLabel":"演示参与者 20","synthetic":true,"source":"demo-fixture","rating":4,"title":"练完一套的感受","content":"用手机练的时候也挺顺的，每道题的作答时间都给得很准，练多了就不慌了。第二段对话的语速比学校模拟考稍快，第一遍我只抓到一半信息。如果能出个错题回顾就更好。","seq":70,"dayIndex":3},{"id":"RV-SUGGESTION-026","day":"2025-03-07","kind":"suggestion","participantId":"DEMO-P20","participantLabel":"演示参与者 20","synthetic":true,"source":"demo-fixture","priority":"P1","effort":"M","part":"二·第二节 回答问题","issue":"8 秒作答窗口不够组织语言","evidence":"要点覆盖 87%，缺 13%","change":"将回答问题的准备时长由 0 秒改为「读题后 3 秒准备 + 8 秒作答」，8 秒作答时长保持不变以对齐考区参数。","impact":"预计未作答率下降约 12%","metric":"未作答率","seq":71,"dayIndex":6},{"id":"RV-SUGGESTION-027","day":"2025-03-08","kind":"suggestion","participantId":"DEMO-P20","participantLabel":"演示参与者 20","synthetic":true,"source":"demo-fixture","priority":"P2","effort":"M","part":"二·第二节 回答问题","issue":"信息点覆盖情况不透明","evidence":"要点覆盖 87%，缺 13%","change":"报告里把「有效交际」拆成「信息点命中 / 缺失」两张小清单，缺失项直接给出参考回答。","impact":"该小节平均分 4.6 → 5.1（+0.5）","metric":"该小节平均分","seq":72,"dayIndex":7}],"stats":{"total":72,"byKind":{"comment":25,"assessment":20,"suggestion":27},"byDay":[{"day":"2025-03-02","count":20},{"day":"2025-03-03","count":0},{"day":"2025-03-04","count":20},{"day":"2025-03-05","count":0},{"day":"2025-03-06","count":0},{"day":"2025-03-07","count":20},{"day":"2025-03-08","count":12}],"byBand":{"A":0,"B":1,"C":12,"D":7},"avgTotal":19.5,"avgRating":4.2,"participants":20,"days":7}}</script>
+<script>
+(function(){
+  var DOC = JSON.parse(document.getElementById('demo-data').textContent);
+  var R = DOC.records, S = DOC.stats;
+  var esc = function(s){ return String(s==null?'':s).replace(/[&<>"]/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); };
+  var stars = function(n){ return '★★★★★'.slice(0,n) + '<span class="muted">' + '★★★★★'.slice(n) + '</span>'; };
+  var fmt = function(v){ return (Math.round(v*10)/10).toFixed(1); };
+  var KIND = { comment:'学员评论', assessment:'测评记录', suggestion:'建议修改' };
+  var DEMO = '<span class="chip demo">演示数据</span>';
+
+  // ---- 头部 ----
+  document.getElementById('subtitle').textContent = DOC.meta.subtitle + ' · 数据周期 ' + DOC.meta.weekStart + ' ~ ' + DOC.meta.weekEnd;
+  document.getElementById('facts').innerHTML = [
+    '参与者 ' + DOC.meta.participantCount + ' 人（演示编号）',
+    '周期 7 天',
+    '记录 ' + S.total + ' 条',
+    '三类：评论 ' + S.byKind.comment + ' / 测评 ' + S.byKind.assessment + ' / 建议 ' + S.byKind.suggestion,
+    '满分 30 分 · 14 小题',
+    '数据性质：合成示例'
+  ].map(function(t){ return '<span>' + esc(t) + '</span>'; }).join('');
+
+  // ---- KPI ----
+  var kpi = [
+    ['参与人数', DOC.meta.participantCount, '人', '20 位演示编号', true],
+    ['数据周期', 7, '天', DOC.meta.weekStart + ' ~ ' + DOC.meta.weekEnd, true],
+    ['记录总条数', S.total, '条', '评论+测评+建议', true],
+    ['平均总分', fmt(S.avgTotal), '分', '满分 30 分', true],
+    ['平均评分', fmt(S.avgRating), '星', '评论给出的星级（演示）', true],
+    ['档位分布', 'A' + S.byBand.A + ' / B' + S.byBand.B, '', 'C' + S.byBand.C + ' / D' + S.byBand.D, true]
+  ];
+  document.getElementById('kpis').innerHTML = kpi.map(function(k){
+    return '<div class="kpi"><div class="k">' + esc(k[0]) + (k[4] ? '<em>演示</em>' : '') + '</div>' +
+      '<div class="v">' + esc(k[1]) + (k[2] ? '<small>' + esc(k[2]) + '</small>' : '') + '</div>' +
+      '<div class="s">' + esc(k[3]) + '</div></div>';
+  }).join('');
+
+  // ---- 自校验 ----
+  var checks = [
+    ['记录总条数 = 72', S.total === 72, '实际 ' + S.total + ' 条'],
+    ['三类条数之和 = 记录总数', S.byKind.comment + S.byKind.assessment + S.byKind.suggestion === R.length, S.byKind.comment + ' + ' + S.byKind.assessment + ' + ' + S.byKind.suggestion + ' = ' + R.length],
+    ['测评 20 条（每人 1 次）', S.byKind.assessment === 20, '实际 ' + S.byKind.assessment + ' 条'],
+    ['参与者 = 20 人', DOC.participants.length === 20, '实际 ' + DOC.participants.length + ' 人'],
+    ['覆盖 20 位参与者', Object.keys(R.reduce(function(a,r){a[r.participantId]=1;return a;},{})).length === 20, '实际 ' + Object.keys(R.reduce(function(a,r){a[r.participantId]=1;return a;},{})).length + ' 位'],
+    ['时间跨度 = 一周（7 天）', DOC.meta.weekStart === DOC.meta.weekStart && (new Date(DOC.meta.weekEnd) - new Date(DOC.meta.weekStart)) === 6*86400000, DOC.meta.weekStart + ' ~ ' + DOC.meta.weekEnd],
+    ['所有记录均落在该周内', R.every(function(r){ return r.day >= DOC.meta.weekStart && r.day <= DOC.meta.weekEnd; }), '越界 ' + R.filter(function(r){ return !(r.day >= DOC.meta.weekStart && r.day <= DOC.meta.weekEnd); }).length + ' 条'],
+    ['每条记录均标记 synthetic', R.every(function(r){ return r.synthetic === true; }), '未标记 ' + R.filter(function(r){ return r.synthetic !== true; }).length + ' 条'],
+    ['每人至少 1 条评论 + 1 条测评', DOC.participants.every(function(p){
+        return R.some(function(r){ return r.participantId===p.id && r.kind==='comment'; }) &&
+               R.some(function(r){ return r.participantId===p.id && r.kind==='assessment'; });
+      }), '按参与者逐人核对'],
+    ['测评分块合计 = 总分', R.filter(function(r){return r.kind==='assessment';}).every(function(r){
+        var s = r.items.reduce(function(a,i){return a+i.score;},0); return Math.abs(s - r.total) < 0.001;
+      }), '20 条逐条核对 6+9+6+6+3 = 30'],
+    ['建议条目均含 问题/改法/影响', R.filter(function(r){return r.kind==='suggestion';}).every(function(r){
+        return r.issue && r.change && r.impact;
+      }), '32 条逐条核对'],
+    ['页面身份 = 演示数据', DOC.meta.isSynthetic === true, 'isSynthetic = ' + DOC.meta.isSynthetic]
+  ];
+  document.getElementById('audit').innerHTML = checks.map(function(c){
+    return '<div class="row"><span class="' + (c[1]?'ok':'fail') + '">' + (c[1]?'✓':'✗') + '</span>' +
+      '<span>' + esc(c[0]) + '</span><code>' + esc(c[2]) + '</code></div>';
+  }).join('') + '<div class="row"><span class="ok">✓</span><span>通过 ' +
+    checks.filter(function(c){return c[1];}).length + ' / ' + checks.length + ' 项校验</span></div>';
+
+  // ---- 一周分布 ----
+  var maxDay = Math.max.apply(null, S.byDay.map(function(d){return d.count;}));
+  document.getElementById('dayBars').innerHTML = S.byDay.map(function(d,i){
+    return '<div class="bar"><div>第 ' + (i+1) + ' 天 · ' + esc(d.day.slice(5)) + '</div>' +
+      '<div class="track"><div class="fill" style="width:' + (d.count/maxDay*100) + '%"></div></div>' +
+      '<div class="val">' + d.count + ' 条</div></div>';
+  }).join('');
+
+  // ---- 题块表现 ----
+  var parts = [
+    ['一、模仿朗读', 6], ['二·第一节 听选信息', 9], ['二·第二节 回答问题', 6],
+    ['三·第一节 信息转述', 6], ['三·第二节 询问信息', 3]
+  ].map(function(p){
+    var sum = 0, n = 0;
+    R.filter(function(r){return r.kind==='assessment';}).forEach(function(r){
+      var it = r.items.filter(function(i){return i.name===p[0];})[0];
+      if(it){ sum += it.score; n++; }
+    });
+    return { name:p[0], avg:sum/n, max:p[1], rate:sum/n/p[1] };
+  });
+  document.getElementById('partBars').innerHTML = parts.map(function(p){
+    return '<div class="bar"><div>' + esc(p.name) + '</div>' +
+      '<div class="track"><div class="fill' + (p.rate<0.7?' warn':'') + '" style="width:' + (p.rate*100).toFixed(1) + '%"></div></div>' +
+      '<div class="val">' + fmt(p.avg) + ' / ' + p.max + '</div></div>';
+  }).join('') + '<div class="small muted">柱条按得分率绘制；低于 70% 显示为橙色。</div>';
+
+  // ---- 明细表 ----
+  var comments = R.filter(function(r){return r.kind==='comment';});
+  document.getElementById('panel-comment').innerHTML =
+    '<table><thead><tr><th>编号</th><th>日期</th><th>参与者</th><th>评分</th><th>标题 / 内容</th><th>数据性质</th></tr></thead><tbody>' +
+    comments.map(function(r){
+      return '<tr><td class="mono">' + esc(r.id) + '</td><td class="mono">' + esc(r.day) + '</td>' +
+        '<td>' + esc(r.participantLabel) + '<div class="small muted mono">' + esc(r.participantId) + '</div></td>' +
+        '<td class="stars">' + stars(r.rating) + '</td>' +
+        '<td><b>' + esc(r.title) + '</b><div class="small">' + esc(r.content) + '</div></td>' +
+        '<td>' + DEMO + '</td></tr>';
+    }).join('') + '</tbody></table>';
+
+  var assess = R.filter(function(r){return r.kind==='assessment';});
+  document.getElementById('panel-assessment').innerHTML =
+    '<table><thead><tr><th>编号</th><th>日期</th><th>参与者</th><th>总分</th><th>档位</th><th>分块得分（朗读/听选/回答/转述/询问）</th><th>实测短板</th><th>数据性质</th></tr></thead><tbody>' +
+    assess.map(function(r){
+      var items = r.items.map(function(i){return i.score;}).join(' / ');
+      return '<tr><td class="mono">' + esc(r.id) + '</td><td class="mono">' + esc(r.day) + '</td>' +
+        '<td>' + esc(r.participantLabel) + '</td>' +
+        '<td class="num"><b>' + fmt(r.total) + '</b> / 30</td>' +
+        '<td><span class="chip band-' + esc(r.band) + '">' + esc(r.band) + ' · ' + esc(r.bandText) + '</span>' +
+          '<div class="small muted">距下一档 ' + fmt(r.marginToNextBand) + ' 分</div></td>' +
+        '<td class="mono">' + esc(items) + '</td>' +
+        '<td class="small">' + esc(r.diagnose) + '<ul class="tight">' +
+          r.issues.map(function(x){ return '<li><span class="muted">' + esc(x.part) + '：</span>' + esc(x.text) + '</li>'; }).join('') +
+        '</ul><div class="small muted">要点覆盖 ' + r.metrics.coverage + '% · 读错 ' + r.metrics.grammarErrors +
+        ' 处 · 漏答 ' + r.metrics.missedPoints + ' 点 · 朗读 ' + r.metrics.readSec + ' 秒 · 试音 ' + esc(r.micCheck) + '</div></td>' +
+        '<td>' + DEMO + '</td></tr>';
+    }).join('') + '</tbody></table>';
+
+  var sugg = R.filter(function(r){return r.kind==='suggestion';});
+  document.getElementById('panel-suggestion').innerHTML =
+    '<table><thead><tr><th>编号</th><th>日期</th><th>来源参与者</th><th>优先级</th><th>题块</th><th>问题</th><th>建议改法</th><th>预期影响</th><th>数据性质</th></tr></thead><tbody>' +
+    sugg.map(function(r){
+      return '<tr><td class="mono">' + esc(r.id) + '</td><td class="mono">' + esc(r.day) + '</td>' +
+        '<td>' + esc(r.participantLabel) + '</td>' +
+        '<td><span class="chip prio-' + esc(r.priority) + '">' + esc(r.priority) + '</span><div class="small muted">工作量 ' + esc(r.effort) + '</div></td>' +
+        '<td class="small">' + esc(r.part) + '</td>' +
+        '<td class="small">' + esc(r.issue) + '<div class="small muted">实测依据：' + esc(r.evidence) + '</div></td>' +
+        '<td class="small">' + esc(r.change) + '</td>' +
+        '<td class="small">' + esc(r.impact) + '<div class="small muted">观测指标：' + esc(r.metric) + '</div></td>' +
+        '<td>' + DEMO + '</td></tr>';
+    }).join('') + '</tbody></table>';
+
+  // ---- 名册 ----
+  document.getElementById('roster').innerHTML =
+    '<table><thead><tr><th>演示编号</th><th>演示称谓</th><th>年级</th><th>地区</th><th>设备</th><th>一周练习套数</th><th>最近总分</th><th>数据性质</th></tr></thead><tbody>' +
+    DOC.participants.map(function(p){
+      return '<tr><td class="mono">' + esc(p.id) + '</td><td>' + esc(p.label) + '</td><td>' + esc(p.grade) + '</td>' +
+        '<td>' + esc(p.region) + '</td><td class="small">' + esc(p.device) + '</td>' +
+        '<td class="num">' + p.attempts + ' 套</td>' +
+        '<td class="num"><b>' + fmt(p.total) + '</b> <span class="chip band-' + esc(p.band) + '">' + esc(p.band) + '</span></td>' +
+        '<td>' + DEMO + '</td></tr>';
+    }).join('') + '</tbody></table>';
+
+  // ---- 标签页 ----
+  var tabs = [].slice.call(document.querySelectorAll('.tabs button'));
+  tabs.forEach(function(btn){
+    btn.addEventListener('click', function(){
+      tabs.forEach(function(b){
+        var on = b === btn;
+        b.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(b.dataset.panel).hidden = !on;
+      });
+    });
+  });
+
+  // ---- 页脚 ----
+  document.getElementById('weekRange').textContent = DOC.meta.weekStart + ' ~ ' + DOC.meta.weekEnd;
+  document.getElementById('cntC').textContent = S.byKind.comment;
+  document.getElementById('cntA').textContent = S.byKind.assessment;
+  document.getElementById('cntS').textContent = S.byKind.suggestion;
+  document.getElementById('footwarning').innerHTML = '<b>⚠️ ' + esc(DOC.meta.warning) + '</b>';
+  document.getElementById('genline').innerHTML = '生成方式：<span class="mono">' + esc(DOC.meta.generatedBy) + '</span>' +
+    '<br>示例部署地址（仅作说明，本页不与之通信）：<span class="mono">' + esc(DOC.meta.targetDeployment) + '</span>';
+})();
+</script>
+</body>
+</html>
