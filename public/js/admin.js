@@ -103,6 +103,7 @@ async function loadOverview() {
     $('#cfg-tscore').value = s.scoreTemperature ?? 0.2;
     fillModelSelect(s.availableModels || [], s.model);
     fillRegionSelect(s.examRegion);
+    renderSecurity(s.security);
 
     const srcBox = $('#cfg-env-source');
     if (srcBox) {
@@ -252,6 +253,35 @@ async function savePricing() {
   } catch (e) {
     toast('保存失败：' + e.message, 'bad', 5000);
   }
+}
+
+/* ------------------------------------------------------------------ *
+ *  安全管控（紧急开关）
+ * ------------------------------------------------------------------ */
+
+async function saveSecurity() {
+  const hint = $('#sec-hint');
+  const body = {
+    security: {
+      registrationOff: Boolean($('#sec-register-off')?.checked),
+      loginOff: Boolean($('#sec-login-off')?.checked),
+      speechOff: Boolean($('#sec-speech-off')?.checked),
+    },
+  };
+  try {
+    await api('/api/admin/settings', body);
+    if (hint) hint.textContent = '已保存';
+    toast('安全开关已更新，立即生效', 'ok');
+  } catch (e) {
+    toast('保存失败：' + e.message, 'bad', 5000);
+  }
+}
+
+function renderSecurity(sec) {
+  const s = sec || {};
+  if ($('#sec-register-off')) $('#sec-register-off').checked = Boolean(s.registrationOff);
+  if ($('#sec-login-off')) $('#sec-login-off').checked = Boolean(s.loginOff);
+  if ($('#sec-speech-off')) $('#sec-speech-off').checked = Boolean(s.speechOff);
 }
 
 /* ------------------------------------------------------------------ *
@@ -631,6 +661,7 @@ function bind() {
   $('#btn-admin-test')?.addEventListener('click', testConn);
   $('#btn-admin-save')?.addEventListener('click', saveApi);
   $('#btn-admin-save-price')?.addEventListener('click', savePricing);
+  $('#btn-admin-save-security')?.addEventListener('click', saveSecurity);
   $('#btn-admin-export')?.addEventListener('click', exportUsers);
   $('#btn-admin-import')?.addEventListener('click', () => $('#cfg-import-file')?.click());
   $('#cfg-import-file')?.addEventListener('change', importUsers);

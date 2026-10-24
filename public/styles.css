@@ -1136,3 +1136,108 @@ body.admin-mode #pill-tts { display: none !important; }
   border-color: var(--brand, #4f46e5);
   box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12);
 }
+
+/* ============ 信息转述：思维导图 ============ */
+.mindmap {
+  margin: 14px 0 6px;
+  padding: 16px;
+  border: 1px solid var(--line, #e4e7ec);
+  border-radius: 14px;
+  background: #fbfbfd;
+}
+.mm-root {
+  display: inline-block;
+  padding: 9px 20px;
+  border-radius: 999px;
+  background: var(--brand, #4f46e5);
+  color: #fff;
+  font-weight: 700;
+  font-size: 14.5px;
+  margin-bottom: 16px;
+  position: relative;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.mm-branches {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
+}
+.mm-node {
+  position: relative;
+  background: #fff;
+  border: 1px solid #dfe3ea;
+  border-left: 4px solid var(--brand, #4f46e5);
+  border-radius: 10px;
+  padding: 10px 12px 10px 14px;
+}
+.mm-idx {
+  position: absolute;
+  top: -8px;
+  left: -8px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--brand, #4f46e5);
+  color: #fff;
+  font-size: 11.5px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+}
+.mm-q {
+  font-size: 13.5px;
+  color: #475467;
+  line-height: 1.5;
+}
+.mm-a {
+  margin-top: 5px;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--ink, #101828);
+  line-height: 1.5;
+}
+
+/* 听选信息：一问两答选项 */
+.qopts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.qopt {
+  padding: 6px 14px;
+  border: 1px solid #dfe3ea;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 14px;
+  color: var(--ink, #101828);
+}
+.qitem.active .qopt { border-color: var(--brand, #4f46e5); }
+.qitem.done .qopt.correct { border-color: var(--ok, #12b76a); background: #ecfdf3; }
+
+/* 安全管控开关 */
+.switch-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border: 1px solid #dfe3ea;
+  border-radius: 10px;
+  background: #fff;
+  font-size: 14px;
+  cursor: pointer;
+  user-select: none;
+}
+.switch-row input { width: 16px; height: 16px; cursor: pointer; }
+
+/* 历史记录 */
+.hist-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 11px 14px;
+  border: 1px solid var(--line, #e4e7ec);
+  border-radius: 10px;
+  margin-bottom: 8px;
+  background: #fff;
+}
+.hist-date { font-size: 12.5px; color: #667085; min-width: 118px; }
+.hist-topic { flex: 1; font-size: 14px; color: var(--ink, #101828); }
+.hist-score { font-size: 17px; font-weight: 700; color: var(--brand, #4f46e5); }
+.hist-score small { font-size: 12px; font-weight: 400; color: #667085; }

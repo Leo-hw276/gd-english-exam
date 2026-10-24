@@ -69,6 +69,12 @@ export const DEFAULT_SETTINGS = {
   scoreTemperature: 0.2,
   // 单句精练每日限额（0 = 不限）
   practiceDailyLimit: 50,
+  // 紧急开关：被攻击/维护时可一键关闭对应入口
+  security: {
+    registrationOff: false, // 关闭新用户注册
+    loginOff: false, // 关闭登录（已登录用户仍可用）
+    speechOff: false, // 关闭语音合成与识别（省带宽/防刷）
+  },
 };
 
 /* ------------------------------------------------------------------ *
@@ -116,6 +122,7 @@ const EMPTY_DB = () => ({
   logs: [],
   orders: [],
   activity: [],   // 登录 / 注册 / 朗读等活动审计（含 IP、浏览器）
+  records: [],    // 考生历史成绩记录（用于复盘）
 });
 
 let db = null;
@@ -203,6 +210,7 @@ export function getPublicSettings() {
     apiKeyHint: hasKey ? s.apiKey.slice(0, 6) + '••••' + s.apiKey.slice(-4) : '',
     availableModels: s.availableModels,
     pricing: s.pricing,
+    security: s.security || { registrationOff: false, loginOff: false, speechOff: false },
     // 配置来源（db=网站后台保存；环境变量仅作新库初始值，不锁定）
     sources: configSources(s),
     locked: envLocked(s),
@@ -277,6 +285,54 @@ export function log(action, userId = '', detail = '') {
   db0.logs.unshift({ at: Date.now(), action, userId, detail });
   if (db0.logs.length > 800) db0.logs.length = 800;
   save();
+}
+
+/* ------------------------------------------------------------------ *
+ *  考试记录（复盘用）
+ * ------------------------------------------------------------------ */
+
+/** 保存一次考试的评分结果 */
+export function addRecord({ userId, topic, total, maxTotal, grade, report, paper }) {
+  const db0 = load();
+  const rec = {
+    id: newToken(),
+    userId,
+    at: Date.now(),
+    topic: topic || '',
+    total,
+    maxTotal,
+    grade: grade || '',
+    // 精简报告：只留评分与诊断，不存完整试卷原文以免库太大
+    report,
+    paperBrief: {
+      topic: paper?.topic || topic || '',
+      readAloud: paper?.readAloud?.passage || '',
+    },
+  };
+  db0.records.unshift(rec);
+  // 每用户最多保留 100 条
+  const mine = db0.records.filter((r) => r.userId === userId);
+  if (mine.length > 100) {
+    const drop = new Set(mine.slice(100).map((r) => r.id));
+    db0.records = db0.records.filter((r) => !drop.has(r.id));
+  }
+  save();
+  return rec;
+}
+
+/** 列出某用户的历史记录（不含完整报告） */
+export function listRecords(userId, limit = 50) {
+  const db0 = load();
+  return db0.records
+    .filter((r) => r.userId === userId)
+    .slice(0, limit)
+    .map((r) => ({ id: r.id, at: r.at, topic: r.topic, total: r.total, maxTotal: r.maxTotal, grade: r.grade }));
+}
+
+/** 取单条完整记录 */
+export function getRecord(userId, id) {
+  const db0 = load();
+  return db0.records.find((r) => r.id === id && r.userId === userId) || null;
 }
 
 /* ------------------------------------------------------------------ *

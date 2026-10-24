@@ -128,7 +128,7 @@ class LlmError extends Error {
  *   3. 自动重试：可重试错误（超时/5xx/限流）再试 RETRIES 次
  */
 const LLM_TIMEOUT_MS = Math.max(15_000, Number(process.env.EXAM_LLM_TIMEOUT_MS || 120_000));
-const LLM_STALL_MS = Math.max(8_000, Number(process.env.EXAM_LLM_STALL_MS || 25_000));
+const LLM_STALL_MS = Math.max(8_000, Number(process.env.EXAM_LLM_STALL_MS || 45_000));
 const LLM_RETRIES = Math.max(0, Math.min(3, Number(process.env.EXAM_LLM_RETRIES || 1)));
 
 /** 这些状态码值得重试；其余（如 401 令牌错误、400 参数错误）重试也没用 */
@@ -136,8 +136,9 @@ const RETRYABLE = new Set([408, 409, 425, 429, 500, 502, 503, 504]);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function callChat({ apiKey, apiBase, model, system, user, temperature, maxTokens, json }) {
+async function callChat({ apiKey, apiBase, model, system, user, temperature, maxTokens, json, stallMs }) {
   const url = `${apiBase.replace(/\/$/, '')}/chat/completions`;
+  const STALL = Math.max(8_000, Number(stallMs) || LLM_STALL_MS);
 
   const run = async (withJson) => {
     const body = {
@@ -162,7 +163,7 @@ async function callChat({ apiKey, apiBase, model, system, user, temperature, max
       watchdog = setTimeout(() => {
         stalled = true;
         ctl.abort();
-      }, LLM_STALL_MS);
+      }, STALL);
     };
     const cleanup = () => {
       clearTimeout(overall);
@@ -182,7 +183,7 @@ async function callChat({ apiKey, apiBase, model, system, user, temperature, max
     } catch (e) {
       cleanup();
       const msg = stalled
-        ? `模型服务 ${LLM_STALL_MS / 1000} 秒无响应（已主动断开）`
+        ? `模型服务 ${STALL / 1000} 秒无响应（已主动断开）`
         : `连接模型服务失败：${e.message}`;
       return { error: msg, status: 504, retryable: true };
     }
@@ -237,7 +238,7 @@ async function callChat({ apiKey, apiBase, model, system, user, temperature, max
     } catch (e) {
       cleanup();
       const msg = stalled
-        ? `模型服务输出中断（${LLM_STALL_MS / 1000} 秒无新内容，已主动断开）`
+        ? `模型服务输出中断（${STALL / 1000} 秒无新内容，已主动断开）`
         : `读取模型流式响应中断：${e.message}`;
       return { error: msg, status: 504, retryable: true };
     }
@@ -276,6 +277,92 @@ async function callChat({ apiKey, apiBase, model, system, user, temperature, max
   return { content: out.content, usage: out.usage };
 }
 
+/** 计算补齐末尾括号所需的字符串 */
+function closeBrackets(s) {
+  const stack = [];
+  let inStr = false;
+  let esc = false;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === '\\') esc = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') inStr = true;
+    else if (ch === '{' || ch === '[') stack.push(ch);
+    else if (ch === '}' || ch === ']') stack.pop();
+  }
+  let out = inStr ? '"' : '';
+  while (stack.length) out += stack.pop() === '{' ? '}' : ']';
+  return out;
+}
+
+/** 末尾是否有未闭合的字符串 */
+function endsInString(s) {
+  let inStr = false;
+  let esc = false;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === '\\') esc = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') inStr = true;
+  }
+  return inStr;
+}
+
+/**
+ * 修复被截断的 JSON：逐级去掉残缺的尾部片段，再补齐括号，直到能解析。
+ * 模型输出被 max_tokens 截断时，这样能救回大部分已生成的内容。
+ */
+function repairTruncatedJson(tail) {
+  let cur = String(tail).replace(/\s+$/, '');
+  for (let round = 0; round < 60; round++) {
+    let c = cur;
+
+    // 1) 去掉末尾的逗号/冒号
+    c = c.replace(/[,:\s]+$/, '');
+
+    // 2) 若结束在字符串内部：砍掉这个未完成的字符串及其键名
+    if (endsInString(c)) {
+      const q = c.lastIndexOf('"');
+      c = q >= 0 ? c.slice(0, q) : c;
+      c = c.replace(/[,:\s]+$/, '');
+      c = c.replace(/"[^"]*"\s*:\s*$/, ''); // 去掉只剩键名的残缺项
+      c = c.replace(/[,:\s]+$/, '');
+    }
+
+    // 3) 补齐括号后尝试解析
+    const full = c + closeBrackets(c);
+    const got = tryParseJson(full);
+    if (got) return got;
+
+    // 4) 还是不行 → 去掉最后一个元素，继续
+    const idx = c.lastIndexOf(',');
+    if (idx < 0) break;
+    cur = c.slice(0, idx);
+  }
+  return null;
+}
+
+/** 宽松解析：先直接解析，失败再修尾逗号 */
+function tryParseJson(str) {
+  try {
+    return JSON.parse(str);
+  } catch {
+    try {
+      return JSON.parse(str.replace(/,\s*([}\]])/g, '$1'));
+    } catch {
+      return null;
+    }
+  }
+}
+
 /** 从可能夹带解释文字/Markdown 围栏的回复中提取第一个完整 JSON 对象 */
 function extractJson(text) {
   if (!text) throw new LlmError('模型未返回内容', 502);
@@ -287,11 +374,13 @@ function extractJson(text) {
   const first = s.indexOf('{');
   if (first < 0) throw new LlmError('模型返回中找不到 JSON', 502);
 
+  const tail = s.slice(first);
+
   let depth = 0;
   let inStr = false;
   let esc = false;
-  for (let i = first; i < s.length; i++) {
-    const ch = s[i];
+  for (let i = 0; i < tail.length; i++) {
+    const ch = tail[i];
     if (inStr) {
       if (esc) esc = false;
       else if (ch === '\\') esc = true;
@@ -303,19 +392,18 @@ function extractJson(text) {
     else if (ch === '}') {
       depth--;
       if (depth === 0) {
-        const candidate = s.slice(first, i + 1);
-        try {
-          return JSON.parse(candidate);
-        } catch {
-          // 尝试修复常见的尾逗号
-          try {
-            return JSON.parse(candidate.replace(/,\s*([}\]])/g, '$1'));
-          } catch (e) {
-            throw new LlmError(`JSON 解析失败：${e.message}`, 502);
-          }
-        }
+        const got = tryParseJson(tail.slice(0, i + 1));
+        if (got) return got;
+        break;
       }
     }
+  }
+
+  // JSON 被截断 → 尝试修复
+  const repaired = repairTruncatedJson(tail);
+  if (repaired) {
+    console.warn('[json] 输出被截断，已修复后解析成功');
+    return repaired;
   }
   throw new LlmError('模型返回的 JSON 不完整', 502);
 }
@@ -330,10 +418,12 @@ const arr = (v) => (Array.isArray(v) ? v : []);
 
 function normalizeQuestion(q, fallbackOptions, fallbackIndex) {
   const options = arr(q?.options).map((o) => str(o)).filter(Boolean);
+  // 兼容「一问两答」与官方三选项两种题型
+  const ok = options.length === 2 || options.length === 3;
   return {
     q: str(q?.q ?? q?.question, 'Question'),
-    options: options.length === 3 ? options : fallbackOptions,
-    answerIndex: clamp(q?.answerIndex ?? fallbackIndex, 0, 2) | 0,
+    options: ok ? options : fallbackOptions,
+    answerIndex: clamp(q?.answerIndex ?? fallbackIndex, 0, Math.max(0, options.length - 1)) | 0,
     evidence: str(q?.evidence, ''),
   };
 }
@@ -351,7 +441,7 @@ function validatePartA(raw) {
       script: arr(s?.script)
         .map((l) => ({ spk: str(l?.spk, 'M').slice(0, 3), en: str(l?.en) }))
         .filter((l) => l.en),
-      questions: arr(s?.questions).map((q, qi) => normalizeQuestion(q, ['—', '—', '—'], qi % 3)),
+      questions: arr(s?.questions).map((q, qi) => normalizeQuestion(q, ['—', '—'], qi % 2)),
     }))
     .filter((s) => s.script.length && s.questions.length);
 
@@ -710,8 +800,8 @@ async function handlePaper(req, res, cfg, session, user) {
 
   // 两批并行组卷 —— 输出更短、更快，且任何一批失败都能用备用材料补齐
   const [resA, resB] = await Promise.all([
-    generate('A', buildPaperPromptPartA({ topic, difficulty, seed }), validatePartA, 2600),
-    generate('B', buildPaperPromptPartB({ topic, difficulty, seed }), validatePartB, 3200),
+    generate('A', buildPaperPromptPartA({ topic, difficulty, seed }), validatePartA, 4500),
+    generate('B', buildPaperPromptPartB({ topic, difficulty, seed }), validatePartB, 5000),
   ]);
 
   const notes = [];
@@ -743,15 +833,87 @@ async function handlePaper(req, res, cfg, session, user) {
 
 const wordList = (s) => String(s || '').toLowerCase().match(/[a-z']+/g) || [];
 
-/** 参考文本的词汇被覆盖的比例（0–1） */
+/**
+ * 两个词是否「算读对了」——容忍语音识别误差。
+ * 规则：完全相同 / 词干相同（think–thinking）/ 编辑距离很小 / 常见同音混淆。
+ */
+const HOMOPHONE_GROUPS = [
+  ['there', 'their', "they're"],
+  ['to', 'too', 'two'],
+  ['your', "you're", 'yore'],
+  ['its', "it's"],
+  ['here', 'hear'],
+  ['where', 'wear', 'were'],
+  ['see', 'sea'],
+  ['write', 'right', 'rite'],
+  ['know', 'no'],
+  ['buy', 'by', 'bye'],
+  ['read', 'red'],
+  ['meet', 'meat'],
+  ['week', 'weak'],
+  ['son', 'sun'],
+  ['for', 'four', 'fore'],
+  ['one', 'won'],
+  ['are', 'our', 'hour'],
+  ['then', 'than'],
+  ['live', 'leave'],
+  ['walk', 'work'],
+  ['think', 'sink', 'thing'],
+  ['well', 'will', 'wheel'],
+  ['want', 'wont'],
+  ['play', 'pray'],
+  ['look', 'luck'],
+  ['much', 'match'],
+];
+
+function editDistance(a, b) {
+  if (a === b) return 0;
+  const m = a.length;
+  const n = b.length;
+  if (!m) return n;
+  if (!n) return m;
+  let prev = Array.from({ length: n + 1 }, (_, i) => i);
+  for (let i = 1; i <= m; i++) {
+    const cur = [i];
+    for (let j = 1; j <= n; j++) {
+      cur[j] = Math.min(
+        prev[j] + 1,
+        cur[j - 1] + 1,
+        prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
+      );
+    }
+    prev = cur;
+  }
+  return prev[n];
+}
+
+function sameWord(a, b) {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  // 词干相同：thinking / think，books / book
+  const stem = (w) => w.replace(/(ing|ed|es|s|ly|er|est)$/, '');
+  if (stem(a) === stem(b) && Math.min(a.length, b.length) >= 3) return true;
+  // 常见同音词
+  for (const g of HOMOPHONE_GROUPS) if (g.includes(a) && g.includes(b)) return true;
+  // 编辑距离：短词容 1，长词容 2
+  const d = editDistance(a, b);
+  const toll = Math.min(a.length, b.length) <= 4 ? 1 : 2;
+  return d <= toll;
+}
+
+/** 参考文本的词汇被覆盖的比例（0–1），容忍识别误差 */
 function wordCoverage(reference, heard) {
   const ref = [...new Set(wordList(reference))].filter((w) => w.length > 1);
   if (!ref.length) return 0;
-  const h = new Set(wordList(heard));
-  return ref.filter((w) => h.has(w)).length / ref.length;
+  const h = wordList(heard);
+  let hit = 0;
+  for (const w of ref) {
+    if (h.some((x) => sameWord(w, x))) hit++;
+  }
+  return hit / ref.length;
 }
 
-/** 逐词对齐正确率：用最长公共子序列估计朗读准确度 */
+/** 逐词对齐正确率：用最长公共子序列估计朗读准确度（容忍识别误差） */
 function seqAccuracy(reference, heard) {
   const a = wordList(reference);
   const b = wordList(heard);
@@ -762,7 +924,7 @@ function seqAccuracy(reference, heard) {
     let prev = 0;
     for (let j = 1; j <= b.length; j++) {
       const tmp = dp[j];
-      dp[j] = a[i - 1] === b[j - 1] ? prev + 1 : Math.max(dp[j], dp[j - 1]);
+      dp[j] = sameWord(a[i - 1], b[j - 1]) ? prev + 1 : Math.max(dp[j], dp[j - 1]);
       prev = tmp;
     }
   }
@@ -1041,7 +1203,8 @@ async function handleScore(req, res, cfg, session, user) {
   if (!preCheck.ok) return sendJson(res, 402, { ok: false, error: preCheck.reason, quota: preCheck });
 
   const apiKey = apiKeyFor(req, cfg, session);
-  const common = { apiKey, apiBase: cfg.apiBase, model: cfg.model };
+  // 评分要输出较长 JSON，给比组卷更宽裕的停滞超时
+  const common = { apiKey, apiBase: cfg.apiBase, model: cfg.model, stallMs: 90_000 };
 
   const tasks = [
     {
@@ -1057,7 +1220,7 @@ async function handleScore(req, res, cfg, session, user) {
             metrics: answers.readAloud?.metrics,
           }),
           temperature: 0.2,
-          maxTokens: 2200,
+          maxTokens: 4096,
           json: true,
         }).then((r) => extractJson(r.content)),
     },
@@ -1070,7 +1233,7 @@ async function handleScore(req, res, cfg, session, user) {
           system: SCORE_SYSTEM_PROMPT,
           user: buildInfoScorePrompt({ paper, answers }),
           temperature: 0.2,
-          maxTokens: 3200,
+          maxTokens: 6000,
           json: true,
         }).then((r) => extractJson(r.content)),
     },
@@ -1083,7 +1246,7 @@ async function handleScore(req, res, cfg, session, user) {
           system: SCORE_SYSTEM_PROMPT,
           user: buildRetellAskScorePrompt({ paper, answers }),
           temperature: 0.2,
-          maxTokens: 3200,
+          maxTokens: 6000,
           json: true,
         }).then((r) => extractJson(r.content)),
     },
@@ -1201,6 +1364,32 @@ async function handleScore(req, res, cfg, session, user) {
     freeLeft: Math.max(0, (DB.getSettings().pricing.freeTrials || 0) - (user.freeUsed || 0)),
     proActive: Boolean(user.proUntil && user.proUntil > Date.now()),
   };
+
+  // 保存历史记录，供考生复盘
+  try {
+    report.recordId = DB.addRecord({
+      userId: user.id,
+      topic: paper?.topic,
+      total,
+      maxTotal: EXAM.totalScore,
+      grade: report.grade,
+      report: {
+        total,
+        grade: report.grade,
+        breakdown,
+        maxBreakdown: { ...SCORE_TABLE },
+        detail: report.detail,
+        partComments: report.partComments,
+        suggestions: report.suggestions,
+        warnings: report.warnings,
+        scoringMode: report.scoringMode,
+        scoredAt: report.scoredAt,
+      },
+      paper,
+    }).id;
+  } catch (e) {
+    console.warn('[score] 保存历史记录失败:', e.message);
+  }
 
   return sendJson(res, 200, report);
 }
@@ -1323,6 +1512,11 @@ async function handleRegister(req, res) {
   const ip = clientIp(req);
   const ua = req.headers['user-agent'] || '';
 
+  // 管理员紧急关闭注册
+  if (DB.getSettings()?.security?.registrationOff) {
+    return sendJson(res, 503, { ok: false, error: '本站当前暂停新用户注册，请稍后再试' });
+  }
+
   // 限流
   if (isBanned(ip)) return sendJson(res, 429, { ok: false, error: '操作过于频繁，请稍后再试' });
   const rl = RL.register(ip);
@@ -1368,6 +1562,11 @@ async function handleRegister(req, res) {
 async function handleLogin(req, res) {
   const ip = clientIp(req);
   const ua = req.headers['user-agent'] || '';
+
+  // 管理员紧急关闭登录（已登录用户的会话不受影响）
+  if (DB.getSettings()?.security?.loginOff) {
+    return sendJson(res, 503, { ok: false, error: '本站当前暂停登录，请稍后再试' });
+  }
 
   if (isBanned(ip)) return sendJson(res, 429, { ok: false, error: '操作过于频繁，请稍后再试' });
   const rl = RL.login(ip);
@@ -1500,6 +1699,15 @@ async function handleAdminSettings(req, res) {
   }
   if (patch.apiKey === '') delete patch.apiKey; // 空字符串 = 不修改
   if (b.pricing && typeof b.pricing === 'object') patch.pricing = b.pricing;
+  // 紧急开关
+  if (b.security && typeof b.security === 'object') {
+    const cur2 = cur.security || {};
+    patch.security = {
+      registrationOff: Boolean(b.security.registrationOff ?? cur2.registrationOff),
+      loginOff: Boolean(b.security.loginOff ?? cur2.loginOff),
+      speechOff: Boolean(b.security.speechOff ?? cur2.speechOff),
+    };
+  }
   if (b.newPassword) {
     if (String(b.newPassword).length < 6) return sendJson(res, 400, { ok: false, error: '管理员密码至少 6 位' });
     patch.adminPasswordHash = DB.hashPassword(String(b.newPassword));
@@ -1873,6 +2081,9 @@ function handleCaptcha(req, res) {
 /* ---------------- Edge-TTS 语音合成 ---------------- */
 
 async function handleTts(req, res) {
+  if (DB.getSettings()?.security?.speechOff) {
+    return sendJson(res, 503, { ok: false, error: '语音合成服务当前已关闭' });
+  }
   const ip = clientIp(req);
   const rl = RL.tts(ip);
   if (!rl.ok) {
@@ -1914,6 +2125,9 @@ function handleTtsVoices(req, res) {
  * 网关不支持时返回 501，前端静默降级为纯声学评分，不影响交卷。
  */
 async function handleAsr(req, res, cfg) {
+  if (DB.getSettings()?.security?.speechOff) {
+    return sendJson(res, 503, { ok: false, error: '语音识别服务当前已关闭' });
+  }
   const ctx = requireUser(req, res);
   if (!ctx) return;
   const ip = clientIp(req);
@@ -2066,6 +2280,20 @@ const server = http.createServer((req, res) => {
       const ctx = requireUser(req, res);
       if (!ctx) return;
       return handleScore(req, res, cfg, ctx.session, ctx.user);
+    }
+
+    // ---------- 历史记录（复盘）----------
+    if (p === '/api/records' && req.method === 'GET') {
+      const ctx = requireUser(req, res);
+      if (!ctx) return;
+      return sendJson(res, 200, { ok: true, records: DB.listRecords(ctx.user.id, 50) });
+    }
+    if (p.startsWith('/api/records/') && req.method === 'GET') {
+      const ctx = requireUser(req, res);
+      if (!ctx) return;
+      const rec = DB.getRecord(ctx.user.id, p.slice('/api/records/'.length));
+      if (!rec) return sendJson(res, 404, { ok: false, error: '记录不存在' });
+      return sendJson(res, 200, { ok: true, record: rec });
     }
 
     // ---------- 管理员 ----------

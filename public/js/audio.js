@@ -39,6 +39,10 @@ const PREFERRED_ZH = [
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// 中文播报文案（与 app.js 的 SAY 保持一致）
+const SAY_RECORD_START = '开始录音。';
+const SAY_RECORD_DONE = '录音结束。';
+
 export const Tts = {
   _voices: [],
   _mode: 'unknown', // 'native' | 'server' | 'none'（仅用于状态展示）
@@ -242,8 +246,18 @@ export const Tts = {
     });
   },
 
-  /** 服务端 edge-tts 朗读 */
-  _speakServer(text, { speed = 1, lang = 'en', token = 0 } = {}) {
+  /** 服务端 edge-tts 朗读（失败自动重试 2 次） */
+  async _speakServer(text, { speed = 1, lang = 'en', token = 0 } = {}) {
+    if (!text) return false;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const ok = await this._speakServerOnce(text, { speed, lang, token });
+      if (ok || token !== this._token) return ok;
+      if (attempt < 3) await sleep(350 * attempt);
+    }
+    return false;
+  },
+
+  _speakServerOnce(text, { speed = 1, lang = 'en', token = 0 } = {}) {
     return new Promise(async (resolve) => {
       if (!text) return resolve(false);
       const voice = lang === 'zh' ? 'zh-CN-XiaoxiaoNeural' : 'en-US-AriaNeural';
@@ -387,7 +401,7 @@ export async function countdownBeeps({ onTick, totalMs = 3500 } = {}) {
 export async function recordingPrepare({ onProgress } = {}) {
   await countdownBeeps({ onTick: (p) => onProgress?.(p * 0.7), totalMs: 3500 });
   onProgress?.(0.75);
-  await Tts.speak('Please start recording now.', { rate: Tts.getSpeed() });
+  await Tts.speak(SAY_RECORD_START, { rate: Tts.getSpeed() });
   onProgress?.(1);
 }
 
@@ -396,7 +410,7 @@ export async function recordingPrepare({ onProgress } = {}) {
  */
 export async function recordingFinish() {
   await stopCue();
-  await Tts.speak('Recording finished.', { rate: Tts.getSpeed() });
+  await Tts.speak(SAY_RECORD_DONE, { rate: Tts.getSpeed() });
 }
 
 /* ==================================================================

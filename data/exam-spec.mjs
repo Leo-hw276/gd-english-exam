@@ -181,19 +181,19 @@ export const CITY_PROFILES = {
   jiangmen: {
     name: '江门市',
     note: '模仿朗读播放录音 2 遍，准备 50 秒后朗读。',
-    readAloud: { playTimes: 2, prepareSec: 50, recordSec: 50 },
+    readAloud: { playTimes: 2, prepareSec: 50, recordSec: 70 },
     retell: { prepareSec: 50, recordSec: 60 },
   },
   guangzhou: {
     name: '广州市',
     note: '模仿朗读听短文一遍，准备 50 秒，50 秒内朗读。',
-    readAloud: { playTimes: 1, prepareSec: 50, recordSec: 50 },
+    readAloud: { playTimes: 1, prepareSec: 50, recordSec: 70 },
     retell: { prepareSec: 50, recordSec: 50 },
   },
   foshan: {
     name: '佛山市',
     note: '模仿朗读听短文一遍，准备 50 秒后朗读。',
-    readAloud: { playTimes: 1, prepareSec: 50, recordSec: 50 },
+    readAloud: { playTimes: 1, prepareSec: 50, recordSec: 70 },
     retell: { prepareSec: 50, recordSec: 60 },
   },
   zhuhai: {
@@ -211,7 +211,7 @@ export const CITY_PROFILES = {
   maoming: {
     name: '茂名市',
     note: '模仿朗读播放 1 遍，准备 50 秒后朗读。',
-    readAloud: { playTimes: 1, prepareSec: 50, recordSec: 50 },
+    readAloud: { playTimes: 1, prepareSec: 50, recordSec: 70 },
     retell: { prepareSec: 50, recordSec: 50 },
   },
   qingyuan: {
@@ -290,14 +290,16 @@ export function buildPaperPromptPartA({ topic, difficulty = '标准', seed }) {
 ${commonHead({ topic, difficulty, seed })}
 
 1) readAloud（模仿朗读，1 小题，6 分）
-   - passage：一段 **70–85 个英文单词**的短文，语言自然、适合朗读，含一定语调变化（陈述句、疑问句、并列句混合）。
+   - passage：一段 **110–120 个英文单词**的短文，语言自然、适合朗读，含一定语调变化（陈述句、疑问句、并列句混合）。
    - 不要在文中加入任何中文或音标提示。
 
 2) chooseInfo（听选信息，6 小题，每题 1.5 分，共 9 分）
    - 共 **恰好 3 段**对话或独白（script），每段对应 **恰好 2 个**问题。
    - 每段 script 为 40–70 词的对话（用 W/M 两个说话人交替）或独白。
-   - 每题的 options 必须是 **恰好 3 个简短选项**（每个 2–6 词），题干问的必须是录音中确实出现的信息。
-   - answerIndex 为 0/1/2，且必须与 script 内容严格一致。
+   - 题型为「一问两答」：每题的 options 恰好 **2 个简短选项**（每个 1–4 词），
+     如 {"q":"Where is he going?","options":["Restaurant","School"],"answerIndex":0}。
+     考生听录音后口头说出其中一个选项，系统比对匹配。
+   - answerIndex 为 0 或 1，且必须与 script 内容严格一致。
    - evidence：从 script 中原文摘录能支撑答案的一句英文。
 
 【输出 JSON 结构（字段名严格遵守）】
@@ -306,13 +308,13 @@ ${commonHead({ topic, difficulty, seed })}
   "chooseInfo": [
     { "script": [ {"spk":"W","en":"..."}, {"spk":"M","en":"..."} ],
       "questions": [
-        { "q": "...", "options": ["...","...","..."], "answerIndex": 0, "evidence": "..." },
-        { "q": "...", "options": ["...","...","..."], "answerIndex": 1, "evidence": "..." }
+        { "q": "...", "options": ["...","..."], "answerIndex": 0, "evidence": "..." },
+        { "q": "...", "options": ["...","..."], "answerIndex": 1, "evidence": "..." }
       ] }
   ]
 }
 
-再次强调：只输出一个 JSON 对象；chooseInfo 恰好 3 段，每段恰好 2 题。`;
+再次强调：只输出一个 JSON 对象；chooseInfo 恰好 3 段，每段恰好 2 题，每题恰好 2 个选项。`;
 }
 
 /** 组卷第二批：回答问题 + 信息转述 + 询问信息 */
@@ -329,10 +331,11 @@ ${commonHead({ topic, difficulty, seed })}
 
 2) retell（信息转述，1 小题，6 分）
    - script：一段 **130–160 词**的独白，叙述一件完整的事或有条理地介绍一个人/一项计划。
-   - 必须能自然拆分为 **恰好 5 个内容要点**。
-   - outline：恰好 5 个要点提示（模拟思维导图分支，如 "Mother's Day / It is coming."），按顺序对应 script。
+   - 必须能自然拆分为 **恰好 4 个内容要点**。
+   - outline：恰好 4 个要点提示，每个要点写成「思维导图节点」形式= 一个简短问句 + 冒号 + 答案提示，
+     例如 "Where is he going?: A restaurant"。顺序与 script 一致，考生照着导图逐点转述。
    - starter：转述开头句（英文，如 "Today Amy will tell us ..."）。
-   - referenceRetell：一段 60–90 词的完整英文转述范文，覆盖全部 5 个要点。
+   - referenceRetell：一段 60–90 词的完整英文转述范文，覆盖全部 4 个要点。
 
 3) askQuestions（询问信息，2 小题，每题 1.5 分，共 3 分）
    - 恰好 2 个 **中文问句**（cn），围绕上面 retell 的情景，要求学生现场翻译成英语提问。
@@ -347,14 +350,14 @@ ${commonHead({ topic, difficulty, seed })}
   },
   "retell": {
     "script": "...",
-    "outline": ["...","...","...","...","..."],
+    "outline": ["...","...","...","..."],
     "starter": "...",
     "referenceRetell": "..."
   },
   "askQuestions": [ { "cn": "...", "reference": "...", "mustInclude": ["..."] } ]
 }
 
-再次强调：只输出一个 JSON 对象；answerQuestions.questions 恰好 4 题；retell.outline 恰好 5 项；askQuestions 恰好 2 项。`;
+再次强调：只输出一个 JSON 对象；answerQuestions.questions 恰好 4 题；retell.outline 恰好 4 项；askQuestions 恰好 2 项。`;
 }
 
 /* ------------------------------------------------------------------ *
@@ -370,6 +373,12 @@ export const SCORE_SYSTEM_PROMPT = `你是广东省中考英语听说考试（�
   * pauseCount 停顿次数（≥300ms 的静音段）；longestPauseMs 最长停顿；meanPauseMs 平均停顿。
   * wordsPerMinute 语速（初中生正常朗读 110–150 wpm；转述 90–130 wpm 属正常）。
   * 若 transcript 为空或 voicedRatio 极低（<0.1），应判定为"未作答/一言不发"，按官方标准给 0 分或最低档。- 学生如果只是简单回答（不需要完整句），只要信息正确就要给满分，不得因句子不完整扣分。
+- **识别容错原则（重要）**：语音识别本身不完美，下列差异**必须视为识别误差，不得扣分**：
+  * 同音/近音词替换（如 there/their、think/sink、walk/work）；
+  * 单复数、冠词、时态等细小的识别偏差（如 a/the、is/are、-s 丢失）；
+  * 专有名词、数字、生僻词被识别成别的词；
+  * 一句话被拆成两段或漏识别一两个虚词（to/of/in 等）。
+  只有当**整句意思错误、关键信息（人/物/时间/地点/数字）明显答错或完全没答**时才扣分。
 - **重要：识别服务不可用时的判定规则。** 当 transcript 为空、但 voicedRatio 较高（≥0.3）且 speechMs 接近正常作答所需时长时，
   说明这是「语音识别服务不可用」而不是「考生没开口」。此时不得按 0 分处理，应当只依据声学指标评定流畅度与节奏：
   时长与语速正常、停顿少、发声连贯 → 给 C 档及以上（朗读 3–4.5 分）；并说明「本次未能获取语音转写，评分仅依据音频特征」。

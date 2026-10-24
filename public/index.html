@@ -325,6 +325,14 @@
     </div>
 
     <div class="card">
+      <div class="row between" style="margin-bottom:10px">
+        <h2 style="margin:0">练习记录</h2>
+        <span class="muted" style="font-size:12.5px">点击任一记录可重新查看完整评分报告</span>
+      </div>
+      <div id="acc-history" class="muted">—</div>
+    </div>
+
+    <div class="card">
       <h2>兑换记录</h2>
       <div id="acc-orders" class="muted">—</div>
     </div>
@@ -401,6 +409,29 @@
           <button class="btn ghost sm" id="btn-admin-refresh">刷新</button>
         </div>
         <div class="stat-grid" id="admin-stats" style="margin-top:14px"></div>
+      </div>
+
+      <div class="card" id="card-security">
+        <h2>安全管控</h2>
+        <p class="muted">网站遭到攻击或需要维护时，可立即关闭对应入口。</p>
+        <div class="row" style="margin-top:12px">
+          <label class="switch-row">
+            <input type="checkbox" id="sec-register-off" />
+            <span>关闭新用户注册</span>
+          </label>
+          <label class="switch-row">
+            <input type="checkbox" id="sec-login-off" />
+            <span>关闭登录</span>
+          </label>
+          <label class="switch-row">
+            <input type="checkbox" id="sec-speech-off" />
+            <span>关闭语音合成与识别</span>
+          </label>
+        </div>
+        <div class="row" style="margin-top:14px">
+          <button class="btn" id="btn-admin-save-security">保存开关</button>
+          <span class="muted" id="sec-hint"></span>
+        </div>
       </div>
 
       <div class="card">

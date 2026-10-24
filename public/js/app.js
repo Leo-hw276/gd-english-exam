@@ -320,6 +320,59 @@ function renderAccount() {
     </div>`;
   const el = $('#acc-orders');
   if (el) el.innerHTML = '<p class="muted">兑换成功后额度会立即到账，可在上方「次卡剩余 / 月卡」处查看。</p>';
+  renderHistory();
+}
+
+/* ------------------------------------------------------------------ *
+ *  练习记录（复盘）
+ * ------------------------------------------------------------------ */
+
+async function renderHistory() {
+  const box = $('#acc-history');
+  if (!box) return;
+  if (!S.user) {
+    box.innerHTML = '<p class="muted">登录后可查看历史练习记录并复盘。</p>';
+    return;
+  }
+  box.innerHTML = '<p class="muted">加载中…</p>';
+  try {
+    const d = await api('/api/records', undefined, 'GET');
+    const list = d.records || [];
+    if (!list.length) {
+      box.innerHTML = '<p class="muted">还没有练习记录，完成一次模拟考试后会自动保存在这里。</p>';
+      return;
+    }
+    box.innerHTML = list
+      .map(
+        (r) => `<div class="hist-item">
+          <span class="hist-date">${new Date(r.at).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+          <span class="hist-topic">${esc(r.topic || '模拟考试')}</span>
+          <span class="hist-score">${r.total}<small> / ${r.maxTotal}</small></span>
+          <button class="btn sm ghost" data-hist="${r.id}">查看报告</button>
+        </div>`
+      )
+      .join('');
+    $$('[data-hist]', box).forEach((btn) => {
+      btn.onclick = () => openHistoryRecord(btn.dataset.hist);
+    });
+  } catch (e) {
+    box.innerHTML = `<p class="muted">记录加载失败：${esc(e.message)}</p>`;
+  }
+}
+
+async function openHistoryRecord(id) {
+  busy('正在载入历史报告…', '');
+  try {
+    const d = await api(`/api/records/${id}`, undefined, 'GET');
+    const rec = d.record;
+    if (!rec) throw new Error('记录不存在');
+    S.lastReport = rec.report;
+    hideOverlay();
+    renderReport(rec.report, { history: true, topic: rec.topic, at: rec.at });
+  } catch (e) {
+    hideOverlay();
+    toast('载入失败：' + e.message, 'bad', 5000);
+  }
 }
 
 /* ==================================================================
@@ -952,10 +1005,10 @@ async function runChooseInfo() {
     $('#nav-current').textContent = `听选信息（第 ${si + 1} 段）`;
     $('#nav-max').textContent = '9 分';
 
-    await announceRequirement(SAY.p2(si * 2 + 1));
+    if (si === 0) await announceRequirement(SAY.p2(si * 2 + 1));
 
     setPhase('阅题中', 'warn');
-    renderRecPanel('#rec-mount', { timerText: 10, note: '阅题时间：看清 3 个备选答案' });
+    renderRecPanel('#rec-mount', { timerText: 10, note: '阅题时间：看清两个备选答案' });
     setRecState(false, '阅题中');
     await countdown(10, { onTick: (s) => setTimer(s, s <= 3 ? 'warn' : '') });
 
@@ -1060,10 +1113,25 @@ async function runRetell() {
         现在你有 <b>15 秒钟</b>的时间阅读要点提示。
         ${starter ? `<br><b>你的转述可以这样开始：</b>「${esc(starter)} …」` : ''}
       </div>
-      <h3 style="margin-top:6px">要点提示（思维导图）</h3>
-      <ul class="outline">
-        ${outline.map((o, i) => `<li><span class="n">要点${i + 1}</span><span>${esc(o)}</span></li>`).join('')}
-      </ul>
+      <h3 style="margin-top:16px">思维导图</h3>
+      <div class="mindmap">
+        <div class="mm-root">${esc(S.paper.topic || '话题')}</div>
+        <div class="mm-branches">
+          ${outline
+            .map((o, i) => {
+              const raw = String(o);
+              const m = raw.split(/[:：]/);
+              const q = (m[0] || '').trim();
+              const a = (m.slice(1).join('：') || '').trim();
+              return `<div class="mm-node">
+                <div class="mm-idx">${i + 1}</div>
+                <div class="mm-q">${esc(q)}</div>
+                ${a ? `<div class="mm-a">${esc(a)}</div>` : ''}
+              </div>`;
+            })
+            .join('')}
+        </div>
+      </div>
       ${recMountHtml()}`,
   });
   $('#nav-current').textContent = '信息转述';
@@ -1072,7 +1140,7 @@ async function runRetell() {
   await announceRequirement(SAY.p4(cfg.prepareSec, cfg.recordSec));
 
   setPhase('读题中', 'warn');
-  renderRecPanel('#rec-mount', { timerText: 15, note: '读题时间：把 5 个要点串成一条线' });
+  renderRecPanel('#rec-mount', { timerText: 15, note: '读题时间：把 4 个要点串成一条线' });
   setRecState(false, '读题中');
   await countdown(15, { onTick: (s) => setTimer(s, s <= 3 ? 'warn' : '') });
 
@@ -1124,7 +1192,7 @@ async function runAskQuestions() {
     $('#nav-max').textContent = '3 分';
     markKey(`k${n}`, 'active');
 
-    await announceRequirement(SAY.p5());
+    if (i === 0) await announceRequirement(SAY.p5());
 
     setPhase('准备中', 'warn');
     renderRecPanel('#rec-mount', { timerText: 15, note: '注意疑问词和语序' });
