@@ -67,7 +67,50 @@ export function showScreen(id) {
 
   if (id === 'screen-account') renderAccount();
   if (id === 'screen-pricing') renderPricing();
-  if (id === 'screen-auth') refreshAllCaptchas();
+  if (id === 'screen-auth') {
+    refreshAllCaptchas();
+    loadNotices();
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ *  公告栏 & 账号异常公示（登录页）
+ * ------------------------------------------------------------------ */
+
+async function loadNotices() {
+  const card = $('#notice-card');
+  if (!card) return;
+  try {
+    const d = await api('/api/notices', undefined, 'GET');
+    const anns = d.announcements || [];
+    const abs = d.abnormal || [];
+    if (!anns.length && !abs.length) {
+      card.style.display = 'none';
+      return;
+    }
+    card.style.display = '';
+    $('#notice-announcements').innerHTML = anns
+      .map(
+        (a) =>
+          `<div class="notice-item lv-${esc(a.level)}">
+            <b>${esc(a.title)}</b><span class="muted">${new Date(a.at).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+            <p>${esc(a.body)}</p>
+          </div>`
+      )
+      .join('');
+    $('#notice-abnormal').innerHTML = abs
+      .map((a) => {
+        const t = a.type === 'ip' ? 'IP' : a.type === 'account' ? '账号' : '地址';
+        return `<div class="notice-item lv-alert">
+          <b>${esc(t)}：${esc(a.value)}</b>
+          ${a.reason ? `<span class="muted">${esc(a.reason)}</span>` : ''}
+          ${a.note ? `<p>${esc(a.note)}</p>` : ''}
+        </div>`;
+      })
+      .join('');
+  } catch {
+    card.style.display = 'none';
+  }
 }
 
 /* ==================================================================
@@ -1934,8 +1977,8 @@ function bind() {
       if (a.dataset.tab) $(`#auth-tabs .tab[data-tab="${a.dataset.tab}"]`)?.click();
       return;
     }
-    // 离开后台时清掉 #admin，避免下次刷新又进后台
-    if (target !== 'screen-admin' && location.hash === '#admin') {
+    // 离开后台时清掉 #adminpowershell，避免下次刷新又进后台
+    if (target !== 'screen-admin' && location.hash === '#adminpowershell') {
       try {
         history.replaceState(null, '', location.pathname + location.search);
       } catch {}
@@ -1987,12 +2030,12 @@ function bind() {
     S.micStream?.getTracks().forEach((t) => t.stop());
   });
 
-  // 支持直接访问 /#admin 进入后台（含已在站内切换 hash 的情况）
+  // 支持直接访问 /#adminpowershell 进入后台（含已在站内切换 hash 的情况）
   const openAdminIfHash = () => {
-    if (location.hash === '#admin') showScreen('screen-admin');
+    if (location.hash === '#adminpowershell') showScreen('screen-admin');
   };
   window.addEventListener('hashchange', openAdminIfHash);
-  if (location.hash === '#admin') setTimeout(openAdminIfHash, 200);
+  if (location.hash === '#adminpowershell') setTimeout(openAdminIfHash, 200);
 }
 
 (async function init() {

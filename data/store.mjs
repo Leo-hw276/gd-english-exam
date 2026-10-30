@@ -123,6 +123,8 @@ const EMPTY_DB = () => ({
   orders: [],
   activity: [],   // 登录 / 注册 / 朗读等活动审计（含 IP、浏览器）
   records: [],    // 考生历史成绩记录（用于复盘）
+  announcements: [], // 公告栏（管理员发布，登录页展示）
+  abnormal: [],      // 账号异常公示（异常 IP / 账号 / 地址）
 });
 
 let db = null;
@@ -648,6 +650,94 @@ export function stats() {
         }, 0) * 100
       ) / 100,
   };
+}
+
+/* ------------------------------------------------------------------ *
+ *  公告栏 & 账号异常公示
+ * ------------------------------------------------------------------ */
+
+/** 发布公告 */
+export function addAnnouncement({ title, body, level = 'info', author = 'admin' }) {
+  const db0 = load();
+  const item = {
+    id: newToken().slice(0, 12),
+    at: Date.now(),
+    title: String(title || '').slice(0, 80),
+    body: String(body || '').slice(0, 2000),
+    level: ['info', 'warn', 'alert'].includes(level) ? level : 'info',
+    author: String(author || 'admin').slice(0, 40),
+    active: true,
+  };
+  db0.announcements.unshift(item);
+  if (db0.announcements.length > 100) db0.announcements.length = 100;
+  save();
+  return item;
+}
+
+/** 公告列表；onlyActive=true 时只返回启用的（登录页用） */
+export function listAnnouncements(onlyActive = true) {
+  const db0 = load();
+  return (db0.announcements || []).filter((a) => (onlyActive ? a.active : true)).slice(0, 50);
+}
+
+/** 启用 / 停用公告 */
+export function toggleAnnouncement(id, active) {
+  const db0 = load();
+  const a = (db0.announcements || []).find((x) => x.id === id);
+  if (!a) return null;
+  a.active = Boolean(active);
+  save();
+  return a;
+}
+
+/** 删除公告 */
+export function removeAnnouncement(id) {
+  const db0 = load();
+  const before = (db0.announcements || []).length;
+  db0.announcements = (db0.announcements || []).filter((x) => x.id !== id);
+  save();
+  return before - db0.announcements.length;
+}
+
+/** 发布账号异常公示（异常 IP / 账号 / 地址） */
+export function addAbnormal({ type = 'ip', value, reason, note }) {
+  const db0 = load();
+  const item = {
+    id: newToken().slice(0, 12),
+    at: Date.now(),
+    type: ['ip', 'account', 'address'].includes(type) ? type : 'ip',
+    value: String(value || '').slice(0, 120),
+    reason: String(reason || '').slice(0, 120),
+    note: String(note || '').slice(0, 500),
+    active: true,
+  };
+  db0.abnormal.unshift(item);
+  if (db0.abnormal.length > 100) db0.abnormal.length = 100;
+  save();
+  return item;
+}
+
+/** 异常公示列表；onlyActive=true 只返回启用的（登录页展示） */
+export function listAbnormal(onlyActive = true) {
+  const db0 = load();
+  return (db0.abnormal || []).filter((a) => (onlyActive ? a.active : true)).slice(0, 50);
+}
+
+export function toggleAbnormal(id, active) {
+  const db0 = load();
+  const a = (db0.abnormal || []).find((x) => x.id === id);
+  if (!a) return null;
+  a.active = Boolean(active);
+  save();
+  return a;
+}
+
+export function removeAbnormal(id) {
+  const db0 = load();
+  const before = (db0.abnormal || []).length;
+  db0.abnormal = (db0.abnormal || []).filter((x) => x.id !== id);
+  save();
+  return before - db0.abnormal.length;
 }
 
 /* ------------------------------------------------------------------ *

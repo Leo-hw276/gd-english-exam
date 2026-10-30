@@ -104,6 +104,7 @@ async function loadOverview() {
     fillModelSelect(s.availableModels || [], s.model);
     fillRegionSelect(s.examRegion);
     renderSecurity(s.security);
+    saveNotices().catch(() => {});
 
     const srcBox = $('#cfg-env-source');
     if (srcBox) {
@@ -282,6 +283,107 @@ function renderSecurity(sec) {
   if ($('#sec-register-off')) $('#sec-register-off').checked = Boolean(s.registrationOff);
   if ($('#sec-login-off')) $('#sec-login-off').checked = Boolean(s.loginOff);
   if ($('#sec-speech-off')) $('#sec-speech-off').checked = Boolean(s.speechOff);
+}
+
+/* ------------------------------------------------------------------ *
+ *  公告栏 & 账号异常公示（管理员）
+ * ------------------------------------------------------------------ */
+
+async function saveNotices() {
+  const d = await api('/api/admin/notices', { action: 'list' });
+  renderNoticeLists(d);
+}
+
+function renderNoticeLists(d) {
+  const anns = d.announcements || [];
+  const abs = d.abnormal || [];
+  $('#nt-list').innerHTML = anns.length
+    ? anns
+        .map(
+          (a) =>
+            `<div class="nt-row">
+              <span class="grow"><b>${esc(a.title)}</b> <span class="muted">${esc(a.level)}</span><div class="muted">${esc(a.body)}</div></span>
+              <button class="btn sm ghost" data-nt-toggle="${a.id}" data-active="${a.active}">${a.active ? '停用' : '启用'}</button>
+              <button class="btn sm ghost" data-nt-del="${a.id}">删除</button>
+            </div>`
+        )
+        .join('')
+    : '<p class="muted">暂无公告</p>';
+  $('#ab-list').innerHTML = abs.length
+    ? abs
+        .map(
+          (a) =>
+            `<div class="ab-row">
+              <span class="grow"><b>${esc(a.type)}：${esc(a.value)}</b> <span class="muted">${esc(a.reason)}</span>${a.note ? `<div class="muted">${esc(a.note)}</div>` : ''}</span>
+              <button class="btn sm ghost" data-ab-toggle="${a.id}" data-active="${a.active}">${a.active ? '停用' : '启用'}</button>
+              <button class="btn sm ghost" data-ab-del="${a.id}">删除</button>
+            </div>`
+        )
+        .join('')
+    : '<p class="muted">暂无异常公示</p>';
+
+  $$('#nt-list [data-nt-toggle]').forEach((b) => {
+    b.onclick = async () => {
+      await api('/api/admin/notices', { action: 'toggleAnnouncement', id: b.dataset.ntToggle, active: b.dataset.active !== 'true' });
+      await saveNotices();
+    };
+  });
+  $$('#nt-list [data-nt-del]').forEach((b) => {
+    b.onclick = async () => {
+      await api('/api/admin/notices', { action: 'removeAnnouncement', id: b.dataset.ntDel });
+      await saveNotices();
+    };
+  });
+  $$('#ab-list [data-ab-toggle]').forEach((b) => {
+    b.onclick = async () => {
+      await api('/api/admin/notices', { action: 'toggleAbnormal', id: b.dataset.abToggle, active: b.dataset.active !== 'true' });
+      await saveNotices();
+    };
+  });
+  $$('#ab-list [data-ab-del]').forEach((b) => {
+    b.onclick = async () => {
+      await api('/api/admin/notices', { action: 'removeAbnormal', id: b.dataset.abDel });
+      await saveNotices();
+    };
+  });
+}
+
+async function addAnnouncement() {
+  const hint = $('#nt-hint');
+  try {
+    await api('/api/admin/notices', {
+      action: 'addAnnouncement',
+      title: $('#nt-title').value,
+      body: $('#nt-body').value,
+      level: $('#nt-level').value,
+    });
+    if (hint) hint.textContent = '已发布';
+    $('#nt-title').value = '';
+    $('#nt-body').value = '';
+    await saveNotices();
+    toast('公告已发布，登录页立即展示', 'ok');
+  } catch (e) {
+    toast('发布失败：' + e.message, 'bad', 5000);
+  }
+}
+
+async function addAbnormal() {
+  const hint = $('#ab-hint');
+  try {
+    await api('/api/admin/notices', {
+      action: 'addAbnormal',
+      type: $('#ab-type').value,
+      value: $('#ab-value').value,
+      reason: $('#ab-reason').value,
+    });
+    if (hint) hint.textContent = '已公示';
+    $('#ab-value').value = '';
+    $('#ab-reason').value = '';
+    await saveNotices();
+    toast('公示已发布', 'ok');
+  } catch (e) {
+    toast('发布失败：' + e.message, 'bad', 5000);
+  }
 }
 
 /* ------------------------------------------------------------------ *
@@ -581,13 +683,13 @@ function renderLogs(logs) {
  *  安全审计日志
  * ------------------------------------------------------------------ */
 
-const fmtKind = (k) => ({ login: '登录', register: '注册', read: '朗读', blocked: '拦截' }[k] || k);
+const fmtKind = (k) => ({ login: '登录', register: '注册', read: '朗读', blocked: '拦截', visit: '访问', score: '评分', paper: '组卷', 'admin-login': '管理员登录' }[k] || k);
 
 function renderActivity(events) {
   const tb = $('#act-table tbody');
   if (!tb) return;
   if (!events || !events.length) {
-    tb.innerHTML = '<tr><td colspan="8" class="muted" style="text-align:center">暂无记录</td></tr>';
+    tb.innerHTML = '<tr><td colspan="9" class="muted" style="text-align:center">暂无记录</td></tr>';
     return;
   }
   tb.innerHTML = events.map((e) => {
@@ -598,6 +700,7 @@ function renderActivity(events) {
       <td${cls}>${esc(e.action || '')}</td>
       <td>${esc(e.email || e.userId || '')}</td>
       <td>${esc(e.ip || '')}</td>
+      <td>${esc(e.geo || '')}</td>
       <td>${esc(e.browser || '')}</td>
       <td>${esc(e.os || '')}</td>
       <td>${esc(e.detail || e.text || '').slice(0, 60)}</td>
@@ -662,6 +765,8 @@ function bind() {
   $('#btn-admin-save')?.addEventListener('click', saveApi);
   $('#btn-admin-save-price')?.addEventListener('click', savePricing);
   $('#btn-admin-save-security')?.addEventListener('click', saveSecurity);
+  $('#btn-nt-add')?.addEventListener('click', addAnnouncement);
+  $('#btn-ab-add')?.addEventListener('click', addAbnormal);
   $('#btn-admin-export')?.addEventListener('click', exportUsers);
   $('#btn-admin-import')?.addEventListener('click', () => $('#cfg-import-file')?.click());
   $('#cfg-import-file')?.addEventListener('change', importUsers);

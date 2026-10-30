@@ -40,6 +40,7 @@ import {
   verifyCaptcha,
   riskScore,
   makeActivityStore,
+  ipToLocation,
 } from './data/security.mjs';
 
 import { synthesize as edgeTts, rateStr as ttsRateStr, setCacheDir as setTtsCacheDir, VOICES as TTS_VOICES } from './data/edge-tts.mjs';
@@ -61,6 +62,43 @@ const Activity = makeActivityStore((events) => {
 // 从持久化数据中恢复
 try { Activity.load(DB.data().activity); } catch {}
 
+/**
+ * 记录一次访问/操作到安全日志。
+ * 统一补齐：时间、IP、浏览器、系统、地理位置（服务端静默反查）。
+ * 不阻塞主流程：地址反查异步进行，事件先入日志、地址稍后补写。
+ */
+const geoPromises = new Map(); // ip -> Promise
+function logVisit(req, kind, fields = {}) {
+  const ip = clientIp(req);
+  const ua = req.headers['user-agent'] || '';
+  const { browser, os, inApp, bot } = parseUa(ua);
+  const rec = Activity.push({
+    kind,
+    ip,
+    browser,
+    os,
+    inApp,
+    bot,
+    ua: ua.slice(0, 220),
+    ...fields,
+  });
+  // 异步补地址（不阻塞请求）
+  if (ip && ip !== 'unknown') {
+    const doGeo = async () => {
+      try {
+        const geo = await ipToLocation(ip);
+        if (geo.str) rec.geo = geo.str;
+      } catch {}
+    };
+    if (geoPromises.has(ip)) geoPromises.get(ip).then(() => doGeo());
+    else {
+      const p = doGeo().finally(() => geoPromises.delete(ip));
+      geoPromises.set(ip, p);
+    }
+  }
+  return rec;
+}
+
 /* ---------- Edge-TTS 缓存目录 ---------- */
 try { setTtsCacheDir(path.join(__dirname, 'data', 'tts-cache')); } catch {}
 
@@ -70,6 +108,8 @@ const RL = {
   register: (ip) => rateLimit(`reg:${ip}`, { windowMs: 10 * 60_000, max: 5 }),
   // 登录：每 IP 每 5 分钟最多 10 次
   login: (ip) => rateLimit(`login:${ip}`, { windowMs: 5 * 60_000, max: 10 }),
+  // 管理员登录：最敏感入口，比用户登录更严 —— 每 IP 每 5 分钟最多 5 次尝试
+  adminLogin: (ip) => rateLimit(`adm-login:${ip}`, { windowMs: 5 * 60_000, max: 5 }),
   // 验证码请求：每 IP 每分钟最多 120 次
   // 学校机房多台设备共用一个出口 IP，限得太死会导致整班同学都刷不出验证码
   captcha: (ip) => rateLimit(`cap:${ip}`, { windowMs: 60_000, max: 120 }),
@@ -1549,7 +1589,7 @@ async function handleRegister(req, res) {
   setSessionCookie(res, token);
   const p = DB.getSettings().pricing;
 
-  Activity.push({ kind: 'register', action: 'ok', userId: user.id, email, ip, ...parseUa(ua), riskScore: risk.score });
+  logVisit(req, 'register', { action: 'ok', userId: user.id, email, ip, riskScore: risk.score });
 
   sendJson(res, 200, {
     ok: true,
@@ -1582,7 +1622,7 @@ async function handleLogin(req, res) {
 
   const user = DB.findUserByEmail(email);
   if (!user || !DB.verifyPassword(password, user.passHash)) {
-    Activity.push({ kind: 'login', action: 'fail', ip, ...parseUa(ua), email, detail: '密码错误' });
+    logVisit(req, 'login', { action: 'fail', ip, email, detail: '密码错误' });
     // 连续失败 5 次 → 临时封 3 分钟
     const fails = Activity.query({ kind: 'login', action: 'fail', ip, since: Date.now() - 3 * 60_000 });
     if (fails.length >= 5) banKey(ip, 3 * 60_000);
@@ -1595,7 +1635,7 @@ async function handleLogin(req, res) {
   const token = DB.createSession(user.id, 'user');
   setSessionCookie(res, token, 'user');
 
-  Activity.push({ kind: 'login', action: 'ok', userId: user.id, email, ip, ...parseUa(ua) });
+  logVisit(req, 'login', { action: 'ok', userId: user.id, email, ip });
 
   sendJson(res, 200, { ok: true, token, admin: false, user: DB.publicUser(user) });
 }
@@ -1646,6 +1686,20 @@ async function handleRedeem(req, res) {
 /* ---------------- 管理员 ---------------- */
 
 async function handleAdminLogin(req, res) {
+  const ip = clientIp(req);
+  const ua = req.headers['user-agent'] || '';
+
+  // 1) 全局封禁检查（风控 / 多次失败封禁）
+  if (isBanned(`adm:${ip}`)) {
+    return sendJson(res, 429, { ok: false, error: '尝试次数过多，请 3 分钟后再试' });
+  }
+
+  // 2) 限流：每 IP 每 5 分钟最多 5 次尝试
+  const rl = RL.adminLogin(ip);
+  if (!rl.ok) {
+    return sendJson(res, 429, { ok: false, error: `尝试次数过多，请 ${rl.retryAfterSec} 秒后再试` });
+  }
+
   const b = await jsonBody(req);
   const account = String(b.account || 'admin').trim();
   const pw = String(b.password || '');
@@ -1653,10 +1707,21 @@ async function handleAdminLogin(req, res) {
 
   if (!s.adminUsername) s.adminUsername = 'admin';
 
-  if (account !== s.adminUsername) return sendJson(res, 401, { ok: false, error: '账号或密码错误' });
-  if (!s.adminPasswordHash) return sendJson(res, 401, { ok: false, error: '管理员密码未设置' });
-  if (!DB.checkAdminPassword(pw)) return sendJson(res, 401, { ok: false, error: '账号或密码错误' });
+  const bad = () => {
+    // 记录失败审计（含 IP / 浏览器 / 系统 / 地址）
+    logVisit(req, 'admin-login', { action: 'fail', ip, detail: '账号或密码错误' });
+    // 连续失败 5 次 → 临时封 3 分钟（比用户登录更狠）
+    const fails = Activity.query({ kind: 'admin-login', action: 'fail', ip, since: Date.now() - 3 * 60_000 });
+    if (fails.length >= 5) banKey(`adm:${ip}`, 3 * 60_000);
+    return sendJson(res, 401, { ok: false, error: '账号或密码错误' });
+  };
 
+  // 账号错误 / 密码未设置 / 密码错误 —— 统一返回「账号或密码错误」，不暴露具体原因
+  if (account !== s.adminUsername) return bad();
+  if (!s.adminPasswordHash) return bad();
+  if (!DB.checkAdminPassword(pw)) return bad();
+
+  logVisit(req, 'admin-login', { action: 'ok', ip, detail: s.adminUsername });
   const token = DB.createSession('admin', 'admin');
   setSessionCookie(res, token, 'admin');
   sendJson(res, 200, { ok: true, token, account: s.adminUsername });
@@ -1950,11 +2015,18 @@ function serveUpload(res, urlPath) {
   const type =
     Object.entries(MIME_EXT).find(([, e]) => e === ext)?.[0] || 'application/octet-stream';
   const buf = fs.readFileSync(file);
-  res.writeHead(200, {
+  // SVG 可能内嵌 <script>，直接以 image/svg+xml 返回存在存储型 XSS 风险。
+  // 处理：SVG 一律加 Content-Disposition: attachment + 严格 CSP，禁止脚本执行。
+  const headers = {
     'Content-Type': type,
     'Content-Length': buf.length,
     'Cache-Control': 'public, max-age=31536000, immutable',
-  });
+  };
+  if (ext === 'svg') {
+    headers['Content-Security-Policy'] = "default-src 'none'; script-src 'none'";
+    headers['X-Content-Type-Options'] = 'nosniff';
+  }
+  res.writeHead(200, headers);
   res.end(buf);
 }
 
@@ -2221,6 +2293,54 @@ async function handleAdminActivity(req, res) {
   sendJson(res, 200, { ok: true, events, stats });
 }
 
+/* ---------------- 公告栏 & 账号异常公示（管理员） ---------------- */
+
+async function handleAdminNotices(req, res) {
+  if (!requireAdmin(req, res)) return;
+  const b = await jsonBody(req);
+  const action = String(b.action || 'list');
+
+  if (action === 'list') {
+    return sendJson(res, 200, {
+      ok: true,
+      announcements: DB.listAnnouncements(false),
+      abnormal: DB.listAbnormal(false),
+    });
+  }
+
+  if (action === 'addAnnouncement') {
+    const a = DB.addAnnouncement({ title: b.title, body: b.body, level: b.level });
+    DB.log('admin-announce', 'admin', a.title);
+    return sendJson(res, 200, { ok: true, item: a });
+  }
+  if (action === 'toggleAnnouncement') {
+    const a = DB.toggleAnnouncement(String(b.id), b.active);
+    if (!a) return sendJson(res, 404, { ok: false, error: '公告不存在' });
+    return sendJson(res, 200, { ok: true, item: a });
+  }
+  if (action === 'removeAnnouncement') {
+    const n = DB.removeAnnouncement(String(b.id));
+    return sendJson(res, 200, { ok: true, removed: n });
+  }
+
+  if (action === 'addAbnormal') {
+    const a = DB.addAbnormal({ type: b.type, value: b.value, reason: b.reason, note: b.note });
+    DB.log('admin-abnormal', 'admin', `${a.type}:${a.value}`);
+    return sendJson(res, 200, { ok: true, item: a });
+  }
+  if (action === 'toggleAbnormal') {
+    const a = DB.toggleAbnormal(String(b.id), b.active);
+    if (!a) return sendJson(res, 404, { ok: false, error: '公示不存在' });
+    return sendJson(res, 200, { ok: true, item: a });
+  }
+  if (action === 'removeAbnormal') {
+    const n = DB.removeAbnormal(String(b.id));
+    return sendJson(res, 200, { ok: true, removed: n });
+  }
+
+  return sendJson(res, 400, { ok: false, error: '未知操作' });
+}
+
 
 /* ---------------------------- 启动 ---------------------------- */
 
@@ -2245,6 +2365,13 @@ const server = http.createServer((req, res) => {
     const cfg = getCfg();
     const ip = clientIp(req);
 
+    // 访问日志：页面加载（/ 或 /index.html）→ visit，含地址异步反查；
+    // API 动作在各自 handler 内记录（login/register/score…），不在此重复。
+    const isStatic = /\.(js|css|png|jpg|jpeg|webp|gif|svg|ico|woff2|json)$/i.test(p);
+    if (!isStatic && (p === '/' || p === '/index.html')) {
+      logVisit(req, 'visit', { action: 'open', detail: '首页' });
+    }
+
     // 全局限流（每 IP 每分钟 120 次 API 调用）
     if (p.startsWith('/api/')) {
       if (isBanned(ip)) return sendJson(res, 429, { ok: false, error: '请求过于频繁，已临时限制访问' });
@@ -2257,6 +2384,14 @@ const server = http.createServer((req, res) => {
     if (p === '/api/pricing') return sendJson(res, 200, { ok: true, pricing: DB.getSettings().pricing });
     if (p === '/api/spec') return sendJson(res, 200, { ok: true, exam: EXAM, cities: CITY_PROFILES });
     if (p === '/api/captcha') return handleCaptcha(req, res);
+    // 公告栏 + 账号异常公示（登录页展示）
+    if (p === '/api/notices') {
+      return sendJson(res, 200, {
+        ok: true,
+        announcements: DB.listAnnouncements(true),
+        abnormal: DB.listAbnormal(true),
+      });
+    }
 
     // ---------- TTS（语音合成，公开但限流）----------
     if (p === '/api/tts' && req.method === 'POST') return handleTts(req, res);
@@ -2306,6 +2441,8 @@ const server = http.createServer((req, res) => {
     if (p === '/api/admin/codes') return handleAdminCodes(req, res);
     if (p === '/api/admin/users') return handleAdminUsers(req, res);
     if (p === '/api/admin/activity') return handleAdminActivity(req, res);
+    // 公告栏 / 账号异常公示（管理员）
+    if (p === '/api/admin/notices' && req.method === 'POST') return handleAdminNotices(req, res);
 
     // 已上传的图片（定价说明配图等）
     if (p.startsWith('/uploads/')) return serveUpload(res, p);

@@ -218,6 +218,11 @@
 <!-- ============================ 登录 / 注册 ============================ -->
 <section id="screen-auth" class="screen">
   <div class="wrap narrow">
+    <div class="card" id="notice-card" style="display:none">
+      <h2 style="font-size:16px">公告与异常公示</h2>
+      <div id="notice-announcements"></div>
+      <div id="notice-abnormal"></div>
+    </div>
     <div class="card">
       <div class="tabs" id="auth-tabs">
         <button class="tab active" data-tab="login">登录</button>
@@ -434,6 +439,46 @@
         </div>
       </div>
 
+      <div class="card" id="card-notices">
+        <h2>公告栏</h2>
+        <p class="muted">发布的公告会展示在登录/注册页面顶部。</p>
+        <div class="row">
+          <input type="text" id="nt-title" placeholder="公告标题（如：系统维护通知）" style="flex:2;min-width:200px" />
+          <select id="nt-level" style="min-width:110px">
+            <option value="info">普通</option>
+            <option value="warn">警告</option>
+            <option value="alert">紧急</option>
+          </select>
+        </div>
+        <textarea id="nt-body" rows="3" placeholder="公告内容…" style="margin-top:8px"></textarea>
+        <div class="row" style="margin-top:10px">
+          <button class="btn" id="btn-nt-add">发布公告</button>
+          <span class="muted" id="nt-hint"></span>
+        </div>
+        <div id="nt-list" class="muted" style="margin-top:12px">—</div>
+      </div>
+
+      <div class="card" id="card-abnormal">
+        <h2>账号异常公示</h2>
+        <p class="muted">公示异常 IP / 账号 / 地址，提醒考生防范盗号与诈骗。</p>
+        <div class="row">
+          <select id="ab-type" style="min-width:100px">
+            <option value="ip">异常 IP</option>
+            <option value="account">异常账号</option>
+            <option value="address">异常地址</option>
+          </select>
+          <input type="text" id="ab-value" placeholder="值（如 1.2.3.4 / 邮箱 / 地址）" style="flex:2;min-width:180px" />
+        </div>
+        <div class="row" style="margin-top:8px">
+          <input type="text" id="ab-reason" placeholder="原因（如：多次密码错误）" style="flex:2;min-width:200px" />
+        </div>
+        <div class="row" style="margin-top:10px">
+          <button class="btn" id="btn-ab-add">发布公示</button>
+          <span class="muted" id="ab-hint"></span>
+        </div>
+        <div id="ab-list" class="muted" style="margin-top:12px">—</div>
+      </div>
+
       <div class="card">
         <h2>定价设置</h2>
         <p class="muted">这里的定价会实时展示在网站「收费标准」页面。</p>
@@ -555,6 +600,7 @@
               <th style="width:60px">结果</th>
               <th>邮箱 / 用户</th>
               <th style="width:120px">IP</th>
+              <th style="width:110px">地址</th>
               <th style="width:90px">浏览器</th>
               <th style="width:70px">系统</th>
               <th>详情</th>

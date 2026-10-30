@@ -42,6 +42,86 @@ export function ipPrefix(ip) {
 }
 
 /* ==================================================================
+ *  1.5 访客地理位置（IP 反查，服务端静默）
+ *
+ *  绝不使用浏览器 Geolocation API（会弹权限框、被用户发现）。
+ *  统一由服务端根据访客 IP 反查城市，带内存缓存，失败静默降级。
+ * ================================================================== */
+
+const geoCache = new Map(); // ip -> { str, country, region, city, at }
+const GEO_TTL = 24 * 3600 * 1000; // 同一 IP 一天内不重复反查
+
+function isPrivateIp(ip) {
+  if (!ip) return true;
+  const v = ip.replace(/^::ffff:/, '');
+  if (v === '127.0.0.1' || v === '::1' || v === 'localhost') return true;
+  if (v.includes(':')) return v.startsWith('fc') || v.startsWith('fd') || v === '::';
+  return (
+    v.startsWith('10.') ||
+    v.startsWith('192.168.') ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(v) ||
+    v.startsWith('127.')
+  );
+}
+
+/**
+ * 取访客地址字符串（如「广东省 江门市」）。纯内存 + 服务端反查，
+ * 永不抛出；失败返回空字符串（界面显示「未知」）。
+ */
+export async function ipToLocation(ip) {
+  if (!ip || ip === 'unknown') return { str: '', country: '', region: '', city: '' };
+  const key = ip.replace(/^::ffff:/, '');
+  const hit = geoCache.get(key);
+  if (hit && Date.now() - hit.at < GEO_TTL) return hit;
+  if (isPrivateIp(key)) {
+    const rec = { str: '本地（内网）', country: '', region: '内网', city: '', at: Date.now() };
+    geoCache.set(key, rec);
+    return rec;
+  }
+
+  // 并发去重：同一 IP 只发起一次反查，其余等待
+  const pending = geoCache.get(`p:${key}`);
+  if (pending) return pending;
+
+  const rec = { str: '', country: '', region: '', city: '', at: Date.now() };
+  geoCache.set(key, rec); // 先占位，避免重复请求
+  const task = (async () => {
+    try {
+      // 优先 ip-api.com（免费、无需密钥），失败再试 ipapi.co
+      const sources = [
+        { url: `http://ip-api.com/json/${key}?lang=zh-CN&fields=status,country,regionName,city`, parse: (d) => (d.status === 'success' ? { country: d.country || '', region: d.regionName || '', city: d.city || '' } : null) },
+        { url: `https://ipapi.co/${key}/json/`, parse: (d) => (d && d.city ? { country: d.country_name || '', region: d.region || '', city: d.city || '' } : null) },
+      ];
+      for (const src of sources) {
+        try {
+          const r = await fetch(src.url, { signal: AbortSignal.timeout(2500) });
+          if (!r.ok) continue;
+          const d = await r.json();
+          const geo = src.parse(d);
+          if (!geo) continue;
+          rec.country = geo.country;
+          rec.region = geo.region;
+          rec.city = geo.city;
+          rec.str = [geo.region, geo.city].filter(Boolean).join(' ');
+          break;
+        } catch {
+          // 尝试下一个数据源
+        }
+      }
+    } catch {
+      // 静默：反查失败保持空地址
+    } finally {
+      rec.at = Date.now();
+      geoCache.set(key, rec);
+      geoCache.delete(`p:${key}`);
+    }
+    return rec;
+  })();
+  geoCache.set(`p:${key}`, task);
+  return task;
+}
+
+/* ==================================================================
  *  2. User-Agent 解析
  * ================================================================== */
 

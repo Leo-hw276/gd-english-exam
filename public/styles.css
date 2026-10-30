@@ -1241,3 +1241,36 @@ body.admin-mode #pill-tts { display: none !important; }
 .hist-topic { flex: 1; font-size: 14px; color: var(--ink, #101828); }
 .hist-score { font-size: 17px; font-weight: 700; color: var(--brand, #4f46e5); }
 .hist-score small { font-size: 12px; font-weight: 400; color: #667085; }
+
+/* 公告栏 / 账号异常公示（登录页） */
+.notice-item {
+  padding: 10px 12px;
+  border: 1px solid var(--line, #e4e7ec);
+  border-left: 4px solid #98a2b3;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  font-size: 13.5px;
+  background: #fff;
+}
+.notice-item b { display: block; font-size: 14px; }
+.notice-item p { margin: 4px 0 0; color: #475467; white-space: pre-wrap; }
+.notice-item .muted { margin-left: 8px; font-size: 12px; }
+.notice-item.lv-warn { border-left-color: #f79009; }
+.notice-item.lv-alert { border-left-color: #ef4444; background: #fef2f2; }
+.notice-item.lv-info { border-left-color: #4f46e5; }
+
+/* 管理员：公告 / 公示列表项 */
+.nt-row, .ab-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line, #e4e7ec);
+  border-radius: 8px;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+.nt-row .grow, .ab-row .grow { flex: 1; min-width: 0; }
+.nt-row .muted, .ab-row .muted { font-size: 12px; }
+.nt-row textarea, .ab-row textarea { width: 100%; resize: vertical; }
+
