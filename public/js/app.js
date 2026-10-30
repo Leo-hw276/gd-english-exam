@@ -113,6 +113,50 @@ async function loadNotices() {
   }
 }
 
+/* 顶栏「公告」按钮：打开弹窗展示公告与异常公示 */
+function bindNoticeModal() {
+  const openBtn = $('#btn-notice-open');
+  const mask = $('#notice-modal');
+  const closeBtn = $('#btn-notice-close');
+  const body = $('#notice-modal-body');
+  if (!openBtn || !mask || !closeBtn || !body) return;
+
+  const render = (d) => {
+    const anns = d.announcements || [];
+    const abs = d.abnormal || [];
+    if (!anns.length && !abs.length) {
+      body.innerHTML = '<p class="muted" style="text-align:center;padding:24px 0">暂无公告</p>';
+      return;
+    }
+    let html = '';
+    if (anns.length) {
+      html += '<h3 style="font-size:15px;margin:0 0 8px">公告</h3>' + anns.map((a) => `<div class="notice-item lv-${esc(a.level)}"><b>${esc(a.title)}</b><span class="muted">${new Date(a.at).toLocaleString('zh-CN')}</span><p>${esc(a.body)}</p></div>`).join('');
+    }
+    if (abs.length) {
+      html += '<h3 style="font-size:15px;margin:14px 0 8px">账号异常公示</h3>' + abs.map((a) => {
+        const t = a.type === 'ip' ? 'IP' : a.type === 'account' ? '账号' : '地址';
+        return `<div class="notice-item lv-alert"><b>${esc(t)}：${esc(a.value)}</b>${a.reason ? `<span class="muted">${esc(a.reason)}</span>` : ''}${a.note ? `<p>${esc(a.note)}</p>` : ''}</div>`;
+      }).join('');
+    }
+    body.innerHTML = html;
+  };
+
+  openBtn.onclick = async () => {
+    mask.classList.remove('hidden');
+    body.innerHTML = '<p class="muted">加载中…</p>';
+    try {
+      const d = await api('/api/notices', undefined, 'GET');
+      render(d);
+    } catch (e) {
+      body.innerHTML = `<p class="muted">加载失败：${esc(e.message)}</p>`;
+    }
+  };
+  closeBtn.onclick = () => mask.classList.add('hidden');
+  mask.onclick = (e) => {
+    if (e.target === mask) mask.classList.add('hidden');
+  };
+}
+
 /* ==================================================================
  *  全局状态
  * ================================================================== */
@@ -1908,6 +1952,7 @@ async function runMicTest() {
 
 function bind() {
   renderSpecTable();
+  bindNoticeModal();
 
   $('#btn-start').onclick = () => startExam({ offline: false });
   $('#btn-offline').onclick = () => startExam({ offline: true });

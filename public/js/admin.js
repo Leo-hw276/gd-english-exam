@@ -105,6 +105,7 @@ async function loadOverview() {
     fillRegionSelect(s.examRegion);
     renderSecurity(s.security);
     saveNotices().catch(() => {});
+    loadBanned().catch(() => {});
 
     const srcBox = $('#cfg-env-source');
     if (srcBox) {
@@ -383,6 +384,62 @@ async function addAbnormal() {
     toast('公示已发布', 'ok');
   } catch (e) {
     toast('发布失败：' + e.message, 'bad', 5000);
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ *  IP 封禁
+ * ------------------------------------------------------------------ */
+
+async function loadBanned() {
+  const d = await api('/api/admin/notices', { action: 'listBanned' });
+  renderBanned(d.banned || []);
+}
+
+function renderBanned(list) {
+  const box = $('#ban-list');
+  if (!box) return;
+  box.innerHTML = list.length
+    ? list
+        .map(
+          (b) =>
+            `<div class="nt-row">
+              <span class="grow"><b>${esc(b.ip)}</b> <span class="muted">${esc(b.note || '')}</span><div class="muted">${new Date(b.at).toLocaleString('zh-CN')}</div></span>
+              <button class="btn sm ghost" data-unban="${b.id}">解封</button>
+            </div>`
+        )
+        .join('')
+    : '<p class="muted">暂无封禁 IP</p>';
+  $$('#ban-list [data-unban]').forEach((btn) => {
+    btn.onclick = async () => {
+      await api('/api/admin/notices', { action: 'removeBannedById', id: btn.dataset.unban });
+      await loadBanned();
+      toast('已解封', 'ok');
+    };
+  });
+}
+
+async function banIp() {
+  const hint = $('#ban-hint');
+  const ip = $('#ban-ip').value.trim();
+  const note = $('#ban-note').value.trim();
+  if (!ip) {
+    if (hint) hint.textContent = '请输入要封禁的 IP';
+    return;
+  }
+  try {
+    const d = await api('/api/admin/notices', { action: 'banIp', ip, note });
+    if (hint) hint.textContent = d.added ? '已封禁' : d.reason || '该 IP 已在封禁列表中';
+    if (d.added) {
+      $('#ban-ip').value = '';
+      $('#ban-note').value = '';
+      toast(`已封禁 ${ip}`, 'ok');
+    } else {
+      toast(d.reason || '封禁失败', 'bad', 4000);
+    }
+    await loadBanned();
+  } catch (e) {
+    toast('封禁失败：' + e.message, 'bad', 5000);
   }
 }
 
@@ -767,6 +824,7 @@ function bind() {
   $('#btn-admin-save-security')?.addEventListener('click', saveSecurity);
   $('#btn-nt-add')?.addEventListener('click', addAnnouncement);
   $('#btn-ab-add')?.addEventListener('click', addAbnormal);
+  $('#btn-ban-add')?.addEventListener('click', banIp);
   $('#btn-admin-export')?.addEventListener('click', exportUsers);
   $('#btn-admin-import')?.addEventListener('click', () => $('#cfg-import-file')?.click());
   $('#cfg-import-file')?.addEventListener('change', importUsers);

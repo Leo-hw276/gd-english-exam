@@ -75,6 +75,8 @@ export const DEFAULT_SETTINGS = {
     loginOff: false, // 关闭登录（已登录用户仍可用）
     speechOff: false, // 关闭语音合成与识别（省带宽/防刷）
   },
+  // 持久化 IP 封禁列表（管理员维护；被封 IP 打开网站直接显示封禁页）
+  bannedIps: [],
 };
 
 /* ------------------------------------------------------------------ *
@@ -738,6 +740,89 @@ export function removeAbnormal(id) {
   db0.abnormal = (db0.abnormal || []).filter((x) => x.id !== id);
   save();
   return before - db0.abnormal.length;
+}
+
+/* ------------------------------------------------------------------ *
+ *  IP 封禁（持久化）
+ * ------------------------------------------------------------------ */
+
+/** 判断某 IP 是否在封禁列表（支持精确匹配 + 网段前缀 + CIDR） */
+export function isIpBanned(ip) {
+  if (!ip) return false;
+  const v = String(ip).replace(/^::ffff:/, '');
+  const list = getSettings().bannedIps || [];
+  for (const b of list) {
+    const target = String(b.ip || '').trim();
+    if (!target) continue;
+    // CIDR 格式：1.2.3.0/24
+    if (target.includes('/')) {
+      const [net, bitsStr] = target.split('/');
+      const bits = Number(bitsStr);
+      if (v.includes(':')) {
+        // IPv6 简化为前缀比对
+        if (Number.isFinite(bits) && bits > 0 && v.startsWith(net.slice(0, 2))) return true;
+      } else {
+        const mask = Number.isFinite(bits) && bits > 0 ? bits : 24;
+        const ipN = v.split('.').map(Number);
+        const netN = net.split('.').map(Number);
+        if (ipN.length === 4 && netN.length === 4) {
+          const toInt = (arr) =>
+            ((arr[0] || 0) << 24) + ((arr[1] || 0) << 16) + ((arr[2] || 0) << 8) + (arr[3] || 0);
+          const shift = 32 - mask;
+          if ((toInt(ipN) >>> shift) === (toInt(netN) >>> shift)) return true;
+        }
+      }
+    } else if (target.endsWith('.')) {
+      // 网段前缀：192.168.1.
+      if (v.startsWith(target)) return true;
+    } else if (v === target) {
+      // 精确 IP
+      return true;
+    }
+  }
+  return false;
+}
+
+/** 封禁一个 IP（可带网段/CIDR），返回是否新增 */
+export function banIp(ip, note = '', by = 'admin') {
+  const db0 = load();
+  const s = db0.settings;
+  if (!s.bannedIps) s.bannedIps = [];
+  const key = String(ip || '').trim();
+  if (!key) return { added: false, reason: 'IP 不能为空' };
+  if (s.bannedIps.some((b) => String(b.ip).trim() === key)) {
+    return { added: false, reason: '该 IP 已在封禁列表中' };
+  }
+  s.bannedIps.unshift({ id: newToken().slice(0, 12), ip: key, note: String(note || '').slice(0, 200), by: String(by || 'admin').slice(0, 40), at: Date.now() });
+  save();
+  return { added: true };
+}
+
+/** 解封一个 IP */
+export function unbanIp(ip) {
+  const db0 = load();
+  const s = db0.settings;
+  if (!s.bannedIps) return 0;
+  const before = s.bannedIps.length;
+  s.bannedIps = s.bannedIps.filter((b) => String(b.ip).trim() !== String(ip || '').trim());
+  save();
+  return before - s.bannedIps.length;
+}
+
+/** 封禁列表 */
+export function listBannedIps() {
+  return getSettings().bannedIps || [];
+}
+
+/** 移除封禁项（按 id） */
+export function removeBannedIpById(id) {
+  const db0 = load();
+  const s = db0.settings;
+  if (!s.bannedIps) return 0;
+  const before = s.bannedIps.length;
+  s.bannedIps = s.bannedIps.filter((b) => b.id !== id);
+  save();
+  return before - s.bannedIps.length;
 }
 
 /* ------------------------------------------------------------------ *

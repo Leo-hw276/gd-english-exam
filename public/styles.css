@@ -1274,3 +1274,40 @@ body.admin-mode #pill-tts { display: none !important; }
 .nt-row .muted, .ab-row .muted { font-size: 12px; }
 .nt-row textarea, .ab-row textarea { width: 100%; resize: vertical; }
 
+/* 公告弹窗 */
+.modal-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(16, 24, 40, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+  padding: 16px;
+}
+.modal-mask.hidden { display: none; }
+.modal-box {
+  background: #fff;
+  border-radius: 14px;
+  width: 100%;
+  max-width: 520px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 12px 40px rgba(16, 24, 40, 0.18);
+}
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line, #e4e7ec);
+  font-size: 15px;
+}
+.modal-body {
+  padding: 16px 18px;
+  overflow: auto;
+}
+
+

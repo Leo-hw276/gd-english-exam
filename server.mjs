@@ -2338,6 +2338,23 @@ async function handleAdminNotices(req, res) {
     return sendJson(res, 200, { ok: true, removed: n });
   }
 
+  if (action === 'listBanned') {
+    return sendJson(res, 200, { ok: true, banned: DB.listBannedIps() });
+  }
+  if (action === 'banIp') {
+    const r = DB.banIp(b.ip, b.note, 'admin');
+    DB.log('admin-ban-ip', 'admin', `${b.ip}${r.added ? '' : '（已存在）'}`);
+    return sendJson(res, 200, { ok: true, ...r, banned: DB.listBannedIps() });
+  }
+  if (action === 'unbanIp') {
+    const n = DB.unbanIp(b.ip);
+    return sendJson(res, 200, { ok: true, removed: n, banned: DB.listBannedIps() });
+  }
+  if (action === 'removeBannedById') {
+    const n = DB.removeBannedIpById(String(b.id));
+    return sendJson(res, 200, { ok: true, removed: n, banned: DB.listBannedIps() });
+  }
+
   return sendJson(res, 400, { ok: false, error: '未知操作' });
 }
 
@@ -2364,6 +2381,25 @@ const server = http.createServer((req, res) => {
   const route = async () => {
     const cfg = getCfg();
     const ip = clientIp(req);
+
+    // 持久化 IP 封禁：被封 IP 直接拒绝（页面显示封禁页，API 返回 403）
+    if (DB.isIpBanned(ip)) {
+      logVisit(req, 'blocked', { action: 'ip-banned', ip, detail: '当前 IP 已被封禁' });
+      if (p.startsWith('/api/')) {
+        return sendJson(res, 403, { ok: false, error: '当前 IP 已被封禁，如有疑问请联系管理员', banned: true });
+      }
+      const site = DB.getSettings().siteName || '在线练习系统';
+      res.writeHead(403, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+      return res.end(
+        `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>IP 已被封禁</title>` +
+          `<style>body{font-family:-apple-system,'Segoe UI',Roboto,'Microsoft YaHei',sans-serif;background:#f4f6fb;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}` +
+          `.box{background:#fff;border-radius:16px;padding:44px 48px;max-width:420px;width:90%;text-align:center;box-shadow:0 8px 30px rgba(16,24,40,.08)}` +
+          `.x{width:64px;height:64px;border-radius:50%;background:#fef2f2;color:#ef4444;font-size:34px;line-height:64px;margin:0 auto 18px;font-weight:700}` +
+          `h1{font-size:20px;margin:0 0 10px;color:#101828}p{color:#667085;font-size:14px;line-height:1.7;margin:0}</style></head><body>` +
+          `<div class="box"><div class="x">!</div><h1>当前 IP 已被封禁</h1>` +
+          `<p>您的访问 IP <b>${ip.replace(/[<>&"]/g, '')}</b> 已被管理员封禁。<br>如有疑问请联系管理员，或更换网络后重试。</p></div></body></html>`
+      );
+    }
 
     // 访问日志：页面加载（/ 或 /index.html）→ visit，含地址异步反查；
     // API 动作在各自 handler 内记录（login/register/score…），不在此重复。

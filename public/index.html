@@ -23,6 +23,7 @@
       <a href="#" data-goto="screen-account">我的账户</a>
     </nav>
     <div class="spacer"></div>
+    <button class="btn sm ghost" id="btn-notice-open">公告</button>
     <a href="#" data-goto="screen-intro" class="btn sm ghost admin-only" id="btn-admin-back">返回首页</a>
     <span class="pill brand" id="pill-model">—</span>
     <span class="pill" id="pill-api">检查中…</span>
@@ -479,6 +480,20 @@
         <div id="ab-list" class="muted" style="margin-top:12px">—</div>
       </div>
 
+      <div class="card" id="card-ban">
+        <h2>IP 封禁</h2>
+        <p class="muted">被封禁的 IP 打开网站会直接看到「当前 IP 已被封禁」页。支持精确 IP、网段前缀（如 <code>192.168.1.</code>）或 CIDR（如 <code>1.2.3.0/24</code>）。</p>
+        <div class="row">
+          <input type="text" id="ban-ip" placeholder="IP / 网段 / CIDR，如 1.2.3.4 或 10.0.0.0/24" style="flex:2;min-width:220px" />
+          <button class="btn" id="btn-ban-add">封禁</button>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <input type="text" id="ban-note" placeholder="备注（可选）" style="flex:2;min-width:220px" />
+        </div>
+        <div id="ban-hint" class="muted" style="margin-top:6px"></div>
+        <div id="ban-list" class="muted" style="margin-top:12px">—</div>
+      </div>
+
       <div class="card">
         <h2>定价设置</h2>
         <p class="muted">这里的定价会实时展示在网站「收费标准」页面。</p>
@@ -615,6 +630,17 @@
 
 
 <div id="toast"></div>
+
+<!-- 公告弹窗 -->
+<div class="modal-mask hidden" id="notice-modal">
+  <div class="modal-box">
+    <div class="modal-head">
+      <b>公告与异常公示</b>
+      <button class="btn sm ghost" id="btn-notice-close">关闭</button>
+    </div>
+    <div class="modal-body" id="notice-modal-body"></div>
+  </div>
+</div>
 
 <script type="module" src="/js/app.js?v=20251024b"></script>
 <script type="module" src="/js/admin.js?v=20251024b"></script>
