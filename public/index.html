@@ -232,8 +232,8 @@
 
       <div id="pane-login">
         <h2>登录</h2>
-        <label class="muted">邮箱</label>
-        <input type="email" id="li-email" placeholder="you@example.com" autocomplete="username" />
+        <label class="muted">邮箱或手机号</label>
+        <input type="text" id="li-email" placeholder="邮箱或 11 位手机号" autocomplete="username" />
         <label class="muted" style="margin-top:12px">密码</label>
         <input type="password" id="li-pass" placeholder="至少 6 位" autocomplete="current-password" />
         <div class="row captcha-row" style="margin-top:12px;align-items:flex-end">
@@ -255,8 +255,10 @@
         <div class="callout ok" style="margin-bottom:14px" id="reg-gift"></div>
         <label class="muted">昵称（可留空）</label>
         <input type="text" id="rg-name" placeholder="例如：小明" />
-        <label class="muted" style="margin-top:12px">邮箱</label>
+        <label class="muted" style="margin-top:12px">邮箱（与手机号填一个即可，两个都填可双重绑定）</label>
         <input type="email" id="rg-email" placeholder="you@example.com" autocomplete="username" />
+        <label class="muted" style="margin-top:12px">手机号（选填）</label>
+        <input type="tel" id="rg-phone" placeholder="11 位中国大陆手机号" autocomplete="tel" inputmode="numeric" maxlength="13" />
         <label class="muted" style="margin-top:12px">密码</label>
         <input type="password" id="rg-pass" placeholder="至少 6 位" autocomplete="new-password" />
         <div class="row captcha-row" style="margin-top:12px;align-items:flex-end">
@@ -569,9 +571,6 @@
       <div class="card">
         <h2>用户管理</h2>
         <div class="row" style="margin-bottom:12px;gap:8px">
-          <button class="btn ghost sm" id="btn-admin-export">导出用户数据</button>
-          <button class="btn ghost sm" id="btn-admin-import">导入用户数据</button>
-          <input type="file" id="cfg-import-file" accept="application/json,.json" style="display:none" />
           <button class="btn danger sm" id="btn-admin-clear">🗑 一键清空用户</button>
           <span class="muted" id="cfg-user-hint"></span>
         </div>

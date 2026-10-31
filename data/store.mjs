@@ -255,20 +255,45 @@ export { publicUser };
 
 export function findUserByEmail(email) {
   const e = String(email || '').trim().toLowerCase();
+  if (!e) return null;
   return load().users.find((u) => u.email === e) || null;
+}
+export function findUserByPhone(phone) {
+  const p = normalizePhone(phone);
+  if (!p) return null;
+  return load().users.find((u) => u.phone === p) || null;
+}
+export function findUserByAccount(account) {
+  const s = String(account || '').trim();
+  if (!s) return null;
+  return s.includes('@') ? findUserByEmail(s) : findUserByPhone(s);
 }
 export function findUserById(id) {
   return load().users.find((u) => u.id === id) || null;
 }
 
-export function createUser({ email, password, name }) {
+/** 手机号规范化：去掉空格、横线、+86 前缀，只保留数字 */
+export function normalizePhone(phone) {
+  const d = String(phone || '').replace(/[\s-]/g, '').replace(/^\+?86/, '');
+  return /^1\d{10}$/.test(d) ? d : '';
+}
+
+/**
+ * 创建用户。email / phone 至少填一个，两个都填则双重绑定。
+ * 任一字段已被其他账号占用则拒绝。
+ */
+export function createUser({ email, phone, password, name }) {
   const db0 = load();
-  const e = String(email).trim().toLowerCase();
-  if (findUserByEmail(e)) throw new Error('该邮箱已注册');
+  const e = String(email || '').trim().toLowerCase();
+  const p = normalizePhone(phone);
+  if (!e && !p) throw new Error('请填写邮箱或手机号');
+  if (e && findUserByEmail(e)) throw new Error('该邮箱已注册');
+  if (p && findUserByPhone(p)) throw new Error('该手机号已注册');
   const user = {
     id: crypto.randomUUID(),
     email: e,
-    name: name || e.split('@')[0],
+    phone: p,
+    name: name || (e ? e.split('@')[0] : `用户${p.slice(-4)}`),
     passHash: hashPassword(password),
     credits: 0,
     freeUsed: 0,
@@ -279,7 +304,7 @@ export function createUser({ email, password, name }) {
     lastLoginAt: 0,
   };
   db0.users.push(user);
-  log('register', user.id, e);
+  log('register', user.id, e || p);
   save();
   return user;
 }
@@ -515,83 +540,6 @@ export function deleteUser(id) {
  *  注意：导出文件包含密码哈希（scrypt 加盐），用于完整备份与还原，
  *  请只保存在自己手上，不要公开分享。
  * ------------------------------------------------------------------ */
-
-export function exportUsers() {
-  const db0 = load();
-  return {
-    exportedAt: new Date().toISOString(),
-    version: 1,
-    users: db0.users.map((u) => ({
-      id: u.id,
-      email: u.email,
-      name: u.name,
-      passHash: u.passHash,
-      credits: u.credits || 0,
-      freeUsed: u.freeUsed || 0,
-      proUntil: u.proUntil || 0,
-      usedCount: u.usedCount || 0,
-      disabled: Boolean(u.disabled),
-      createdAt: u.createdAt || Date.now(),
-      lastLoginAt: u.lastLoginAt || 0,
-    })),
-  };
-}
-
-/**
- * 导入用户。
- * @param {object} payload  导出文件的内容，或直接是用户数组
- * @param {'merge'|'replace'} mode  merge=按邮箱覆盖/新增；replace=先清空再导入
- */
-export function importUsers(payload, mode = 'merge') {
-  const db0 = load();
-  const list = Array.isArray(payload) ? payload : Array.isArray(payload?.users) ? payload.users : null;
-  if (!list) throw new Error('导入内容格式不正确（需要 users 数组）');
-  if (!list.length) throw new Error('导入内容为空');
-
-  const result = { added: 0, updated: 0, skipped: 0, removed: 0 };
-
-  if (mode === 'replace') {
-    result.removed = db0.users.length;
-    db0.users = [];
-    db0.sessions = {};
-  }
-
-  const byEmail = new Map(db0.users.map((u) => [String(u.email).toLowerCase(), u]));
-
-  for (const raw of list) {
-    const email = String(raw?.email || '').trim().toLowerCase();
-    if (!email || !email.includes('@')) {
-      result.skipped++;
-      continue;
-    }
-    const existing = byEmail.get(email);
-    const fields = {
-      name: String(raw.name || email.split('@')[0]).slice(0, 40),
-      passHash: typeof raw.passHash === 'string' && raw.passHash.includes(':') ? raw.passHash : hashPassword('123456'),
-      credits: Math.max(0, Number(raw.credits) || 0),
-      freeUsed: Math.max(0, Number(raw.freeUsed) || 0),
-      proUntil: Number(raw.proUntil) || 0,
-      usedCount: Math.max(0, Number(raw.usedCount) || 0),
-      disabled: Boolean(raw.disabled),
-      createdAt: Number(raw.createdAt) || Date.now(),
-      lastLoginAt: Number(raw.lastLoginAt) || 0,
-    };
-
-    if (existing) {
-      Object.assign(existing, fields);
-      result.updated++;
-    } else {
-      const u = { id: String(raw.id || crypto.randomUUID()), email, ...fields };
-      db0.users.push(u);
-      byEmail.set(email, u);
-      result.added++;
-    }
-  }
-
-  log('admin-import-users', 'admin', `mode=${mode} +${result.added} ~${result.updated} -${result.removed}`);
-  save();
-  return result;
-}
 
 /**
  * 一键清空用户数据。

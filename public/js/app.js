@@ -2,7 +2,7 @@
  * app.js —— 广东省江门市中考英语听说考试（人机对话）在线模拟 · 主控程序
  *
  * 考试流程严格对齐江门考区官方录音时间分配：
- *   一、模仿朗读                    录音播放 2 遍 → 准备 50s → 朗读 50s
+ *   一、模仿朗读                    录音播放 1 遍 → 准备 50s → 朗读 70s
  *   二、信息获取 第一节 听选信息      阅题 10s → 录音 2 遍 → 每题作答 8s
  *   二、信息获取 第二节 回答问题      读题 15s → 录音 2 遍 → 每题作答 8s
  *   三、信息转述及询问 第一节 信息转述 读题 15s → 录音 2 遍 → 准备 50s → 转述 60s
@@ -200,7 +200,7 @@ function cityCfg() {
   return (
     S.cities[S.city] || {
       name: '江门市',
-      readAloud: { playTimes: 2, prepareSec: 50, recordSec: 50 },
+      readAloud: { playTimes: 1, prepareSec: 50, recordSec: 70 },
       retell: { prepareSec: 50, recordSec: 60 },
     }
   );
@@ -303,14 +303,14 @@ function refreshAllCaptchas() {
 }
 
 export async function doLogin() {
-  const email = $('#li-email').value.trim();
+  const account = $('#li-email').value.trim();
   const password = $('#li-pass').value;
   const captchaId = $('#li-captcha-id')?.value || '';
   const captchaCode = $('#li-captcha')?.value?.trim() || '';
-  if (!email || !password) return toast('请填写邮箱和密码', 'warn');
+  if (!account || !password) return toast('请填写邮箱或手机号，以及密码', 'warn');
   if (!captchaCode) return toast('请输入验证码', 'warn');
   try {
-    const d = await api('/api/auth/login', { email, password, captchaId, captchaCode });
+    const d = await api('/api/auth/login', { account, password, captchaId, captchaCode });
     S.user = d.user;
     S.isAdmin = Boolean(d.admin);
     await refreshMe();
@@ -325,15 +325,17 @@ export async function doLogin() {
 
 export async function doRegister() {
   const email = $('#rg-email').value.trim();
+  const phone = ($('#rg-phone')?.value || '').trim();
   const password = $('#rg-pass').value;
   const name = $('#rg-name').value.trim();
   const captchaId = $('#rg-captcha-id')?.value || '';
   const captchaCode = $('#rg-captcha')?.value?.trim() || '';
-  if (!email || !password) return toast('请填写邮箱和密码', 'warn');
+  if (!email && !phone) return toast('邮箱和手机号填一个即可', 'warn');
+  if (!password) return toast('请填写密码', 'warn');
   if (password.length < 6) return toast('密码至少 6 位', 'warn');
   if (!captchaCode) return toast('请输入验证码', 'warn');
   try {
-    const d = await api('/api/auth/register', { email, password, name, captchaId, captchaCode });
+    const d = await api('/api/auth/register', { email, phone, password, name, captchaId, captchaCode });
     S.user = d.user;
     await refreshMe();
     toast(d.message || '注册成功！', 'ok', 5000);
@@ -634,7 +636,7 @@ function fillCitySelect() {
  * ================================================================== */
 
 const SPEC_ROWS = [
-  ['一、模仿朗读', '', '屏幕呈现一段 60–85 词的英语短文。录音播放 2 遍后，考生有 50 秒准备时间，在 50 秒内模仿朗读短文，须包含全部内容。', 1, 6],
+  ['一、模仿朗读', '', '屏幕呈现一段 110–120 词的英语短文。录音播放 1 遍后，考生有 50 秒准备时间，在 70 秒内模仿朗读短文，须包含全部内容。', 1, 6],
   ['二、信息获取', '第一节 听选信息', '屏幕呈现英文问题和 3 个备选答案，共播放三段对话或独白，每段各播放两遍。各段播放前 10 秒阅题；每段播放后有两个问题，在 8 秒内选择正确的信息口头回答。', 6, 9],
   ['二、信息获取', '第二节 回答问题', '屏幕呈现 4 个英语问题，播放一段对话或独白 2 遍，录音播放前有 15 秒阅读 4 个问题。每题在 8 秒内口头回答。', 4, 6],
   ['三、信息转述及询问', '第一节 信息转述', '屏幕呈现信息要点提示（思维导图形式），录音播放 2 遍。15 秒读题、50 秒准备，在 60 秒内口头转述短文，须包含全部要点。', 1, 6],
@@ -948,8 +950,8 @@ async function announceRequirement(text, { label = '正在播报题目要求' } 
 
 /** 供各小节使用的播报文案（考试指令用中文，只有题目内容本身是英文） */
 const SAY = {
-  p1: (playTimes, prepareSec, recordSec) =>
-    `第一部分，模仿朗读。请听短文${playTimes}遍。听完后有${prepareSec}秒钟准备时间，` +
+  p1: (_playTimes, prepareSec, recordSec) =>
+    `第一部分，模仿朗读。请听短文一遍。听完后有${prepareSec}秒钟准备时间，` +
     `然后请在${recordSec}秒钟内模仿朗读。听到开始录音的提示音后开始朗读。`,
   p2: (n) =>
     `第二部分，听选信息。请听第${n}题的录音，录音播放两遍。` +
@@ -983,13 +985,10 @@ async function runReadAloud() {
     body: `
     <div class="instruction">
       <b>一、模仿朗读（共 6 分）</b><br>
-      听以下短文 <b>${cfg.playTimes} 遍</b>，然后你有 <b>${cfg.prepareSec} 秒钟</b>的时间准备，接着模仿朗读。
+      听以下短文 <b>1 遍</b>，然后你有 <b>${cfg.prepareSec} 秒钟</b>的时间准备，接着模仿朗读。
       当听到「开始录音」的信号后，请在 <b>${cfg.recordSec} 秒钟</b>内朗读短文；答完后可点击「我答完了 · 结束录音」提前结束。
     </div>
     <div class="passage" id="passage-body">${words.map((w, i) => `<span class="w" data-w="${i}">${esc(w)}</span>`).join(' ')}</div>
-    <div class="row" style="margin-top:14px">
-      <button class="btn ghost sm" id="btn-replay-p1">重听范文录音</button>
-    </div>
     ${recMountHtml()}`,
   });
 
@@ -1000,12 +999,8 @@ async function runReadAloud() {
   // 每大题开始前自动播报题干与作答要求
   await announceRequirement(SAY.p1(cfg.playTimes, cfg.prepareSec, cfg.recordSec));
 
-  await playListening(p, cfg.playTimes, { label: '正在播放范文录音' });
-
-  $('#btn-replay-p1').onclick = async () => {
-    if (S.recording || S.startedRecording) return toast('录音已开始，无法重听', 'warn');
-    await playListening(p, 1, { label: '重听范文' });
-  };
+  // 范文只朗读一遍，不提供重播
+  await playListening(p, 1, { label: '正在播放范文录音' });
 
   setPhase('准备中', 'warn');
   renderRecPanel('#rec-mount', { timerText: cfg.prepareSec, note: '准备时间：先默读一遍，标出难读的词' });

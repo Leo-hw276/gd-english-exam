@@ -547,55 +547,6 @@ async function uploadImage() {
  *  用户数据：导出 / 导入 / 一键清空
  * ------------------------------------------------------------------ */
 
-async function exportUsers() {
-  const hint = $('#cfg-user-hint');
-  try {
-    const d = await api('/api/admin/users', { action: 'export' });
-    const blob = new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' });
-    const a = document.createElement('a');
-    const stamp = new Date().toISOString().slice(0, 10);
-    a.href = URL.createObjectURL(blob);
-    a.download = `users-backup-${stamp}.json`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-    if (hint) hint.textContent = `已导出 ${d.users?.length || 0} 个用户`;
-    toast(`已导出 ${d.users?.length || 0} 个用户（含密码哈希，请妥善保管）`, 'ok', 6000);
-  } catch (e) {
-    toast('导出失败：' + e.message, 'bad', 6000);
-  }
-}
-
-async function importUsers(e) {
-  const file = e.target.files?.[0];
-  const hint = $('#cfg-user-hint');
-  if (!file) return;
-  try {
-    const text = await file.text();
-    const data = JSON.parse(text);
-    const n = Array.isArray(data) ? data.length : data?.users?.length || 0;
-    if (!n) throw new Error('文件里没有用户数据');
-    const mode = confirm(
-      `即将导入 ${n} 个用户。\n\n点「确定」= 合并（同邮箱覆盖，其余保留）\n点「取消」= 取消导入`
-    )
-      ? 'merge'
-      : null;
-    if (!mode) {
-      if (hint) hint.textContent = '已取消';
-      return;
-    }
-    if (hint) hint.textContent = '导入中…';
-    const r = await api('/api/admin/users', { action: 'import', mode, data });
-    toast(r.message, 'ok', 6000);
-    if (hint) hint.textContent = r.message;
-    await loadOverview();
-  } catch (err) {
-    toast('导入失败：' + err.message, 'bad', 7000);
-    if (hint) hint.textContent = '导入失败';
-  } finally {
-    e.target.value = '';
-  }
-}
-
 async function clearUsers() {
   const hint = $('#cfg-user-hint');
   const first = confirm(
@@ -875,9 +826,6 @@ function bind() {
   $('#btn-nt-add')?.addEventListener('click', addAnnouncement);
   $('#btn-ab-add')?.addEventListener('click', addAbnormal);
   $('#btn-ban-add')?.addEventListener('click', banIp);
-  $('#btn-admin-export')?.addEventListener('click', exportUsers);
-  $('#btn-admin-import')?.addEventListener('click', () => $('#cfg-import-file')?.click());
-  $('#cfg-import-file')?.addEventListener('change', importUsers);
   $('#btn-admin-clear')?.addEventListener('click', clearUsers);
   $('#btn-admin-img-upload')?.addEventListener('click', uploadImage);
   $('#btn-admin-img-clear')?.addEventListener('click', () => {

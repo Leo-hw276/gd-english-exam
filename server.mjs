@@ -1564,6 +1564,7 @@ async function handleRegister(req, res) {
 
   const b = await jsonBody(req);
   const email = String(b.email || '').trim().toLowerCase();
+  const phone = DB.normalizePhone(b.phone);
   const password = String(b.password || '');
   const name = String(b.name || '').trim();
 
@@ -1571,25 +1572,29 @@ async function handleRegister(req, res) {
   const cap = verifyCaptcha(b.captchaId, b.captchaCode, ip);
   if (!cap.ok) return sendJson(res, 400, { ok: false, error: cap.error });
 
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return sendJson(res, 400, { ok: false, error: '邮箱格式不正确' });
+  // 邮箱、手机号至少填一个；两个都填则双重绑定
+  if (!email && !phone) return sendJson(res, 400, { ok: false, error: '请填写邮箱或手机号（填一个即可）' });
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return sendJson(res, 400, { ok: false, error: '邮箱格式不正确' });
+  if (String(b.phone || '').trim() && !phone) return sendJson(res, 400, { ok: false, error: '手机号格式不正确（11 位中国大陆手机号）' });
   if (password.length < 6) return sendJson(res, 400, { ok: false, error: '密码至少 6 位' });
-  if (DB.findUserByEmail(email)) return sendJson(res, 409, { ok: false, error: '该邮箱已注册，请直接登录' });
+  if (email && DB.findUserByEmail(email)) return sendJson(res, 409, { ok: false, error: '该邮箱已注册，请直接登录' });
+  if (phone && DB.findUserByPhone(phone)) return sendJson(res, 409, { ok: false, error: '该手机号已注册，请直接登录' });
 
   // 风控评分
   const recent = Activity.query({ kind: 'register', ip, since: Date.now() - 30 * 60_000 });
-  const risk = riskScore({ ip, ua, email, recentSameIp: recent.length });
+  const risk = riskScore({ ip, ua, email: email || phone, recentSameIp: recent.length });
   if (risk.score >= 70) {
     banKey(ip, 10 * 60_000);
-    Activity.push({ kind: 'blocked', action: 'register', ip, ua: parseUa(ua).raw, email, detail: risk.reasons.join('；') });
+    Activity.push({ kind: 'blocked', action: 'register', ip, ua: parseUa(ua).raw, email: email || phone, detail: risk.reasons.join('；') });
     return sendJson(res, 403, { ok: false, error: '检测到异常注册行为，请稍后重试或联系管理员' });
   }
 
-  const user = DB.createUser({ email, password, name });
+  const user = DB.createUser({ email, phone, password, name });
   const token = DB.createSession(user.id, 'user');
   setSessionCookie(res, token);
   const p = DB.getSettings().pricing;
 
-  logVisit(req, 'register', { action: 'ok', userId: user.id, email, ip, riskScore: risk.score });
+  logVisit(req, 'register', { action: 'ok', userId: user.id, email: email || phone, ip, riskScore: risk.score });
 
   sendJson(res, 200, {
     ok: true,
@@ -1613,16 +1618,17 @@ async function handleLogin(req, res) {
   if (!rl.ok) return sendJson(res, 429, { ok: false, error: `登录过于频繁，请 ${rl.retryAfterSec} 秒后重试` });
 
   const b = await jsonBody(req);
-  const email = String(b.email || '').trim().toLowerCase();
+  // 账号框可填邮箱或手机号，按是否含 @ 自动识别
+  const account = String(b.account || b.email || b.phone || '').trim();
   const password = String(b.password || '');
 
   // 验证码校验
   const cap = verifyCaptcha(b.captchaId, b.captchaCode, ip);
   if (!cap.ok) return sendJson(res, 400, { ok: false, error: cap.error });
 
-  const user = DB.findUserByEmail(email);
+  const user = DB.findUserByAccount(account);
   if (!user || !DB.verifyPassword(password, user.passHash)) {
-    logVisit(req, 'login', { action: 'fail', ip, email, detail: '密码错误' });
+    logVisit(req, 'login', { action: 'fail', ip, email: account, detail: '密码错误' });
     // 连续失败 5 次 → 临时封 3 分钟
     const fails = Activity.query({ kind: 'login', action: 'fail', ip, since: Date.now() - 3 * 60_000 });
     if (fails.length >= 5) banKey(ip, 3 * 60_000);
@@ -1635,7 +1641,7 @@ async function handleLogin(req, res) {
   const token = DB.createSession(user.id, 'user');
   setSessionCookie(res, token, 'user');
 
-  logVisit(req, 'login', { action: 'ok', userId: user.id, email, ip });
+  logVisit(req, 'login', { action: 'ok', userId: user.id, email: account, ip });
 
   sendJson(res, 200, { ok: true, token, admin: false, user: DB.publicUser(user) });
 }
@@ -2038,32 +2044,6 @@ async function handleAdminUsers(req, res) {
 
   const b = req.method === 'POST' ? await jsonBody(req).catch(() => ({})) : {};
   const action = String(b.action || '');
-
-  // 导出
-  if (action === 'export' || (req.method === 'GET' && new URL(req.url, 'http://x').searchParams.get('export'))) {
-    const dump = DB.exportUsers();
-    DB.log('admin-export-users', 'admin', `${dump.users.length} 个用户`);
-    return sendJson(res, 200, { ok: true, ...dump });
-  }
-
-  // 导入
-  if (action === 'import') {
-    try {
-      const mode = b.mode === 'replace' ? 'replace' : 'merge';
-      const result = DB.importUsers(b.data, mode);
-      return sendJson(res, 200, {
-        ok: true,
-        ...result,
-        message:
-          `导入完成：新增 ${result.added}，更新 ${result.updated}` +
-          (result.skipped ? `，跳过 ${result.skipped}` : '') +
-          (result.removed ? `，清空原有 ${result.removed}` : ''),
-        users: DB.listUsers(),
-      });
-    } catch (e) {
-      return sendJson(res, 400, { ok: false, error: e.message });
-    }
-  }
 
   // 一键清空
   if (action === 'clear') {

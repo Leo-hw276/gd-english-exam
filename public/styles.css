@@ -900,7 +900,6 @@ label.muted { display: block; font-size: 12.5px; margin-bottom: 5px; }
 #admin-panel .row { gap: 12px; flex-wrap: wrap; }
 
 @media (max-width: 900px) {
-  .topnav { display: none; }
   .userchip .uc-name { display: none; }
 }
 
