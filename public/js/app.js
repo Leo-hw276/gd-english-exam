@@ -277,7 +277,7 @@ function renderQuotaHint() {
   const el = $('#quota-hint');
   if (!el) return;
   if (!S.user) {
-    el.innerHTML = `当前未登录。新用户注册即送 <b>${S.pricing?.freeTrials ?? 2}</b> 次免费听说模拟 →
+    el.innerHTML = `当前未登录。新用户注册即送 <b>${S.pricing?.freeTrials ?? 1}</b> 次免费听说模拟 →
       <a href="#" data-goto="screen-auth">立即注册</a>　|　已有兑换码？<a href="#" data-goto="screen-account">去兑换</a>`;
   } else {
     el.innerHTML = `当前额度：<b>${esc(quotaText())}</b>　|
@@ -471,7 +471,7 @@ function renderPricing() {
   const grid = $('#price-grid');
   if (!grid || !p) return;
   const sym = p.currencySymbol || '¥';
-  const free = p.freeTrials ?? 2;
+  const free = p.freeTrials ?? 1;
   grid.innerHTML = `
     <div class="price-card free">
       <div class="pc-tag">新手福利</div>
@@ -493,7 +493,7 @@ function renderPricing() {
     <div class="price-card">
       <div class="pc-tag">按次付费</div>
       <div class="pc-name">${esc(p.perUse?.name || '次卡')}</div>
-      <div class="pc-price"><span class="cur">${sym}</span><span class="num">${p.perUse?.price ?? 2.9}</span><span class="unit">/${esc(p.perUse?.unit || '次')}</span></div>
+      <div class="pc-price"><span class="cur">${sym}</span><span class="num">${p.perUse?.price ?? 1}</span><span class="unit">/${esc(p.perUse?.unit || '次')}</span></div>
       <div class="pc-desc">${esc(p.perUse?.desc || '')}</div>
       <ul class="pc-list">
         <li>1 次 = 1 套完整模拟 + 评分报告</li>
@@ -505,7 +505,7 @@ function renderPricing() {
     <div class="price-card hot">
       <div class="pc-tag best">最受欢迎</div>
       <div class="pc-name">${esc(p.monthly?.name || '月卡')}</div>
-      <div class="pc-price"><span class="cur">${sym}</span><span class="num">${p.monthly?.price ?? 29.9}</span><span class="unit">/${p.monthly?.days ?? 30} 天</span></div>
+      <div class="pc-price"><span class="cur">${sym}</span><span class="num">${p.monthly?.price ?? 19.9}</span><span class="unit">/${p.monthly?.days ?? 30} 天</span></div>
       <div class="pc-desc">${esc(p.monthly?.desc || '')}</div>
       <ul class="pc-list">
         <li>有效期内<b>不限次</b>练习</li>
@@ -520,8 +520,8 @@ function renderPricing() {
       ? `<img class="price-source-img" src="${esc(p.sourceImage)}" alt="定价说明配图" loading="lazy" />`
       : '';
     src.innerHTML = `<b>定价来源：</b>${esc(p.sourceNote || '')}
-      <br><b>当前标准：</b>免费 ${free} 次 · 次卡 ${sym}${p.perUse?.price ?? 2.9}/次 · 月卡 ${sym}${
-      p.monthly?.price ?? 29.9
+      <br><b>当前标准：</b>免费 ${free} 次 · 次卡 ${sym}${p.perUse?.price ?? 1}/次 · 月卡 ${sym}${
+      p.monthly?.price ?? 19.9
     }/${p.monthly?.days ?? 30} 天。${img}`;
   }
   const lf = $('#li-free');

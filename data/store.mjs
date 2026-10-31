@@ -36,17 +36,17 @@ export const DB_FILE = process.env.EXAM_DB_FILE
 export const DEFAULT_PRICING = {
   currency: 'CNY',
   currencySymbol: '¥',
-  freeTrials: 2,
-  freeTrialNote: '新用户注册即赠 2 次完整听说模拟（三大题五小节，含 AI 逐题评分报告）。',
+  freeTrials: 1,
+  freeTrialNote: '新用户注册即赠 1 次完整听说模拟（三大题五小节，含 AI 逐题评分报告）。',
   perUse: {
     name: '次卡',
-    price: 2.9,
+    price: 1,
     unit: '次',
     desc: '一次完整听说模拟：自动组卷 + 全程录音 + 30 分制 AI 评分报告。',
   },
   monthly: {
     name: '月卡',
-    price: 29.9,
+    price: 19.9,
     days: 30,
     desc: '30 天内不限次练习，适合考前冲刺，每天可练多套。',
   },

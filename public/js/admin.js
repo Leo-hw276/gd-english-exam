@@ -117,9 +117,9 @@ async function loadOverview() {
 
     // 定价
     const p = s.pricing || {};
-    $('#cfg-free').value = p.freeTrials ?? 2;
-    $('#cfg-peruse').value = p.perUse?.price ?? 2.9;
-    $('#cfg-monthly').value = p.monthly?.price ?? 29.9;
+    $('#cfg-free').value = p.freeTrials ?? 1;
+    $('#cfg-peruse').value = p.perUse?.price ?? 1;
+    $('#cfg-monthly').value = p.monthly?.price ?? 19.9;
     $('#cfg-days').value = p.monthly?.days ?? 30;
     $('#cfg-peruse-desc').value = p.perUse?.desc || '';
     $('#cfg-monthly-desc').value = p.monthly?.desc || '';
