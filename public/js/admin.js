@@ -137,19 +137,68 @@ async function loadOverview() {
   }
 }
 
+const CUSTOM_MODEL = '__custom__';
+
+/** 读取当前选中的模型名（下拉框选自定义时取自定义输入框） */
+function currentModel() {
+  const sel = $('#cfg-model');
+  const custom = $('#cfg-model-custom');
+  if (sel && sel.value === CUSTOM_MODEL) return (custom?.value || '').trim();
+  return (sel?.value || '').trim();
+}
+
+/**
+ * 填充模型下拉框：真正的 <select>，可直接点选；
+ * 末尾附「自定义模型名…」选项，供不在列表里的模型手填。
+ */
 function fillModelSelect(models, current) {
-  // ad-model 是可输入文本框 + datalist：既能下拉选，也能手填模型名
-  const input = $('#cfg-model');
-  const list = $('#cfg-model-list');
-  if (current && !models.includes(current)) models = [current, ...models];
-  if (list) {
-    list.innerHTML = models.map((m) => `<option value="${esc(m)}"></option>`).join('');
+  const sel = $('#cfg-model');
+  const custom = $('#cfg-model-custom');
+  const listBox = $('#cfg-model-list');
+  if (!sel) return;
+
+  const arr = Array.from(new Set((models || []).filter(Boolean)));
+  const cur = String(current || '').trim();
+  // 当前模型不在列表里 → 也加进去，避免被覆盖丢失
+  if (cur && cur !== CUSTOM_MODEL && !arr.includes(cur)) arr.unshift(cur);
+
+  const opts = [`<option value="">（请选择模型）</option>`];
+  for (const m of arr) opts.push(`<option value="${esc(m)}">${esc(m)}</option>`);
+  opts.push(`<option value="${CUSTOM_MODEL}">✏️ 自定义模型名…</option>`);
+  sel.innerHTML = opts.join('');
+
+  if (cur === CUSTOM_MODEL || !cur) {
+    sel.value = cur === CUSTOM_MODEL ? CUSTOM_MODEL : '';
+    if (custom) {
+      custom.style.display = cur === CUSTOM_MODEL ? '' : 'none';
+      if (cur === CUSTOM_MODEL) custom.value = custom.dataset.last || '';
+    }
+  } else {
+    sel.value = cur;
+    if (custom) custom.style.display = 'none';
   }
-  if (input && document.activeElement !== input) {
-    input.value = current || input.value || '';
+
+  if (listBox) {
+    listBox.textContent = arr.length ? `共 ${arr.length} 个可用模型（可点击上方下拉框选择）` : '暂无模型列表，点「拉取模型列表」获取';
   }
   const hint = $('#cfg-model-hint');
-  if (hint) hint.textContent = models.length ? `共 ${models.length} 个可用模型` : '';
+  if (hint && arr.length) hint.textContent = `共 ${arr.length} 个可用模型`;
+}
+
+/** 下拉框切到「自定义」时显示输入框 */
+function bindModelSelect() {
+  const sel = $('#cfg-model');
+  const custom = $('#cfg-model-custom');
+  if (!sel || !custom) return;
+  sel.addEventListener('change', () => {
+    if (sel.value === CUSTOM_MODEL) {
+      custom.dataset.last = custom.value || '';
+      custom.style.display = '';
+      custom.focus();
+    } else {
+      custom.style.display = 'none';
+    }
+  });
 }
 
 function fillRegionSelect(current) {
@@ -173,7 +222,7 @@ async function fetchModels() {
       apiBase: $('#cfg-base').value.trim(),
       apiKey: $('#cfg-key').value.trim() || undefined,
     });
-    fillModelSelect(d.models, $('#cfg-model').value || S.cfg?.model);
+    fillModelSelect(d.models, currentModel() || S.cfg?.model);
     hint.textContent = `拉取成功，共 ${d.count} 个模型`;
     toast(`获取到 ${d.count} 个模型`, 'ok');
   } catch (e) {
@@ -190,7 +239,7 @@ async function testConn() {
     const d = await api('/api/admin/test', {
       apiBase: $('#cfg-base').value.trim() || undefined,
       apiKey: $('#cfg-key').value.trim() || undefined,
-      model: $('#cfg-model').value.trim() || undefined,
+      model: currentModel() || undefined,
     });
     const failedStep = (d.steps || []).find((x) => x.ok === false);
     if (d.ok === false || failedStep) {
@@ -211,7 +260,7 @@ async function saveApi() {
   const hint = $('#cfg-save-hint');
   const body = {
     apiBase: $('#cfg-base').value.trim(),
-    model: $('#cfg-model').value,
+    model: currentModel(),
     examRegion: $('#cfg-region').value,
     paperTemperature: Number($('#cfg-tpaper').value),
     scoreTemperature: Number($('#cfg-tscore').value),
@@ -817,6 +866,7 @@ function bind() {
   $('#btn-admin-login')?.addEventListener('click', adminLogin);
   $('#cfg-pass')?.addEventListener('keydown', (e) => e.key === 'Enter' && adminLogin());
   $('#btn-admin-refresh')?.addEventListener('click', () => loadOverview().then(() => toast('已刷新', 'ok', 1500)));
+  bindModelSelect();
   $('#btn-admin-models')?.addEventListener('click', fetchModels);
   $('#btn-admin-test')?.addEventListener('click', testConn);
   $('#btn-admin-save')?.addEventListener('click', saveApi);

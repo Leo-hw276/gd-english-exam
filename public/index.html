@@ -386,8 +386,12 @@
         </div>
         <div style="margin-top:14px">
           <label class="muted">模型</label>
-          <input type="text" id="cfg-model" list="cfg-model-list" style="width:100%;margin-top:6px" placeholder="选择或直接输入模型名" />
-          <datalist id="cfg-model-list"></datalist>
+          <select id="cfg-model" style="width:100%;margin-top:6px">
+            <option value="">（请先拉取模型列表，或选择「自定义模型名…」）</option>
+          </select>
+          <input type="text" id="cfg-model-custom" style="width:100%;margin-top:6px;display:none"
+                 placeholder="请输入模型名，例如 DeepSeek-V4.1-Flash" />
+          <div id="cfg-model-list" class="muted" style="font-size:12px;margin-top:6px"></div>
         </div>
         <div class="row" style="margin-top:14px">
           <div style="min-width:150px">
