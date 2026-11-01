@@ -497,7 +497,27 @@
           <input type="text" id="ban-note" placeholder="备注（可选）" style="flex:2;min-width:220px" />
         </div>
         <div id="ban-hint" class="muted" style="margin-top:6px"></div>
-        <div id="ban-list" class="muted" style="margin-top:12px">—</div>
+
+        <h3 style="margin-top:20px;font-size:15px">脚本访问防护</h3>
+        <p class="muted">同一 IP 在统计窗口内以脚本（curl、Python、程序请求等）访问超过设定次数时，自动封禁该 IP。普通浏览器访问不计入。</p>
+        <div class="row" style="margin-top:10px;align-items:flex-end;gap:12px">
+          <label class="muted" style="display:flex;align-items:center;gap:6px">
+            <input type="checkbox" id="sg-enabled" style="width:auto" /> 启用自动封禁
+          </label>
+          <div style="min-width:120px">
+            <label class="muted">识别次数阈值</label>
+            <input type="number" id="sg-max" min="1" max="1000" step="1" />
+          </div>
+          <div style="min-width:120px">
+            <label class="muted">统计窗口（分钟）</label>
+            <input type="number" id="sg-window" min="1" max="1440" step="1" />
+          </div>
+          <button class="btn" id="btn-sg-save">保存</button>
+        </div>
+        <div id="sg-hint" class="muted" style="margin-top:8px"></div>
+
+        <h3 style="margin-top:20px;font-size:15px">封禁记录</h3>
+        <div id="ban-list" class="muted" style="margin-top:10px">—</div>
       </div>
 
       <div class="card">

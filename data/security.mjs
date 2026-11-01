@@ -51,7 +51,7 @@ export function ipPrefix(ip) {
 const geoCache = new Map(); // ip -> { str, country, region, city, at }
 const GEO_TTL = 24 * 3600 * 1000; // 同一 IP 一天内不重复反查
 
-function isPrivateIp(ip) {
+export function isPrivateIp(ip) {
   if (!ip) return true;
   const v = ip.replace(/^::ffff:/, '');
   if (v === '127.0.0.1' || v === '::1' || v === 'localhost') return true;
@@ -223,6 +223,47 @@ export function isBanned(key) {
     return false;
   }
   return true;
+}
+
+/* ------------------------------------------------------------------ *
+ *  脚本访问计数（超过阈值 → 自动封禁 IP）
+ *
+ *  只统计「脚本/程序」类型的请求（curl、python、node-fetch 等），
+ *  普通浏览器访问不计入。内网 / 本机 IP 不计数，也不自动封禁，
+ *  避免本地开发或内网调试把自己锁在门外。
+ * ------------------------------------------------------------------ */
+const scriptHits = new Map(); // ip -> number[]（时间戳，滑动窗口内）
+
+/**
+ * 记录一次脚本访问，返回该 IP 在窗口内的累计次数。
+ * @param {string} ip
+ * @param {number} windowMs 统计窗口
+ */
+export function countScriptHit(ip, windowMs = 10 * 60_000) {
+  if (!ip || isPrivateIp(ip)) return 0;
+  const now = Date.now();
+  const arr = (scriptHits.get(ip) || []).filter((t) => now - t < windowMs);
+  arr.push(now);
+  scriptHits.set(ip, arr);
+  // 防止内存无限增长：条目过多时清理过期键
+  if (scriptHits.size > 5000) {
+    for (const [k, v] of scriptHits) {
+      if (!v.length || now - v[v.length - 1] > windowMs) scriptHits.delete(k);
+    }
+  }
+  return arr.length;
+}
+
+/** 查询某 IP 在窗口内的脚本访问次数（不计数） */
+export function getScriptHits(ip, windowMs = 10 * 60_000) {
+  const arr = scriptHits.get(ip) || [];
+  const now = Date.now();
+  return arr.filter((t) => now - t < windowMs).length;
+}
+
+/** 清零某 IP 的脚本计数（解封时调用） */
+export function resetScriptHits(ip) {
+  scriptHits.delete(ip);
 }
 
 /* ==================================================================

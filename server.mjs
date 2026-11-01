@@ -41,6 +41,9 @@ import {
   riskScore,
   makeActivityStore,
   ipToLocation,
+  isPrivateIp,
+  countScriptHit,
+  resetScriptHits,
 } from './data/security.mjs';
 
 import { synthesize as edgeTts, rateStr as ttsRateStr, setCacheDir as setTtsCacheDir, VOICES as TTS_VOICES } from './data/edge-tts.mjs';
@@ -2319,7 +2322,25 @@ async function handleAdminNotices(req, res) {
   }
 
   if (action === 'listBanned') {
-    return sendJson(res, 200, { ok: true, banned: DB.listBannedIps() });
+    return sendJson(res, 200, {
+      ok: true,
+      banned: DB.listBannedIps(),
+      scriptGuard: DB.getSettings().scriptGuard || {},
+    });
+  }
+  if (action === 'saveScriptGuard') {
+    const enabled = b.enabled !== false;
+    const scriptMax = Math.min(1000, Math.max(1, Number(b.scriptMax) || 5));
+    const windowMin = Math.min(1440, Math.max(1, Number(b.windowMin) || 10));
+    DB.updateSettings({ scriptGuard: { enabled, scriptMax, windowMin } });
+    DB.log('admin-script-guard', 'admin', `enabled=${enabled} max=${scriptMax} window=${windowMin}min`);
+    return sendJson(res, 200, {
+      ok: true,
+      scriptGuard: DB.getSettings().scriptGuard,
+      message: enabled
+        ? `已保存：${windowMin} 分钟内脚本访问超过 ${scriptMax} 次自动封禁`
+        : '已关闭脚本访问自动封禁',
+    });
   }
   if (action === 'banIp') {
     const r = DB.banIp(b.ip, b.note, 'admin');
@@ -2328,10 +2349,13 @@ async function handleAdminNotices(req, res) {
   }
   if (action === 'unbanIp') {
     const n = DB.unbanIp(b.ip);
+    resetScriptHits(String(b.ip || '').trim());
     return sendJson(res, 200, { ok: true, removed: n, banned: DB.listBannedIps() });
   }
   if (action === 'removeBannedById') {
+    const target = DB.listBannedIps().find((x) => String(x.id) === String(b.id));
     const n = DB.removeBannedIpById(String(b.id));
+    if (target) resetScriptHits(String(target.ip || '').trim());
     return sendJson(res, 200, { ok: true, removed: n, banned: DB.listBannedIps() });
   }
 
@@ -2361,6 +2385,36 @@ const server = http.createServer((req, res) => {
   const route = async () => {
     const cfg = getCfg();
     const ip = clientIp(req);
+
+    // 脚本访问防护：同一 IP 在窗口内脚本访问超过阈值 → 自动封禁
+    // 只统计外网「脚本/程序」请求；内网与本机不计数（避免本地调试被锁）；
+    // 静态资源（js/css/图片/字体）不计入，避免一次正常页面加载请求过多被误封。
+    const isStaticAsset = /\.(js|css|png|jpg|jpeg|webp|gif|svg|ico|woff2|woff|ttf|map|txt|xml|json)$/i.test(p);
+    if (!isPrivateIp(ip) && !isStaticAsset && !p.startsWith('/uploads/')) {
+      const guard = DB.getSettings().scriptGuard || {};
+      if (guard.enabled !== false) {
+        const uaInfo = parseUa(req.headers['user-agent'] || '');
+        if (uaInfo.bot) {
+          const max = Math.max(1, Number(guard.scriptMax) || 5);
+          const windowMs = Math.max(1, Number(guard.windowMin) || 10) * 60_000;
+          const hits = countScriptHit(ip, windowMs);
+          if (hits > max && !DB.isIpBanned(ip)) {
+            const r = DB.banIp(
+              ip,
+              `脚本访问超限（${guard.windowMin || 10} 分钟内第 ${hits} 次，阈值 ${max}）`,
+              'auto'
+            );
+            if (r.added) {
+              logVisit(req, 'blocked', {
+                action: 'auto-ban-ip',
+                detail: `脚本访问超限 ${hits}/${max}，已自动封禁`,
+              });
+              DB.log('auto-ban-ip', 'system', `${ip} 脚本访问 ${hits} 次（阈值 ${max}）`);
+            }
+          }
+        }
+      }
+    }
 
     // 持久化 IP 封禁：被封 IP 直接拒绝（页面显示封禁页，API 返回 403）
     if (DB.isIpBanned(ip)) {

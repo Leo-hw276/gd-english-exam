@@ -443,6 +443,7 @@ async function addAbnormal() {
 async function loadBanned() {
   const d = await api('/api/admin/notices', { action: 'listBanned' });
   renderBanned(d.banned || []);
+  renderScriptGuard(d.scriptGuard || {});
 }
 
 function renderBanned(list) {
@@ -450,15 +451,17 @@ function renderBanned(list) {
   if (!box) return;
   box.innerHTML = list.length
     ? list
-        .map(
-          (b) =>
-            `<div class="nt-row">
-              <span class="grow"><b>${esc(b.ip)}</b> <span class="muted">${esc(b.note || '')}</span><div class="muted">${new Date(b.at).toLocaleString('zh-CN')}</div></span>
+        .map((b) => {
+          const tag = b.auto
+            ? '<span class="muted" style="color:#b54708">自动封禁</span>'
+            : '<span class="muted">手动封禁</span>';
+          return `<div class="nt-row">
+              <span class="grow"><b>${esc(b.ip)}</b> ${tag} <span class="muted">${esc(b.note || '')}</span><div class="muted">${new Date(b.at).toLocaleString('zh-CN')}</div></span>
               <button class="btn sm ghost" data-unban="${b.id}">解封</button>
-            </div>`
-        )
+            </div>`;
+        })
         .join('')
-    : '<p class="muted">暂无封禁 IP</p>';
+    : '<p class="muted">暂无封禁记录</p>';
   $$('#ban-list [data-unban]').forEach((btn) => {
     btn.onclick = async () => {
       await api('/api/admin/notices', { action: 'removeBannedById', id: btn.dataset.unban });
@@ -466,6 +469,39 @@ function renderBanned(list) {
       toast('已解封', 'ok');
     };
   });
+}
+
+/** 脚本访问防护设置：阈值与窗口 */
+function renderScriptGuard(g) {
+  const cb = $('#sg-enabled');
+  if (!cb) return;
+  cb.checked = g.enabled !== false;
+  $('#sg-max').value = g.scriptMax ?? 5;
+  $('#sg-window').value = g.windowMin ?? 10;
+  const hint = $('#sg-hint');
+  if (hint) {
+    hint.textContent =
+      g.enabled === false
+        ? '已关闭：不再自动封禁脚本访问'
+        : `${g.windowMin ?? 10} 分钟内脚本访问超过 ${g.scriptMax ?? 5} 次自动封禁该 IP`;
+  }
+}
+
+async function saveScriptGuard() {
+  const hint = $('#sg-hint');
+  try {
+    const d = await api('/api/admin/notices', {
+      action: 'saveScriptGuard',
+      enabled: $('#sg-enabled').checked,
+      scriptMax: Number($('#sg-max').value) || 5,
+      windowMin: Number($('#sg-window').value) || 10,
+    });
+    renderScriptGuard(d.scriptGuard || {});
+    toast(d.message || '已保存', 'ok');
+  } catch (e) {
+    if (hint) hint.textContent = '保存失败';
+    toast('保存失败：' + e.message, 'bad', 5000);
+  }
 }
 
 async function banIp() {
@@ -826,6 +862,7 @@ function bind() {
   $('#btn-nt-add')?.addEventListener('click', addAnnouncement);
   $('#btn-ab-add')?.addEventListener('click', addAbnormal);
   $('#btn-ban-add')?.addEventListener('click', banIp);
+  $('#btn-sg-save')?.addEventListener('click', saveScriptGuard);
   $('#btn-admin-clear')?.addEventListener('click', clearUsers);
   $('#btn-admin-img-upload')?.addEventListener('click', uploadImage);
   $('#btn-admin-img-clear')?.addEventListener('click', () => {

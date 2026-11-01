@@ -77,6 +77,12 @@ export const DEFAULT_SETTINGS = {
   },
   // 持久化 IP 封禁列表（管理员维护；被封 IP 打开网站直接显示封禁页）
   bannedIps: [],
+  // 脚本访问防护：同一 IP 在窗口内脚本访问超过 scriptMax 次 → 自动封禁
+  scriptGuard: {
+    enabled: true,
+    scriptMax: 5, // 超过 5 次自动封禁
+    windowMin: 10, // 统计窗口（分钟）
+  },
 };
 
 /* ------------------------------------------------------------------ *
@@ -741,7 +747,14 @@ export function banIp(ip, note = '', by = 'admin') {
   if (s.bannedIps.some((b) => String(b.ip).trim() === key)) {
     return { added: false, reason: '该 IP 已在封禁列表中' };
   }
-  s.bannedIps.unshift({ id: newToken().slice(0, 12), ip: key, note: String(note || '').slice(0, 200), by: String(by || 'admin').slice(0, 40), at: Date.now() });
+  s.bannedIps.unshift({
+    id: newToken().slice(0, 12),
+    ip: key,
+    note: String(note || '').slice(0, 200),
+    by: String(by || 'admin').slice(0, 40),
+    auto: by === 'auto',
+    at: Date.now(),
+  });
   save();
   return { added: true };
 }
