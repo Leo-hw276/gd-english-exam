@@ -760,6 +760,20 @@ function serveStatic(res, urlPath) {
   }
   fs.readFile(full, (err, buf) => {
     if (err) {
+      // SPA 路由兜底：无扩展名的页面路径返回 index.html（/login /signup /account /price）
+      if (!path.extname(urlPath)) {
+        return fs.readFile(path.join(PUBLIC_DIR, 'index.html'), (e2, idx) => {
+          if (e2) {
+            res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }).end('404 Not Found');
+            return;
+          }
+          res.writeHead(200, {
+            'Content-Type': 'text/html; charset=utf-8',
+            'Cache-Control': 'no-cache',
+          });
+          res.end(idx);
+        });
+      }
       res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }).end('404 Not Found');
       return;
     }

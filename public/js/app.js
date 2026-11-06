@@ -55,7 +55,28 @@ const busy = (title, sub = '') =>
   showOverlay(`<div class="spinner"></div><h3 style="margin-bottom:6px">${esc(title)}</h3>
     <p class="muted" style="margin:0">${esc(sub)}</p>`);
 
-export function showScreen(id) {
+/** 路径 ↔ 页面映射 */
+const ROUTES = {
+  '/': { screen: 'screen-intro' },
+  '/login': { screen: 'screen-auth', tab: 'login' },
+  '/signup': { screen: 'screen-auth', tab: 'register' },
+  '/account': { screen: 'screen-account' },
+  '/price': { screen: 'screen-pricing' },
+};
+const SCREEN_TO_PATH = {
+  'screen-intro': '/',
+  'screen-auth': '/login',
+  'screen-account': '/account',
+  'screen-pricing': '/price',
+};
+
+function pathFor(screenId, tab) {
+  if (screenId === 'screen-auth') return tab === 'register' ? '/signup' : '/login';
+  return SCREEN_TO_PATH[screenId] || '/';
+}
+
+export function showScreen(id, opts = {}) {
+  const { push = false, tab } = opts;
   $$('.screen').forEach((s) => s.classList.toggle('active', s.id === id));
   window.scrollTo(0, 0);
   // 顶栏高亮当前页
@@ -65,12 +86,30 @@ export function showScreen(id) {
   const adminMode = id === 'screen-admin';
   document.body.classList.toggle('admin-mode', adminMode);
 
+  if (push && !adminMode) {
+    const next = pathFor(id, tab);
+    if (location.pathname !== next) {
+      try { history.pushState({ screen: id, tab }, '', next); } catch {}
+    }
+  }
+
   if (id === 'screen-account') renderAccount();
   if (id === 'screen-pricing') renderPricing();
   if (id === 'screen-auth') {
+    if (tab) $(`#auth-tabs .tab[data-tab="${tab}"]`)?.click();
     refreshAllCaptchas();
     loadNotices();
   }
+}
+
+/** 根据当前 URL 打开对应页面（初始化 / 前进后退） */
+function syncScreenFromLocation() {
+  if (location.hash === '#adminpowershell') {
+    showScreen('screen-admin');
+    return;
+  }
+  const r = ROUTES[location.pathname] || ROUTES['/'];
+  showScreen(r.screen, { tab: r.tab });
 }
 
 /* ------------------------------------------------------------------ *
@@ -315,7 +354,7 @@ export async function doLogin() {
     S.isAdmin = Boolean(d.admin);
     await refreshMe();
     toast('登录成功，欢迎回来！', 'ok');
-    showScreen('screen-intro');
+    showScreen('screen-intro', { push: true });
   } catch (e) {
     toast('登录失败：' + e.message, 'bad', 5000);
     loadCaptcha($('#li-captcha-img'), $('#li-captcha-id'));
@@ -339,7 +378,7 @@ export async function doRegister() {
     S.user = d.user;
     await refreshMe();
     toast(d.message || '注册成功！', 'ok', 5000);
-    showScreen('screen-intro');
+    showScreen('screen-intro', { push: true });
   } catch (e) {
     toast('注册失败：' + e.message, 'bad', 5000);
     loadCaptcha($('#rg-captcha-img'), $('#rg-captcha-id'));
@@ -355,7 +394,7 @@ async function doLogout() {
   renderQuotaHint();
   window.dispatchEvent(new CustomEvent('jmkt:auth', { detail: { user: null, admin: false } }));
   toast('已退出登录', 'ok');
-  showScreen('screen-intro');
+  showScreen('screen-intro', { push: true });
 }
 
 async function doRedeem() {
@@ -1389,7 +1428,7 @@ async function doScore() {
     hideOverlay();
     if (e.status === 402) {
       toast('额度已用完：' + e.message, 'warn', 6000);
-      showScreen('screen-pricing');
+      showScreen('screen-pricing', { push: true });
     } else {
       toast('评分失败：' + e.message, 'bad', 6000);
     }
@@ -1776,7 +1815,7 @@ function showAnswerReview() {
 async function startExam({ offline = false } = {}) {
   if (!S.user) {
     toast('请先登录 / 注册，新用户送免费次数', 'warn', 4500);
-    showScreen('screen-auth');
+    showScreen('screen-auth', { push: true, tab: 'login' });
     return;
   }
   const topic = $('#inp-topic').value.trim();
@@ -1839,12 +1878,12 @@ async function startExam({ offline = false } = {}) {
     hideOverlay();
     if (e.status === 401) {
       toast('请先登录后再开始考试', 'warn', 4500);
-      showScreen('screen-auth');
+      showScreen('screen-auth', { push: true, tab: 'login' });
       return;
     }
     if (e.status === 402) {
       toast('额度已用完，请使用兑换码开通次卡或月卡', 'warn', 6000);
-      showScreen('screen-pricing');
+      showScreen('screen-pricing', { push: true });
       return;
     }
     toast('组卷失败：' + e.message, 'bad', 6000);
@@ -1953,7 +1992,10 @@ function bind() {
   $('#btn-offline').onclick = () => startExam({ offline: true });
   $('#btn-check').onclick = () => runEnvCheck();
   $('#btn-mictest').onclick = runMicTest;
-  $('#btn-auth-open').onclick = () => showScreen('screen-auth');
+  $('#btn-auth-open').onclick = (e) => {
+    e.preventDefault();
+    showScreen('screen-auth', { push: true, tab: 'login' });
+  };
   $('#btn-login').onclick = doLogin;
   $('#btn-register').onclick = doRegister;
   $('#btn-logout').onclick = doLogout;
@@ -1998,32 +2040,27 @@ function bind() {
     $('#pane-register').style.display = btn.dataset.tab === 'register' ? '' : 'none';
   });
 
-  // 站内所有 data-goto 跳转
+  // 站内所有 data-goto 跳转（走 pushState，保持 URL 与页面同步）
   document.addEventListener('click', (e) => {
     const a = e.target.closest('[data-goto]');
     if (!a) return;
     e.preventDefault();
     const target = a.dataset.goto;
+    const tab = a.dataset.tab;
 
     // 已登录用户点击「登录/注册」入口：不再跳登录页，明确提示已登录
     if (target === 'screen-auth' && S.user) {
-      toast(`您已登录（${S.user.email}）`, 'ok', 3000);
-      showScreen('screen-account');
+      toast(`您已登录（${S.user.email || S.user.phone}）`, 'ok', 3000);
+      showScreen('screen-account', { push: true });
       return;
     }
 
-    if (target === 'screen-auth') {
-      showScreen('screen-auth');
-      if (a.dataset.tab) $(`#auth-tabs .tab[data-tab="${a.dataset.tab}"]`)?.click();
-      return;
-    }
     // 离开后台时清掉 #adminpowershell，避免下次刷新又进后台
     if (target !== 'screen-admin' && location.hash === '#adminpowershell') {
-      try {
-        history.replaceState(null, '', location.pathname + location.search);
-      } catch {}
+      try { history.replaceState(null, '', location.pathname + location.search); } catch {}
     }
-    showScreen(target);
+
+    showScreen(target, { push: true, tab });
   });
 
   $('#inp-city')?.addEventListener('change', (e) => {
@@ -2055,12 +2092,12 @@ function bind() {
 
   $('#btn-again').onclick = () => {
     S.lastReport = null;
-    showScreen('screen-intro');
+    showScreen('screen-intro', { push: true });
     startExam({ offline: false });
   };
   $('#btn-home').onclick = async () => {
     await Tts.stopNow();
-    showScreen('screen-intro');
+    showScreen('screen-intro', { push: true });
   };
   $('#btn-review').onclick = showAnswerReview;
   $('#btn-print').onclick = () => window.print();
@@ -2075,7 +2112,17 @@ function bind() {
     if (location.hash === '#adminpowershell') showScreen('screen-admin');
   };
   window.addEventListener('hashchange', openAdminIfHash);
-  if (location.hash === '#adminpowershell') setTimeout(openAdminIfHash, 200);
+
+  // URL 路由：前进后退时按路径切换页面
+  window.addEventListener('popstate', () => {
+    // 浏览器前进/后退时若落在后台 hash，则进后台；否则按路径恢复
+    if (location.hash === '#adminpowershell') {
+      showScreen('screen-admin');
+    } else {
+      syncScreenFromLocation();
+    }
+  });
+  // 首次加载的屏幕同步在 init() 里 refreshMe() 之后进行，避免 /account 未读到登录态
 }
 
 (async function init() {
@@ -2085,6 +2132,9 @@ function bind() {
   window.__exam = { Tts, S, showScreen };
   await runEnvCheck();
   await refreshMe();
+
+  // 登录态就绪后再按 URL 打开对应页面（/login /signup /account /price；#adminpowershell 进后台）
+  syncScreenFromLocation();
 
   if (!isAsrSupported()) {
     toast(
