@@ -48,6 +48,8 @@ import {
 
 import { synthesize as edgeTts, rateStr as ttsRateStr, setCacheDir as setTtsCacheDir, VOICES as TTS_VOICES } from './data/edge-tts.mjs';
 
+import * as Brevo from './data/brevo.mjs';
+
 import { CITY_PROFILES, DEFAULT_CITY, cityProfile } from './data/exam-spec.mjs';
 import * as DB from './data/store.mjs';
 
@@ -116,6 +118,8 @@ const RL = {
   // 验证码请求：每 IP 每分钟最多 120 次
   // 学校机房多台设备共用一个出口 IP，限得太死会导致整班同学都刷不出验证码
   captcha: (ip) => rateLimit(`cap:${ip}`, { windowMs: 60_000, max: 120 }),
+  // 邮件验证码发送：每 IP 每 10 分钟最多 10 次（防脚本批量轰炸）
+  emailCode: (ip) => rateLimit(`ec:${ip}`, { windowMs: 10 * 60_000, max: 10 }),
   // 组卷：每用户每分钟 3 次
   paper: (uid) => rateLimit(`paper:${uid}`, { windowMs: 60_000, max: 3 }),
   // 通用 API：每 IP 每分钟 120 次
@@ -1470,6 +1474,11 @@ async function handleHealth(req, res, cfg) {
     pricing: s.pricing,
     siteName: s.siteName,
     authRequired: true,
+    // 卡密购买外链（空 = 不显示按钮）
+    cardBuyUrl: String(s.cardBuyUrl || '').trim(),
+    // 邮箱验证码是否开启（前端据此显示验证码输入框；Key 不下发）
+    emailVerify: emailVerifyOn(),
+    emailCodeResendSec: Brevo.RESEND_SEC,
   });
 }
 
@@ -1565,6 +1574,69 @@ async function jsonBody(req) {
 
 /* ---------------- 用户认证 ---------------- */
 
+/** 邮箱验证码是否启用（后台配置了 Brevo 且开关打开） */
+function emailVerifyOn() {
+  const b = DB.getSettings().brevo || {};
+  return Boolean(b.enabled && b.apiKey && b.senderEmail);
+}
+
+/**
+ * 发送邮箱验证码
+ * 规则：必须先通过图形验证码；同一设备 60 秒内只能发一次（与邮箱无关）；
+ *       单邮箱每小时上限；邮件发送成功后才记录冷却与验证码。
+ */
+async function handleEmailCode(req, res) {
+  const ip = clientIp(req);
+  const rl = RL.emailCode(ip);
+  if (!rl.ok) return sendJson(res, 429, { ok: false, error: '请求过于频繁，请稍后再试' });
+
+  const b = await jsonBody(req);
+
+  // 1. 图形验证码必须通过（每次发码都要验，防止脚本刷邮件）
+  const cap = verifyCaptcha(b.captchaId, b.captchaCode, ip);
+  if (!cap.ok) return sendJson(res, 400, { ok: false, error: cap.error });
+
+  // 2. 设备冷却：同一设备 60 秒内只能发一次
+  const cd = Brevo.checkCooldown(ip);
+  if (!cd.ok) return sendJson(res, 429, { ok: false, error: `发送太频繁，请 ${cd.waitSec} 秒后再获取`, waitSec: cd.waitSec });
+
+  const email = String(b.email || '').trim().toLowerCase();
+  const purpose = b.purpose === 'login' ? 'login' : 'register';
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return sendJson(res, 400, { ok: false, error: '邮箱格式不正确' });
+
+  // 3. 单邮箱每小时上限
+  const hourly = Brevo.checkEmailHourlyLimit(email);
+  if (!hourly.ok) return sendJson(res, 429, { ok: false, error: hourly.error });
+
+  // 4. 账号存在性：注册不允许已注册邮箱；登录必须是已注册邮箱
+  const exists = Boolean(DB.findUserByEmail(email));
+  if (purpose === 'register' && exists) return sendJson(res, 409, { ok: false, error: '该邮箱已注册，请直接登录' });
+  if (purpose === 'login' && !exists) return sendJson(res, 404, { ok: false, error: '该邮箱尚未注册' });
+
+  if (!emailVerifyOn()) return sendJson(res, 503, { ok: false, error: '邮箱验证码服务未开启，请联系管理员' });
+
+  // 5. 生成验证码 → 发送；失败则不留痕（不占用冷却，验证码作废）
+  const code = Brevo.createCode(purpose, email);
+  const cfgB = DB.getSettings().brevo;
+  const subject = purpose === 'register' ? '注册验证码' : '登录验证码';
+  const html = `<div style="font-family:Arial,'Microsoft YaHei',sans-serif;font-size:15px;color:#222">
+    <p>您好，您的${subject}是：</p>
+    <p style="font-size:28px;font-weight:700;letter-spacing:6px;color:#3538cd">${code}</p>
+    <p style="color:#666;font-size:13px">验证码 ${Brevo.CODE_TTL_SEC / 60} 分钟内有效，请勿泄露给他人。如非本人操作，请忽略此邮件。</p>
+  </div>`;
+  try {
+    await Brevo.sendMail(cfgB, { to: email, subject: `${subject} - ${cfgB.senderName || '在线练习系统'}`, html });
+  } catch (e) {
+    Brevo.clearCode(purpose, email);
+    logVisit(req, 'email-code', { action: 'fail', email, ip, detail: e.message });
+    return sendJson(res, 502, { ok: false, error: e.message });
+  }
+
+  Brevo.markSent(ip, email);
+  logVisit(req, 'email-code', { action: 'ok', email, ip, detail: purpose });
+  sendJson(res, 200, { ok: true, message: `验证码已发送至 ${email}`, ttlSec: Brevo.CODE_TTL_SEC, resendSec: Brevo.RESEND_SEC });
+}
+
 async function handleRegister(req, res) {
   const ip = clientIp(req);
   const ua = req.headers['user-agent'] || '';
@@ -1585,13 +1657,17 @@ async function handleRegister(req, res) {
   const password = String(b.password || '');
   const name = String(b.name || '').trim();
 
-  // 验证码校验
+  // 图形验证码始终必填（防止脚本批量注册）
   const cap = verifyCaptcha(b.captchaId, b.captchaCode, ip);
   if (!cap.ok) return sendJson(res, 400, { ok: false, error: cap.error });
 
   // 邮箱、手机号至少填一个；两个都填则双重绑定
   if (!email && !phone) return sendJson(res, 400, { ok: false, error: '请填写邮箱或手机号（填一个即可）' });
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return sendJson(res, 400, { ok: false, error: '邮箱格式不正确' });
+
+  // 开启邮箱验证时：必须填邮箱（验证码在全部校验通过、真正建号前再核对，避免失败后验证码被白白消耗）
+  if (emailVerifyOn() && !email) return sendJson(res, 400, { ok: false, error: '注册需要验证邮箱，请填写邮箱' });
+
   if (String(b.phone || '').trim() && !phone) return sendJson(res, 400, { ok: false, error: '手机号格式不正确（11 位中国大陆手机号）' });
   if (password.length < 6) return sendJson(res, 400, { ok: false, error: '密码至少 6 位' });
   if (email && DB.findUserByEmail(email)) return sendJson(res, 409, { ok: false, error: '该邮箱已注册，请直接登录' });
@@ -1604,6 +1680,12 @@ async function handleRegister(req, res) {
     banKey(ip, 10 * 60_000);
     Activity.push({ kind: 'blocked', action: 'register', ip, ua: parseUa(ua).raw, email: email || phone, detail: risk.reasons.join('；') });
     return sendJson(res, 403, { ok: false, error: '检测到异常注册行为，请稍后重试或联系管理员' });
+  }
+
+  // 邮箱验证码：全部业务校验通过后再核对并消耗（一次性）
+  if (emailVerifyOn()) {
+    const ev = Brevo.verifyCode('register', email, b.emailCode);
+    if (!ev.ok) return sendJson(res, 400, { ok: false, error: ev.error });
   }
 
   const user = DB.createUser({ email, phone, password, name });
@@ -1639,7 +1721,7 @@ async function handleLogin(req, res) {
   const account = String(b.account || b.email || b.phone || '').trim();
   const password = String(b.password || '');
 
-  // 验证码校验
+  // 图形验证码始终必填
   const cap = verifyCaptcha(b.captchaId, b.captchaCode, ip);
   if (!cap.ok) return sendJson(res, 400, { ok: false, error: cap.error });
 
@@ -1652,6 +1734,12 @@ async function handleLogin(req, res) {
     return sendJson(res, 401, { ok: false, error: '邮箱或密码错误' });
   }
   if (user.disabled) return sendJson(res, 403, { ok: false, error: '账号已被停用，请联系管理员' });
+
+  // 邮箱登录 + 开启邮箱验证：密码正确后还需核对邮箱验证码（手机号登录不走邮箱验证）
+  if (account.includes('@') && emailVerifyOn()) {
+    const ev = Brevo.verifyCode('login', account.toLowerCase(), b.emailCode);
+    if (!ev.ok) return sendJson(res, 400, { ok: false, error: ev.error, needEmailCode: true });
+  }
   user.lastLoginAt = Date.now();
   DB.save();
 
@@ -1787,6 +1875,31 @@ async function handleAdminSettings(req, res) {
   }
   if (patch.apiKey === '') delete patch.apiKey; // 空字符串 = 不修改
   if (b.pricing && typeof b.pricing === 'object') patch.pricing = b.pricing;
+  // 卡密购买外链：只允许 http(s)，留空 = 不显示按钮
+  if (b.cardBuyUrl !== undefined) {
+    const u = String(b.cardBuyUrl || '').trim();
+    if (u && !/^https?:\/\/[^\s]+$/i.test(u)) {
+      return sendJson(res, 400, { ok: false, error: '购买卡密链接需以 http:// 或 https:// 开头' });
+    }
+    patch.cardBuyUrl = u;
+  }
+  // Brevo 邮箱验证码配置（API Key 留空 = 不修改）
+  if (b.brevo && typeof b.brevo === 'object') {
+    const cb = cur.brevo || {};
+    const next = {
+      enabled: Boolean(b.brevo.enabled),
+      apiKey: String(b.brevo.apiKey || '').trim() || cb.apiKey || '',
+      senderEmail: String(b.brevo.senderEmail ?? cb.senderEmail ?? '').trim(),
+      senderName: String(b.brevo.senderName ?? cb.senderName ?? '').trim().slice(0, 60) || '在线练习系统',
+    };
+    if (next.senderEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(next.senderEmail)) {
+      return sendJson(res, 400, { ok: false, error: 'Brevo 发件邮箱格式不正确' });
+    }
+    if (next.enabled && (!next.apiKey || !next.senderEmail)) {
+      return sendJson(res, 400, { ok: false, error: '开启邮箱验证前，需填写 Brevo API Key 与发件邮箱' });
+    }
+    patch.brevo = next;
+  }
   // 紧急开关
   if (b.security && typeof b.security === 'object') {
     const cur2 = cur.security || {};
@@ -1802,7 +1915,7 @@ async function handleAdminSettings(req, res) {
   }
 
   DB.updateSettings(patch);
-  DB.log('admin-settings', 'admin', Object.keys(patch).filter((k) => k !== 'apiKey').join(',') || '(无变更)');
+  DB.log('admin-settings', 'admin', Object.keys(patch).filter((k) => k !== 'apiKey' && k !== 'brevo').join(',') || '(无变更)');
 
   sendJson(res, 200, {
     ok: true,
@@ -2486,6 +2599,7 @@ const server = http.createServer((req, res) => {
     if (p === '/api/auth/register' && req.method === 'POST') return handleRegister(req, res);
     if (p === '/api/auth/login' && req.method === 'POST') return handleLogin(req, res);
     if (p === '/api/auth/logout' && req.method === 'POST') return handleLogout(req, res);
+    if (p === '/api/auth/email-code' && req.method === 'POST') return handleEmailCode(req, res);
     if (p === '/api/auth/me') return handleMe(req, res);
     if (p === '/api/redeem' && req.method === 'POST') return handleRedeem(req, res);
 

@@ -238,12 +238,19 @@
         <input type="password" id="li-pass" placeholder="至少 6 位" autocomplete="current-password" />
         <div class="row captcha-row" style="margin-top:12px;align-items:flex-end">
           <div style="flex:1;min-width:120px">
-            <label class="muted">验证码（区分大小写）</label>
+            <label class="muted">图形验证码（区分大小写）</label>
             <input type="text" id="li-captcha" placeholder="照图中大小写输入" autocomplete="off" maxlength="6" autocapitalize="off" spellcheck="false" />
           </div>
           <div class="captcha-img" id="li-captcha-img" title="点击刷新"></div>
         </div>
         <input type="hidden" id="li-captcha-id" />
+        <div id="li-email-code-row" class="row" style="margin-top:12px;align-items:flex-end;display:none">
+          <div style="flex:1;min-width:120px">
+            <label class="muted">邮箱验证码（6 位数字）</label>
+            <input type="text" id="li-email-code" placeholder="查收邮件中的 6 位数字" autocomplete="one-time-code" inputmode="numeric" maxlength="6" />
+          </div>
+          <button class="btn ghost" id="btn-li-code" type="button">获取验证码</button>
+        </div>
         <div class="row" style="margin-top:16px">
           <button class="btn" id="btn-login">登录</button>
           <span class="muted">还没有账号？点上方「注册」，新用户送 <b id="li-free">2</b> 次免费听说模拟</span>
@@ -255,7 +262,7 @@
         <div class="callout ok" style="margin-bottom:14px" id="reg-gift"></div>
         <label class="muted">昵称（可留空）</label>
         <input type="text" id="rg-name" placeholder="例如：小明" />
-        <label class="muted" style="margin-top:12px">邮箱（与手机号填一个即可，两个都填可双重绑定）</label>
+        <label class="muted" style="margin-top:12px">邮箱 <span id="rg-email-hint">（与手机号填一个即可，两个都填可双重绑定）</span></label>
         <input type="email" id="rg-email" placeholder="you@example.com" autocomplete="username" />
         <label class="muted" style="margin-top:12px">手机号（选填）</label>
         <input type="tel" id="rg-phone" placeholder="11 位中国大陆手机号" autocomplete="tel" inputmode="numeric" maxlength="13" />
@@ -269,6 +276,13 @@
           <div class="captcha-img" id="rg-captcha-img" title="点击刷新"></div>
         </div>
         <input type="hidden" id="rg-captcha-id" />
+        <div id="rg-email-code-row" class="row" style="margin-top:12px;align-items:flex-end;display:none">
+          <div style="flex:1;min-width:120px">
+            <label class="muted">邮箱验证码（6 位数字）</label>
+            <input type="text" id="rg-email-code" placeholder="查收邮件中的 6 位数字" autocomplete="one-time-code" inputmode="numeric" maxlength="6" />
+          </div>
+          <button class="btn ghost" id="btn-rg-code" type="button">获取验证码</button>
+        </div>
         <div class="row" style="margin-top:16px">
           <button class="btn" id="btn-register">注册并领取免费次数</button>
         </div>
@@ -283,6 +297,10 @@
     <div class="hero" style="padding:8px 0 4px">
       <h1>收费标准</h1>
       <p>本站为个人开发的公益向练习工具，服务器与模型调用有实际成本，因此采用「免费试用 + 次数卡 / 月卡」的方式维持运转。</p>
+    </div>
+
+    <div class="row" id="buy-card-row" style="justify-content:center;margin:4px 0 14px;display:none">
+      <a class="btn lg" id="btn-buy-card" href="#" target="_blank" rel="noopener noreferrer">购买卡密</a>
     </div>
 
     <div class="price-grid" id="price-grid"></div>
@@ -540,6 +558,33 @@
         </div>
         <div style="margin-top:12px">
           <label class="muted">定价来源 / 说明（展示在收费页）</label><textarea id="cfg-source" rows="3"></textarea>
+        </div>
+        <div style="margin-top:12px">
+          <label class="muted">购买卡密链接（收费页「购买卡密」按钮跳转到此地址，留空则不显示按钮）</label>
+          <input type="text" id="cfg-card-buy" placeholder="https://example.com/buy" />
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>邮箱验证码（Brevo）</h2>
+        <p class="muted">开启后，注册与邮箱登录都需要输入邮箱验证码。图形验证码始终保留。同一设备 60 秒内只能获取一次验证码。发件邮箱需先在 Brevo 后台完成验证。</p>
+        <label class="muted" style="display:flex;align-items:center;gap:6px;margin-top:8px">
+          <input type="checkbox" id="cfg-brevo-on" style="width:auto" /> 开启邮箱验证码
+        </label>
+        <div class="row" style="margin-top:12px">
+          <div style="flex:2;min-width:240px">
+            <label class="muted">Brevo API Key</label>
+            <input type="password" id="cfg-brevo-key" placeholder="xkeysib-…（留空则不修改）" autocomplete="off" />
+            <div class="muted" id="cfg-brevo-key-hint" style="font-size:12px;margin-top:4px"></div>
+          </div>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <div style="flex:1;min-width:200px"><label class="muted">发件邮箱</label><input type="email" id="cfg-brevo-from" placeholder="noreply@你的域名" /></div>
+          <div style="flex:1;min-width:160px"><label class="muted">发件人名称</label><input type="text" id="cfg-brevo-name" placeholder="在线练习系统" /></div>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <button class="btn" id="btn-brevo-save">保存邮箱设置</button>
+          <span class="muted" id="cfg-brevo-hint"></span>
         </div>
 
         <div style="margin-top:14px">

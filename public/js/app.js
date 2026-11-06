@@ -341,15 +341,76 @@ function refreshAllCaptchas() {
   loadCaptcha($('#rg-captcha-img'), $('#rg-captcha-id'));
 }
 
+/* ---------- 邮箱验证码 ---------- */
+
+/** 根据后台开关显示/隐藏邮箱验证码输入行（图形验证码始终保留） */
+function applyEmailVerifyUi() {
+  const on = Boolean(S.emailVerify);
+  ['li-email-code-row', 'rg-email-code-row'].forEach((id) => {
+    const row = document.getElementById(id);
+    if (row) row.style.display = on ? '' : 'none';
+  });
+  const hint = document.getElementById('rg-email-hint');
+  if (hint) hint.textContent = on ? '（必填，用于接收验证码）' : '（与手机号填一个即可，两个都填可双重绑定）';
+}
+
+let emailCodeTimer = null;
+
+/**
+ * 获取邮箱验证码：必须先填图形验证码；按钮 60 秒倒计时（同一设备换邮箱也受限）
+ * @param {'register'|'login'} purpose
+ */
+async function requestEmailCode(purpose) {
+  const isLogin = purpose === 'login';
+  const email = (isLogin ? $('#li-email').value : $('#rg-email').value).trim();
+  const captchaId = (isLogin ? $('#li-captcha-id') : $('#rg-captcha-id'))?.value || '';
+  const captchaCode = ((isLogin ? $('#li-captcha') : $('#rg-captcha'))?.value || '').trim();
+  const btn = document.getElementById(isLogin ? 'btn-li-code' : 'btn-rg-code');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return toast('请先填写正确的邮箱', 'warn');
+  if (!captchaCode) return toast('请先输入图形验证码', 'warn');
+
+  try {
+    const d = await api('/api/auth/email-code', { email, purpose, captchaId, captchaCode });
+    toast(d.message || '验证码已发送', 'ok', 5000);
+    startResendCountdown(btn, d.resendSec || S.emailCodeResendSec || 60);
+  } catch (e) {
+    if (e.waitSec) startResendCountdown(btn, e.waitSec);
+    toast('发送失败：' + e.message, 'bad', 6000);
+    loadCaptcha(isLogin ? $('#li-captcha-img') : $('#rg-captcha-img'), isLogin ? $('#li-captcha-id') : $('#rg-captcha-id'));
+    if (isLogin ? $('#li-captcha') : $('#rg-captcha')) (isLogin ? $('#li-captcha') : $('#rg-captcha')).value = '';
+  }
+}
+
+/** 60 秒倒计时：按钮禁用，结束后恢复 */
+function startResendCountdown(btn, sec) {
+  if (!btn) return;
+  clearInterval(emailCodeTimer);
+  let left = Math.max(1, Math.ceil(sec));
+  btn.disabled = true;
+  btn.textContent = `${left} 秒后可重发`;
+  emailCodeTimer = setInterval(() => {
+    left -= 1;
+    if (left <= 0) {
+      clearInterval(emailCodeTimer);
+      btn.disabled = false;
+      btn.textContent = '获取验证码';
+    } else {
+      btn.textContent = `${left} 秒后可重发`;
+    }
+  }, 1000);
+}
+
 export async function doLogin() {
   const account = $('#li-email').value.trim();
   const password = $('#li-pass').value;
   const captchaId = $('#li-captcha-id')?.value || '';
   const captchaCode = $('#li-captcha')?.value?.trim() || '';
+  const emailCode = ($('#li-email-code')?.value || '').trim();
   if (!account || !password) return toast('请填写邮箱或手机号，以及密码', 'warn');
-  if (!captchaCode) return toast('请输入验证码', 'warn');
+  if (!captchaCode) return toast('请输入图形验证码', 'warn');
+  if (S.emailVerify && account.includes('@') && !emailCode) return toast('请输入邮箱验证码', 'warn');
   try {
-    const d = await api('/api/auth/login', { account, password, captchaId, captchaCode });
+    const d = await api('/api/auth/login', { account, password, captchaId, captchaCode, emailCode });
     S.user = d.user;
     S.isAdmin = Boolean(d.admin);
     await refreshMe();
@@ -369,12 +430,15 @@ export async function doRegister() {
   const name = $('#rg-name').value.trim();
   const captchaId = $('#rg-captcha-id')?.value || '';
   const captchaCode = $('#rg-captcha')?.value?.trim() || '';
+  const emailCode = ($('#rg-email-code')?.value || '').trim();
   if (!email && !phone) return toast('邮箱和手机号填一个即可', 'warn');
+  if (S.emailVerify && !email) return toast('注册需要验证邮箱，请填写邮箱', 'warn');
   if (!password) return toast('请填写密码', 'warn');
   if (password.length < 6) return toast('密码至少 6 位', 'warn');
-  if (!captchaCode) return toast('请输入验证码', 'warn');
+  if (!captchaCode) return toast('请输入图形验证码', 'warn');
+  if (S.emailVerify && !emailCode) return toast('请输入邮箱验证码', 'warn');
   try {
-    const d = await api('/api/auth/register', { email, phone, password, name, captchaId, captchaCode });
+    const d = await api('/api/auth/register', { email, phone, password, name, captchaId, captchaCode, emailCode });
     S.user = d.user;
     await refreshMe();
     toast(d.message || '注册成功！', 'ok', 5000);
@@ -511,6 +575,15 @@ function renderPricing() {
   const p = S.pricing;
   const grid = $('#price-grid');
   if (!grid || !p) return;
+
+  // 购买卡密按钮：后台填了外链才显示，新窗口打开
+  const buyRow = $('#buy-card-row');
+  const buyBtn = $('#btn-buy-card');
+  if (buyRow && buyBtn) {
+    const url = String(S.cardBuyUrl || '').trim();
+    buyRow.style.display = url ? '' : 'none';
+    buyBtn.setAttribute('href', url || '#');
+  }
   const sym = p.currencySymbol || '¥';
   const free = p.freeTrials ?? 1;
   grid.innerHTML = `
@@ -585,6 +658,10 @@ async function runEnvCheck() {
     if (health.cities) S.cities = health.cities;
     if (health.defaultCity) S.city = health.defaultCity;
     if (health.pricing) S.pricing = health.pricing;
+    S.cardBuyUrl = health.cardBuyUrl || '';
+    S.emailVerify = Boolean(health.emailVerify);
+    S.emailCodeResendSec = health.emailCodeResendSec || 60;
+    applyEmailVerifyUi();
     items.push({ k: '评分服务端', v: '已连接', ok: true });
     $('#pill-api').textContent = `接口正常 · ${health.model}`;
     $('#pill-api').className = 'pill ok';
@@ -1998,6 +2075,8 @@ function bind() {
   };
   $('#btn-login').onclick = doLogin;
   $('#btn-register').onclick = doRegister;
+  $('#btn-li-code')?.addEventListener('click', () => requestEmailCode('login'));
+  $('#btn-rg-code')?.addEventListener('click', () => requestEmailCode('register'));
   $('#btn-logout').onclick = doLogout;
   $('#btn-redeem').onclick = doRedeem;
 

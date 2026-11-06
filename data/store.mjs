@@ -75,6 +75,15 @@ export const DEFAULT_SETTINGS = {
     loginOff: false, // 关闭登录（已登录用户仍可用）
     speechOff: false, // 关闭语音合成与识别（省带宽/防刷）
   },
+  // 卡密购买外链（管理员后台设置，价格页显示「购买卡密」按钮）
+  cardBuyUrl: '',
+  // Brevo 邮箱验证码（SMTP API / transactional email），用于注册和登录验证
+  brevo: {
+    enabled: false,
+    apiKey: '',      // Brevo API Key（xkeysib-...）
+    senderEmail: '',  // 已在 Brevo 验证的发件邮箱
+    senderName: '在线练习系统',
+  },
   // 持久化 IP 封禁列表（管理员维护；被封 IP 打开网站直接显示封禁页）
   bannedIps: [],
   // 脚本访问防护：同一 IP 在窗口内脚本访问超过 scriptMax 次 → 自动封禁
@@ -220,6 +229,16 @@ export function getPublicSettings() {
     apiKeyHint: hasKey ? s.apiKey.slice(0, 6) + '••••' + s.apiKey.slice(-4) : '',
     availableModels: s.availableModels,
     pricing: s.pricing,
+    cardBuyUrl: String(s.cardBuyUrl || '').trim(),
+    emailVerify: Boolean(s.brevo?.enabled && s.brevo?.apiKey && s.brevo?.senderEmail),
+    // Brevo 配置（API Key 不下发，只给是否已设置与脱敏提示）
+    brevo: {
+      enabled: Boolean(s.brevo?.enabled),
+      apiKeySet: Boolean(s.brevo?.apiKey),
+      apiKeyHint: s.brevo?.apiKey ? s.brevo.apiKey.slice(0, 8) + '••••' + s.brevo.apiKey.slice(-4) : '',
+      senderEmail: s.brevo?.senderEmail || '',
+      senderName: s.brevo?.senderName || '',
+    },
     security: s.security || { registrationOff: false, loginOff: false, speechOff: false },
     // 配置来源（db=网站后台保存；环境变量仅作新库初始值，不锁定）
     sources: configSources(s),

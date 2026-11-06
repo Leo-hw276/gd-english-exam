@@ -125,6 +125,8 @@ async function loadOverview() {
     $('#cfg-monthly-desc').value = p.monthly?.desc || '';
     $('#cfg-free-note').value = p.freeTrialNote || '';
     $('#cfg-source').value = p.sourceNote || '';
+    $('#cfg-card-buy').value = s.cardBuyUrl || '';
+    renderBrevoForm(s.brevo || {});
     renderImagePreview(p.sourceImage || '');
 
     renderCodes(d.codes || []);
@@ -282,6 +284,37 @@ async function saveApi() {
  *  定价
  * ------------------------------------------------------------------ */
 
+/** 邮箱验证码设置：Key 不回显，只显示是否已设置 */
+function renderBrevoForm(b) {
+  $('#cfg-brevo-on').checked = Boolean(b.enabled);
+  $('#cfg-brevo-from').value = b.senderEmail || '';
+  $('#cfg-brevo-name').value = b.senderName || '';
+  $('#cfg-brevo-key').value = '';
+  $('#cfg-brevo-key-hint').textContent = b.apiKeySet ? `已设置：${b.apiKeyHint}（留空则不修改）` : '尚未设置';
+}
+
+async function saveBrevo() {
+  const hint = $('#cfg-brevo-hint');
+  try {
+    await api('/api/admin/settings', {
+      brevo: {
+        enabled: $('#cfg-brevo-on').checked,
+        apiKey: $('#cfg-brevo-key').value.trim(),
+        senderEmail: $('#cfg-brevo-from').value.trim(),
+        senderName: $('#cfg-brevo-name').value.trim(),
+      },
+    });
+    hint.textContent = '已保存';
+    toast('邮箱验证码设置已保存', 'ok');
+    const h = await api('/api/health', undefined, 'GET');
+    S.emailVerify = Boolean(h.emailVerify);
+    await loadOverview();
+  } catch (e) {
+    hint.textContent = '保存失败';
+    toast('保存失败：' + e.message, 'bad', 5000);
+  }
+}
+
 async function savePricing() {
   const hint = $('#cfg-price-hint');
   try {
@@ -294,6 +327,7 @@ async function savePricing() {
         sourceNote: $('#cfg-source').value,
         sourceImage: currentImage || '',
       },
+      cardBuyUrl: $('#cfg-card-buy').value.trim(),
     });
     hint.textContent = '已保存';
     toast('定价已更新，前台收费页立即生效', 'ok');
@@ -854,6 +888,7 @@ function bind() {
   $('#cfg-pass')?.addEventListener('keydown', (e) => e.key === 'Enter' && adminLogin());
   $('#btn-admin-refresh')?.addEventListener('click', () => loadOverview().then(() => toast('已刷新', 'ok', 1500)));
   bindModelSelect();
+  $('#btn-brevo-save')?.addEventListener('click', saveBrevo);
   $('#btn-admin-models')?.addEventListener('click', fetchModels);
   $('#btn-admin-test')?.addEventListener('click', testConn);
   $('#btn-admin-save')?.addEventListener('click', saveApi);
