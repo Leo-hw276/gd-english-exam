@@ -340,18 +340,12 @@ async function fetchSpeechModels() {
   const hint = $('#cfg-speech-model-hint');
   hint.textContent = '拉取中…';
   try {
-    
     let base = $('#cfg-speech-base')?.value.trim() || $('#cfg-base')?.value.trim() || '';
     if (!base) { hint.textContent = '请先填写 API 地址'; return; }
-    base = base.replace(/\/+$/, '');
-    if (!/\/v\d+$/.test(base)) base += '/v1';
     const key = $('#cfg-speech-key')?.value.trim() || $('#cfg-key')?.value.trim() || '';
-    const r = await fetch(base + '/models', {
-      headers: key ? { Authorization: 'Bearer ' + key } : {},
-    });
-    if (!r.ok) { hint.textContent = `拉取失败（${r.status}）`; return; }
-    const d = await r.json();
-    const list = (d.data || d.models || []).map((m) => m.id || m.name || m).filter(Boolean);
+    const d = await api('/api/admin/speech-models', { apiBase: base, apiKey: key });
+    if (!d.ok) { hint.textContent = d.error || '拉取失败'; return; }
+    const list = d.models || [];
     if (!list.length) { hint.textContent = '未找到可用模型'; return; }
     
     const ttsSel = $('#cfg-speech-tts-model');

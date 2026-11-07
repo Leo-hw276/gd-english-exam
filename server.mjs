@@ -737,7 +737,7 @@ const HTML_CSP =
   "style-src 'self' 'unsafe-inline'; " +
   "img-src 'self' data: blob:; " +
   "media-src 'self' data: blob:; " +
-  "connect-src 'self'; " +
+  "connect-src 'self' https://challenges.cloudflare.com; " +
   'frame-src https://challenges.cloudflare.com; ' +
   "font-src 'self' data:; " +
   "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
@@ -2420,6 +2420,34 @@ async function handleAdminSpeechTest(req, res) {
   });
 }
 
+async function handleAdminSpeechModels(req, res) {
+  if (!requireAdmin(req, res)) return;
+  const b = await jsonBody(req);
+  const s = DB.getSettings();
+  const sp = s.speechApi || {};
+  let base = String(b.apiBase || sp.apiBase || s.apiBase || '').trim().replace(/\/+$/, '');
+  if (!base) return sendJson(res, 400, { ok: false, error: '请先填写 API 地址' });
+  if (!/^https?:\/\//i.test(base)) return sendJson(res, 400, { ok: false, error: 'API 地址需以 http:// 或 https:// 开头' });
+  if (!/\/v\d+$/.test(base)) base += '/v1';
+  const key = String(b.apiKey || sp.apiKey || s.apiKey || '').trim();
+
+  try {
+    const r = await fetch(`${base}/models`, {
+      headers: key ? { Authorization: `Bearer ${key}` } : {},
+      signal: AbortSignal.timeout(20000),
+    });
+    if (!r.ok) {
+      const t = (await r.text().catch(() => '')).slice(0, 200);
+      return sendJson(res, 200, { ok: false, error: `拉取失败（HTTP ${r.status}）${t ? '：' + t : ''}` });
+    }
+    const d = await r.json().catch(() => null);
+    const list = ((d && (d.data || d.models)) || []).map((m) => (typeof m === 'string' ? m : m.id || m.name)).filter(Boolean);
+    sendJson(res, 200, { ok: true, models: list, base });
+  } catch (e) {
+    sendJson(res, 200, { ok: false, error: `拉取失败：${e.message}` });
+  }
+}
+
 async function handleTts(req, res) {
   if (DB.getSettings()?.security?.speechOff) {
     return sendJson(res, 503, { ok: false, error: '语音合成服务当前已关闭' });
@@ -2837,6 +2865,7 @@ const server = http.createServer((req, res) => {
     if (p === '/api/admin/models' && req.method === 'POST') return handleAdminModels(req, res);
     if (p === '/api/admin/test' && req.method === 'POST') return handleAdminTest(req, res);
     if (p === '/api/admin/speech-test' && req.method === 'POST') return handleAdminSpeechTest(req, res);
+    if (p === '/api/admin/speech-models' && req.method === 'POST') return handleAdminSpeechModels(req, res);
     if (p === '/api/admin/upload' && req.method === 'POST') return handleAdminUpload(req, res);
     if (p === '/api/admin/codes') return handleAdminCodes(req, res);
     if (p === '/api/admin/users') return handleAdminUsers(req, res);
