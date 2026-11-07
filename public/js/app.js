@@ -373,6 +373,15 @@ async function requestEmailCode(purpose) {
     const d = await api('/api/auth/email-code', { email, purpose, captchaId, captchaCode });
     toast(d.message || '验证码已发送', 'ok', 5000);
     startResendCountdown(btn, d.resendSec || S.emailCodeResendSec || 60);
+    // 发码消耗了旧图形验证码，用服务端返回的新验证码替换
+    if (d.captcha) {
+      const imgEl = isLogin ? $('#li-captcha-img') : $('#rg-captcha-img');
+      const idEl  = isLogin ? $('#li-captcha-id')  : $('#rg-captcha-id');
+      if (imgEl) imgEl.innerHTML = d.captcha.svg || '';
+      if (idEl)  idEl.value = d.captcha.id || '';
+      const inp = isLogin ? $('#li-captcha') : $('#rg-captcha');
+      if (inp) inp.value = '';
+    }
   } catch (e) {
     if (e.waitSec) startResendCountdown(btn, e.waitSec);
     toast('发送失败：' + e.message, 'bad', 6000);

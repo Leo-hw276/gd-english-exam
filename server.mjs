@@ -1634,7 +1634,16 @@ async function handleEmailCode(req, res) {
 
   Brevo.markSent(ip, email);
   logVisit(req, 'email-code', { action: 'ok', email, ip, detail: purpose });
-  sendJson(res, 200, { ok: true, message: `验证码已发送至 ${email}`, ttlSec: Brevo.CODE_TTL_SEC, resendSec: Brevo.RESEND_SEC });
+
+  // 发码消耗了图形验证码，自动生成新的供后续登录/注册使用
+  const newCap = createCaptcha(ip);
+  sendJson(res, 200, {
+    ok: true,
+    message: `验证码已发送至 ${email}`,
+    ttlSec: Brevo.CODE_TTL_SEC,
+    resendSec: Brevo.RESEND_SEC,
+    captcha: { id: newCap.id, svg: newCap.svg },
+  });
 }
 
 async function handleRegister(req, res) {
