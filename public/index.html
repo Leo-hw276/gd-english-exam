@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8" />
@@ -586,7 +586,26 @@
       </div>
 
       <div class="card">
-        <h2>邮箱验证码（Brevo）</h2>
+        <h2>紧急通知弹窗</h2>
+        <p class="muted">开启后，用户打开网站立即弹出通知，点击「我知道了」关闭。修改内容后会重新弹出（已读按通知 ID 记录）。</p>
+        <label class="muted" style="display:flex;align-items:center;gap:6px;margin-top:8px">
+          <input type="checkbox" id="cfg-urgent-on" style="width:auto" /> 开启紧急通知
+        </label>
+        <div style="margin-top:12px">
+          <label class="muted">通知标题</label>
+          <input type="text" id="cfg-urgent-title" placeholder="如：系统维护通知" />
+        </div>
+        <div style="margin-top:12px">
+          <label class="muted">通知内容</label>
+          <textarea id="cfg-urgent-body" rows="4" placeholder="通知正文…"></textarea>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <button class="btn" id="btn-urgent-save">保存紧急通知</button>
+          <span class="muted" id="cfg-urgent-hint"></span>
+        </div>
+      </div>
+
+      <div class="card">
         <p class="muted">开启后，注册与邮箱登录都需要输入邮箱验证码。图形验证码始终保留。同一设备 60 秒内只能获取一次验证码。发件邮箱需先在 Brevo 后台完成验证。</p>
         <label class="muted" style="display:flex;align-items:center;gap:6px;margin-top:8px">
           <input type="checkbox" id="cfg-brevo-on" style="width:auto" /> 开启邮箱验证码

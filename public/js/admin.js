@@ -127,6 +127,7 @@ async function loadOverview() {
     $('#cfg-source').value = p.sourceNote || '';
     $('#cfg-card-buy').value = s.cardBuyUrl || '';
     renderBrevoForm(s.brevo || {});
+    renderUrgentNotice(s.urgentNotice || {});
     renderImagePreview(p.sourceImage || '');
 
     renderCodes(d.codes || []);
@@ -283,6 +284,39 @@ async function saveApi() {
 /* ------------------------------------------------------------------ *
  *  定价
  * ------------------------------------------------------------------ */
+
+/* ---------- 紧急通知弹窗 ---------- */
+
+function renderUrgentNotice(un) {
+  const el = (id) => document.getElementById(id);
+  const on = el('cfg-urgent-on');
+  const title = el('cfg-urgent-title');
+  const body = el('cfg-urgent-body');
+  const hint = el('cfg-urgent-hint');
+  if (on) on.checked = Boolean(un.enabled);
+  if (title) title.value = un.title || '';
+  if (body) body.value = un.body || '';
+  if (hint) hint.textContent = un.id ? `当前通知 ID：${un.id}` : '尚未发布';
+}
+
+async function saveUrgentNotice() {
+  const hint = $('#cfg-urgent-hint');
+  try {
+    await api('/api/admin/settings', {
+      urgentNotice: {
+        enabled: $('#cfg-urgent-on').checked,
+        title: $('#cfg-urgent-title').value.trim(),
+        body: $('#cfg-urgent-body').value.trim(),
+      },
+    });
+    hint.textContent = '已保存';
+    toast('紧急通知已更新', 'ok');
+    await loadOverview();
+  } catch (e) {
+    hint.textContent = '保存失败';
+    toast('保存失败：' + e.message, 'bad', 5000);
+  }
+}
 
 /** 邮箱验证码设置：Key 不回显，只显示是否已设置 */
 function renderBrevoForm(b) {
@@ -889,6 +923,7 @@ function bind() {
   $('#btn-admin-refresh')?.addEventListener('click', () => loadOverview().then(() => toast('已刷新', 'ok', 1500)));
   bindModelSelect();
   $('#btn-brevo-save')?.addEventListener('click', saveBrevo);
+  $('#btn-urgent-save')?.addEventListener('click', saveUrgentNotice);
   $('#btn-admin-models')?.addEventListener('click', fetchModels);
   $('#btn-admin-test')?.addEventListener('click', testConn);
   $('#btn-admin-save')?.addEventListener('click', saveApi);

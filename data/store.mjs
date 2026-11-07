@@ -86,6 +86,13 @@ export const DEFAULT_SETTINGS = {
   },
   // 持久化 IP 封禁列表（管理员维护；被封 IP 打开网站直接显示封禁页）
   bannedIps: [],
+  // 紧急通知弹窗（管理员设置后，用户打开网站立即弹窗）
+  urgentNotice: {
+    enabled: false,
+    id: '',       // 每次更新自动生成，用于 localStorage 已读标记
+    title: '',
+    body: '',
+  },
   // 脚本访问防护：同一 IP 在窗口内脚本访问超过 scriptMax 次 → 自动封禁
   scriptGuard: {
     enabled: true,
@@ -240,6 +247,8 @@ export function getPublicSettings() {
       senderName: s.brevo?.senderName || '',
     },
     security: s.security || { registrationOff: false, loginOff: false, speechOff: false },
+    // 紧急通知弹窗（前端根据 id 判断是否已读）
+    urgentNotice: s.urgentNotice?.enabled ? { id: s.urgentNotice.id, title: s.urgentNotice.title, body: s.urgentNotice.body } : null,
     // 配置来源（db=网站后台保存；环境变量仅作新库初始值，不锁定）
     sources: configSources(s),
     locked: envLocked(s),

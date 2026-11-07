@@ -671,6 +671,7 @@ async function runEnvCheck() {
     S.cardBuyUrl = health.cardBuyUrl || '';
     S.emailVerify = Boolean(health.emailVerify);
     S.emailCodeResendSec = health.emailCodeResendSec || 60;
+    S.urgentNotice = health.urgentNotice || null;
     applyEmailVerifyUi();
     items.push({ k: '评分服务端', v: '已连接', ok: true });
     $('#pill-api').textContent = `接口正常 · ${health.model}`;
@@ -2214,6 +2215,29 @@ function bind() {
   // 首次加载的屏幕同步在 init() 里 refreshMe() 之后进行，避免 /account 未读到登录态
 }
 
+/* ---------- 紧急通知弹窗 ---------- */
+
+function checkUrgentNotice() {
+  const n = S.urgentNotice;
+  if (!n || !n.id || !n.title) return;
+  const key = 'urgent_read_' + n.id;
+  if (localStorage.getItem(key)) return;
+  const mask = document.createElement('div');
+  mask.className = 'modal-mask';
+  mask.innerHTML = `<div class="modal-box" style="max-width:440px">
+    <h2 style="margin:0 0 12px;font-size:18px">${esc(n.title)}</h2>
+    <div style="white-space:pre-wrap;line-height:1.7;font-size:14px;color:#444;max-height:50vh;overflow-y:auto">${esc(n.body)}</div>
+    <div style="margin-top:18px;text-align:center">
+      <button class="btn" id="btn-urgent-ok">我知道了</button>
+    </div>
+  </div>`;
+  document.body.appendChild(mask);
+  mask.querySelector('#btn-urgent-ok').onclick = () => {
+    localStorage.setItem(key, '1');
+    mask.remove();
+  };
+}
+
 (async function init() {
   Tts.init();
   bind();
@@ -2224,6 +2248,7 @@ function bind() {
 
   // 登录态就绪后再按 URL 打开对应页面（/login /signup /account /price；#adminpowershell 进后台）
   syncScreenFromLocation();
+  checkUrgentNotice();
 
   if (!isAsrSupported()) {
     toast(

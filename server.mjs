@@ -1479,6 +1479,8 @@ async function handleHealth(req, res, cfg) {
     // 邮箱验证码是否开启（前端据此显示验证码输入框；Key 不下发）
     emailVerify: emailVerifyOn(),
     emailCodeResendSec: Brevo.RESEND_SEC,
+    // 紧急通知弹窗（前端据此弹窗；未开启时不下发）
+    urgentNotice: s.urgentNotice?.enabled ? { id: s.urgentNotice.id, title: s.urgentNotice.title, body: s.urgentNotice.body } : null,
   });
 }
 
@@ -1917,6 +1919,21 @@ async function handleAdminSettings(req, res) {
       loginOff: Boolean(b.security.loginOff ?? cur2.loginOff),
       speechOff: Boolean(b.security.speechOff ?? cur2.speechOff),
     };
+  }
+  // 紧急通知弹窗
+  if (b.urgentNotice !== undefined) {
+    if (b.urgentNotice && typeof b.urgentNotice === 'object') {
+      const title = String(b.urgentNotice.title || '').trim().slice(0, 100);
+      const body  = String(b.urgentNotice.body  || '').trim().slice(0, 2000);
+      const enabled = Boolean(b.urgentNotice.enabled);
+      const oldUn = cur.urgentNotice || {};
+      // 内容变化或首次开启时生成新 id，让前端重新弹窗
+      const contentChanged = title !== (oldUn.title || '') || body !== (oldUn.body || '');
+      const id = (enabled && contentChanged) ? crypto.randomUUID().slice(0, 8) : (oldUn.id || crypto.randomUUID().slice(0, 8));
+      patch.urgentNotice = { enabled, id, title, body };
+    } else {
+      patch.urgentNotice = { enabled: false, id: '', title: '', body: '' };
+    }
   }
   if (b.newPassword) {
     if (String(b.newPassword).length < 6) return sendJson(res, 400, { ok: false, error: '管理员密码至少 6 位' });
