@@ -313,6 +313,8 @@ async function refreshMe() {
   }
   renderUserChip();
   renderQuotaHint();
+  // 如果当前在账户页，登录态变化后自动刷新
+  if (document.querySelector('#screen-account.active')) renderAccount();
   window.dispatchEvent(new CustomEvent('jmkt:auth', { detail: { user: S.user, admin: S.isAdmin } }));
 }
 
