@@ -1,20 +1,9 @@
-/**
- * store.mjs —— 轻量 JSON 持久化层（零依赖）
- *
- * 保存：平台设置（API Key / v1 地址 / 模型 / 定价）、用户、会话、兑换码、流水日志。
- * 写入采用「临时文件 + 原子重命名」，避免进程中断导致数据文件损坏。
- *
- * 数据文件默认落在 <项目根>/data/db.json（可用 EXAM_DB_FILE 覆盖；
- * Railway 上建议挂载 Volume 并把路径指到 /data/db.json）。
- *
- * 配置优先级：环境变量 > .env 文件 > 后台设置 > 内置默认值
- *   —— 密钥永远不该写进代码，所以 server.mjs / store.mjs 里没有任何硬编码 Key。
- */
+ 
 
-// 必须最先加载 .env：下面的 DB_FILE 与 DEFAULT_SETTINGS 都依赖 process.env
+
 import { configSources, envLocked } from './env.mjs';
 
-// 再导出，方便 server.mjs 直接通过 DB.configSources / DB.envLocked 使用
+
 export { configSources, envLocked };
 
 import fs from 'node:fs';
@@ -29,9 +18,7 @@ export const DB_FILE = process.env.EXAM_DB_FILE
   ? path.resolve(process.env.EXAM_DB_FILE)
   : path.join(ROOT, 'data', 'db.json');
 
-/* ------------------------------------------------------------------ *
- *  默认设置
- * ------------------------------------------------------------------ */
+ 
 
 export const DEFAULT_PRICING = {
   currency: 'CNY',
@@ -52,7 +39,7 @@ export const DEFAULT_PRICING = {
   },
   sourceNote:
     '定价由本站管理员在后台自行设定，非官方收费标准；广东省中考英语听说考试本身不向考生收取任何费用。',
-  sourceImage: '', // 定价说明配图（/uploads/xxx.png），由管理员后台上传
+  sourceImage: '', 
 };
 
 export const DEFAULT_SETTINGS = {
@@ -67,56 +54,54 @@ export const DEFAULT_SETTINGS = {
   pricing: DEFAULT_PRICING,
   paperTemperature: 0.85,
   scoreTemperature: 0.2,
-  // 单句精练每日限额（0 = 不限）
+  
   practiceDailyLimit: 50,
-  // 紧急开关：被攻击/维护时可一键关闭对应入口
+  
   security: {
-    registrationOff: false, // 关闭新用户注册
-    loginOff: false, // 关闭登录（已登录用户仍可用）
-    speechOff: false, // 关闭语音合成与识别（省带宽/防刷）
+    registrationOff: false, 
+    loginOff: false, 
+    speechOff: false, 
   },
-  // 卡密购买外链（管理员后台设置，价格页显示「购买卡密」按钮）
+  
   cardBuyUrl: '',
-  // Brevo 邮箱验证码（SMTP API / transactional email），用于注册和登录验证
+  
   brevo: {
     enabled: false,
-    apiKey: '',      // Brevo API Key（xkeysib-...）
-    senderEmail: '',  // 已在 Brevo 验证的发件邮箱
+    apiKey: '',      
+    senderEmail: '',  
     senderName: '在线练习系统',
   },
-  // 持久化 IP 封禁列表（管理员维护；被封 IP 打开网站直接显示封禁页）
+  
   bannedIps: [],
-  // 紧急通知弹窗（管理员设置后，用户打开网站立即弹窗）
+  
   urgentNotice: {
     enabled: false,
-    id: '',       // 每次更新自动生成，用于 localStorage 已读标记
+    id: '',       
     title: '',
     body: '',
   },
-  // Cloudflare Turnstile 人机验证（留空 = 不启用）
+  
   turnstile: {
-    siteKey: '',    // 公开，前端渲染用
-    secretKey: '',  // 保密，仅服务端校验用
+    siteKey: '',    
+    secretKey: '',  
   },
-  // 语音服务 API（TTS 朗读 + ASR 转写），留空时 TTS 降级到 edge-tts，ASR 用主 API
+  
   speechApi: {
-    apiBase: '',     // 如 https://api.openai.com/v1
-    apiKey: '',      // 语音服务专用 Key（留空则用主 API Key）
+    apiBase: '',     
+    apiKey: '',      
     ttsModel: 'tts-1',
     ttsVoice: 'alloy',
     asrModel: 'whisper-1',
   },
-  // 脚本访问防护：同一 IP 在窗口内脚本访问超过 scriptMax 次 → 自动封禁
+  
   scriptGuard: {
     enabled: true,
-    scriptMax: 5, // 超过 5 次自动封禁
-    windowMin: 10, // 统计窗口（分钟）
+    scriptMax: 5, 
+    windowMin: 10, 
   },
 };
 
-/* ------------------------------------------------------------------ *
- *  密码与令牌
- * ------------------------------------------------------------------ */
+ 
 
 export function hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) {
   const hash = crypto.scryptSync(String(password), salt, 64).toString('hex');
@@ -139,7 +124,7 @@ export function verifyPassword(password, stored) {
 
 export const newToken = () => crypto.randomBytes(24).toString('hex');
 
-/** 生成易读兑换码，如 JMKT-7F3K-92QD-XB4M（去掉了 0/O/1/I 等易混字符） */
+ 
 export function generateCode(prefix = 'JMKT', groups = 3, size = 4) {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   const pick = (n) =>
@@ -147,9 +132,7 @@ export function generateCode(prefix = 'JMKT', groups = 3, size = 4) {
   return [prefix, ...Array.from({ length: groups }, () => pick(size))].join('-');
 }
 
-/* ------------------------------------------------------------------ *
- *  数据库
- * ------------------------------------------------------------------ */
+ 
 
 const EMPTY_DB = () => ({
   settings: { ...DEFAULT_SETTINGS },
@@ -158,22 +141,27 @@ const EMPTY_DB = () => ({
   codes: [],
   logs: [],
   orders: [],
-  activity: [],   // 登录 / 注册 / 朗读等活动审计（含 IP、浏览器）
-  records: [],    // 考生历史成绩记录（用于复盘）
-  announcements: [], // 公告栏（管理员发布，登录页展示）
-  abnormal: [],      // 账号异常公示（异常 IP / 账号 / 地址）
+  activity: [],   
+  records: [],    
+  announcements: [], 
+  abnormal: [],      
 });
 
 let db = null;
 let saveTimer = null;
 let dirty = false;
 
+const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
 function deepMerge(base, patch) {
   if (patch === null || patch === undefined) return base;
   if (Array.isArray(base) || typeof base !== 'object') return patch;
   if (typeof patch !== 'object' || Array.isArray(patch)) return patch;
   const out = { ...base };
-  for (const [k, v] of Object.entries(patch)) out[k] = deepMerge(base[k], v);
+  for (const [k, v] of Object.entries(patch)) {
+    if (UNSAFE_KEYS.has(k)) continue;
+    out[k] = deepMerge(base[k], v);
+  }
   return out;
 }
 
@@ -195,9 +183,9 @@ export function load() {
     } catch {}
     db = EMPTY_DB();
   }
-  // 配置唯一入口是网站后台（管理员在 /#admin 里填 v1 地址、密钥、模型并保存在库里）。
-  // 环境变量只在新库第一次初始化时作为初始默认值（见 EMPTY_DB），之后以数据库为准，
-  // 后台随时可改 —— 不经过部署平台的变量注入，改完立即生效。
+  
+  
+  
   if (process.env.ADMIN_PASSWORD && !db.settings.adminPasswordHash) {
     db.settings.adminPasswordHash = hashPassword(process.env.ADMIN_PASSWORD);
     save();
@@ -229,9 +217,7 @@ export function flush() {
 
 export const data = () => load();
 
-/* ------------------------------------------------------------------ *
- *  设置
- * ------------------------------------------------------------------ */
+ 
 
 export function getSettings() {
   return load().settings;
@@ -251,7 +237,7 @@ export function getPublicSettings() {
     pricing: s.pricing,
     cardBuyUrl: String(s.cardBuyUrl || '').trim(),
     emailVerify: Boolean(s.brevo?.enabled && s.brevo?.apiKey && s.brevo?.senderEmail),
-    // Brevo 配置（API Key 不下发，只给是否已设置与脱敏提示）
+    
     brevo: {
       enabled: Boolean(s.brevo?.enabled),
       apiKeySet: Boolean(s.brevo?.apiKey),
@@ -260,12 +246,12 @@ export function getPublicSettings() {
       senderName: s.brevo?.senderName || '',
     },
     security: s.security || { registrationOff: false, loginOff: false, speechOff: false },
-    // 紧急通知弹窗（前端根据 id 判断是否已读）
+    
     urgentNotice: s.urgentNotice?.enabled ? { id: s.urgentNotice.id, title: s.urgentNotice.title, body: s.urgentNotice.body } : null,
-    // Turnstile 站点密钥（公开可见；Secret 不下发）
+    
     turnstileSiteKey: String(s.turnstile?.siteKey || '').trim(),
     turnstileSecretSet: Boolean(s.turnstile?.secretKey),
-    // 语音服务配置（Key 不下发）
+    
     speechApi: {
       apiBase: s.speechApi?.apiBase || '',
       apiKeySet: Boolean(s.speechApi?.apiKey),
@@ -274,7 +260,7 @@ export function getPublicSettings() {
       ttsVoice: s.speechApi?.ttsVoice || 'alloy',
       asrModel: s.speechApi?.asrModel || 'whisper-1',
     },
-    // 配置来源（db=网站后台保存；环境变量仅作新库初始值，不锁定）
+    
     sources: configSources(s),
     locked: envLocked(s),
   };
@@ -288,9 +274,7 @@ export function updateSettings(patch) {
   return db0.settings;
 }
 
-/* ------------------------------------------------------------------ *
- *  用户
- * ------------------------------------------------------------------ */
+ 
 
 const publicUser = (u) => {
   if (!u) return null;
@@ -331,16 +315,13 @@ export function findUserById(id) {
   return load().users.find((u) => u.id === id) || null;
 }
 
-/** 手机号规范化：去掉空格、横线、+86 前缀，只保留数字 */
+ 
 export function normalizePhone(phone) {
   const d = String(phone || '').replace(/[\s-]/g, '').replace(/^\+?86/, '');
   return /^1\d{10}$/.test(d) ? d : '';
 }
 
-/**
- * 创建用户。email / phone 至少填一个，两个都填则双重绑定。
- * 任一字段已被其他账号占用则拒绝。
- */
+ 
 export function createUser({ email, phone, password, name }) {
   const db0 = load();
   const e = String(email || '').trim().toLowerCase();
@@ -375,11 +356,9 @@ export function log(action, userId = '', detail = '') {
   save();
 }
 
-/* ------------------------------------------------------------------ *
- *  考试记录（复盘用）
- * ------------------------------------------------------------------ */
+ 
 
-/** 保存一次考试的评分结果 */
+ 
 export function addRecord({ userId, topic, total, maxTotal, grade, report, paper }) {
   const db0 = load();
   const rec = {
@@ -390,7 +369,7 @@ export function addRecord({ userId, topic, total, maxTotal, grade, report, paper
     total,
     maxTotal,
     grade: grade || '',
-    // 精简报告：只留评分与诊断，不存完整试卷原文以免库太大
+    
     report,
     paperBrief: {
       topic: paper?.topic || topic || '',
@@ -398,7 +377,7 @@ export function addRecord({ userId, topic, total, maxTotal, grade, report, paper
     },
   };
   db0.records.unshift(rec);
-  // 每用户最多保留 100 条
+  
   const mine = db0.records.filter((r) => r.userId === userId);
   if (mine.length > 100) {
     const drop = new Set(mine.slice(100).map((r) => r.id));
@@ -408,7 +387,7 @@ export function addRecord({ userId, topic, total, maxTotal, grade, report, paper
   return rec;
 }
 
-/** 列出某用户的历史记录（不含完整报告） */
+ 
 export function listRecords(userId, limit = 50) {
   const db0 = load();
   return db0.records
@@ -417,15 +396,13 @@ export function listRecords(userId, limit = 50) {
     .map((r) => ({ id: r.id, at: r.at, topic: r.topic, total: r.total, maxTotal: r.maxTotal, grade: r.grade }));
 }
 
-/** 取单条完整记录 */
+ 
 export function getRecord(userId, id) {
   const db0 = load();
   return db0.records.find((r) => r.id === id && r.userId === userId) || null;
 }
 
-/* ------------------------------------------------------------------ *
- *  会话
- * ------------------------------------------------------------------ */
+ 
 
 const SESSION_TTL = 30 * 86400000;
 
@@ -458,11 +435,9 @@ export function destroySession(token) {
   }
 }
 
-/* ------------------------------------------------------------------ *
- *  额度 / 会员
- * ------------------------------------------------------------------ */
+ 
 
-/** 是否还能开考；返回 {ok, source} */
+ 
 export function checkQuota(user) {
   if (!user) return { ok: false, source: 'none', reason: '请先登录' };
   if (user.disabled) return { ok: false, source: 'none', reason: '账号已被管理员停用' };
@@ -473,7 +448,7 @@ export function checkQuota(user) {
   return { ok: false, source: 'none', reason: '免费次数已用完，请使用兑换码开通次卡或月卡' };
 }
 
-/** 消耗一次额度（优先扣免费次数 → 次卡 → 月卡不扣） */
+ 
 export function consumeQuota(user) {
   const q = checkQuota(user);
   if (!q.ok) return q;
@@ -488,9 +463,7 @@ export function consumeQuota(user) {
   return q;
 }
 
-/* ------------------------------------------------------------------ *
- *  兑换码
- * ------------------------------------------------------------------ */
+ 
 
 export function createCodes({ type, value, count = 1, note = '', prefix = 'JMKT' }) {
   const db0 = load();
@@ -594,16 +567,9 @@ export function deleteUser(id) {
   save();
 }
 
-/* ------------------------------------------------------------------ *
- *  用户数据：导出 / 导入 / 一键清空
- *  注意：导出文件包含密码哈希（scrypt 加盐），用于完整备份与还原，
- *  请只保存在自己手上，不要公开分享。
- * ------------------------------------------------------------------ */
+ 
 
-/**
- * 一键清空用户数据。
- * @param {{users?:boolean, sessions?:boolean, codes?:boolean, orders?:boolean, logs?:boolean}} scope
- */
+ 
 export function clearData(scope = {}) {
   const db0 = load();
   const done = {};
@@ -611,8 +577,8 @@ export function clearData(scope = {}) {
     done.users = db0.users.length;
     db0.users = [];
   }
-  // 用户没了，用户会话必须一起清，否则会出现"幽灵登录"；
-  // 但管理员自己的会话要保留，否则清空后立刻被踢出后台。
+  
+  
   if (scope.users !== false || scope.sessions) {
     const keepAdmin = Object.fromEntries(
       Object.entries(db0.sessions).filter(([, s]) => s && s.kind === 'admin')
@@ -661,11 +627,9 @@ export function stats() {
   };
 }
 
-/* ------------------------------------------------------------------ *
- *  公告栏 & 账号异常公示
- * ------------------------------------------------------------------ */
+ 
 
-/** 发布公告 */
+ 
 export function addAnnouncement({ title, body, level = 'info', author = 'admin' }) {
   const db0 = load();
   const item = {
@@ -683,13 +647,13 @@ export function addAnnouncement({ title, body, level = 'info', author = 'admin' 
   return item;
 }
 
-/** 公告列表；onlyActive=true 时只返回启用的（登录页用） */
+ 
 export function listAnnouncements(onlyActive = true) {
   const db0 = load();
   return (db0.announcements || []).filter((a) => (onlyActive ? a.active : true)).slice(0, 50);
 }
 
-/** 启用 / 停用公告 */
+ 
 export function toggleAnnouncement(id, active) {
   const db0 = load();
   const a = (db0.announcements || []).find((x) => x.id === id);
@@ -699,7 +663,7 @@ export function toggleAnnouncement(id, active) {
   return a;
 }
 
-/** 删除公告 */
+ 
 export function removeAnnouncement(id) {
   const db0 = load();
   const before = (db0.announcements || []).length;
@@ -708,7 +672,7 @@ export function removeAnnouncement(id) {
   return before - db0.announcements.length;
 }
 
-/** 发布账号异常公示（异常 IP / 账号 / 地址） */
+ 
 export function addAbnormal({ type = 'ip', value, reason, note }) {
   const db0 = load();
   const item = {
@@ -726,7 +690,7 @@ export function addAbnormal({ type = 'ip', value, reason, note }) {
   return item;
 }
 
-/** 异常公示列表；onlyActive=true 只返回启用的（登录页展示） */
+ 
 export function listAbnormal(onlyActive = true) {
   const db0 = load();
   return (db0.abnormal || []).filter((a) => (onlyActive ? a.active : true)).slice(0, 50);
@@ -749,11 +713,9 @@ export function removeAbnormal(id) {
   return before - db0.abnormal.length;
 }
 
-/* ------------------------------------------------------------------ *
- *  IP 封禁（持久化）
- * ------------------------------------------------------------------ */
+ 
 
-/** 判断某 IP 是否在封禁列表（支持精确匹配 + 网段前缀 + CIDR） */
+ 
 export function isIpBanned(ip) {
   if (!ip) return false;
   const v = String(ip).replace(/^::ffff:/, '');
@@ -761,12 +723,12 @@ export function isIpBanned(ip) {
   for (const b of list) {
     const target = String(b.ip || '').trim();
     if (!target) continue;
-    // CIDR 格式：1.2.3.0/24
+    
     if (target.includes('/')) {
       const [net, bitsStr] = target.split('/');
       const bits = Number(bitsStr);
       if (v.includes(':')) {
-        // IPv6 简化为前缀比对
+        
         if (Number.isFinite(bits) && bits > 0 && v.startsWith(net.slice(0, 2))) return true;
       } else {
         const mask = Number.isFinite(bits) && bits > 0 ? bits : 24;
@@ -780,17 +742,17 @@ export function isIpBanned(ip) {
         }
       }
     } else if (target.endsWith('.')) {
-      // 网段前缀：192.168.1.
+      
       if (v.startsWith(target)) return true;
     } else if (v === target) {
-      // 精确 IP
+      
       return true;
     }
   }
   return false;
 }
 
-/** 封禁一个 IP（可带网段/CIDR），返回是否新增 */
+ 
 export function banIp(ip, note = '', by = 'admin') {
   const db0 = load();
   const s = db0.settings;
@@ -812,7 +774,7 @@ export function banIp(ip, note = '', by = 'admin') {
   return { added: true };
 }
 
-/** 解封一个 IP */
+ 
 export function unbanIp(ip) {
   const db0 = load();
   const s = db0.settings;
@@ -823,12 +785,12 @@ export function unbanIp(ip) {
   return before - s.bannedIps.length;
 }
 
-/** 封禁列表 */
+ 
 export function listBannedIps() {
   return getSettings().bannedIps || [];
 }
 
-/** 移除封禁项（按 id） */
+ 
 export function removeBannedIpById(id) {
   const db0 = load();
   const s = db0.settings;
@@ -839,9 +801,7 @@ export function removeBannedIpById(id) {
   return before - s.bannedIps.length;
 }
 
-/* ------------------------------------------------------------------ *
- *  管理员
- * ------------------------------------------------------------------ */
+ 
 
 export function adminPasswordSet() {
   return Boolean(getSettings().adminPasswordHash);
@@ -857,7 +817,7 @@ export function checkAdminPassword(pw) {
   return verifyPassword(pw, s.adminPasswordHash);
 }
 
-// 进程退出前落盘
+
 for (const sig of ['SIGINT', 'SIGTERM']) {
   process.on(sig, () => {
     flush();

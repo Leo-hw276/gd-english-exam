@@ -1,14 +1,4 @@
-/**
- * 广东省初中学业水平考试（中考）英语听说考试 —— 权威考试蓝图
- *
- * 依据（均为各地市教育局官方文件，已联网核实）：
- *  - 东莞市教育局《东莞市初中学业水平考试英语听说考试说明》
- *  - 珠海市教育局《珠海市初中学业水平考试英语听说考试方案（试行）》
- *  - 茂名市教育局《茂名市初中学业水平考试英语听说考试方案》
- *  - 广州市中考听说考试题型分值表
- *
- * 结构：三大题 / 五小节 / 14 小题 / 满分 30 分 / 考试时长约 20 分钟
- */
+ 
 
 export const EXAM = {
   name: '广东省中考英语听说考试（人机对话）',
@@ -26,7 +16,7 @@ export const EXAM = {
       items: 1,
       score: 6,
       perItem: 6,
-      // 人机对话录音时间分配（东莞/珠海官方）
+      
       timing: { prepareSec: 30, recordSec: 70 },
       task:
         '屏幕呈现一段长度为 60–80 个词的英语短文，播放短文录音 1 遍。考生有 30 秒准备时间，在 70 秒内模仿朗读短文。',
@@ -156,7 +146,7 @@ export const EXAM = {
   ],
 };
 
-/** 题号分配：与官方"全卷 14 小题"一致 */
+ 
 export const ITEM_NUMBERING = {
   readAloud: [1],
   chooseInfo: [1, 2, 3, 4, 5, 6],
@@ -165,18 +155,7 @@ export const ITEM_NUMBERING = {
   askQuestions: [12, 13],
 };
 
-/**
- * 各考区「人机对话」录音时间参数
- *
- * 广东省各市题型、分值、题量完全一致（三大题 五小节 14 小题 30 分），
- * 但**准备时长与播放遍数**由各市自行规定，因此做成可切换的预设。
- *
- * readAloud.playTimes  模仿朗读录音播放遍数
- * readAloud.prepareSec 模仿朗读准备时间
- * readAloud.recordSec  模仿朗读录音时间
- * retell.prepareSec    信息转述准备时间
- * retell.recordSec     信息转述录音时间
- */
+ 
 export const CITY_PROFILES = {
   jiangmen: {
     name: '江门市',
@@ -240,9 +219,7 @@ export function partById(id) {
   return EXAM.parts.find((p) => p.id === id);
 }
 
-/* ------------------------------------------------------------------ *
- * 组卷（Paper generation）提示词
- * ------------------------------------------------------------------ */
+ 
 
 export const PAPER_SYSTEM_PROMPT = `你是一位资深的广东省初中学业水平考试（中考）英语听说考试命题专家，长期参与"人机对话"听说考试的命题与阅卷定标。
 
@@ -250,7 +227,7 @@ export const PAPER_SYSTEM_PROMPT = `你是一位资深的广东省初中学业�
 
 题材要求：紧扣《义务教育英语课程标准》话题项目表，贴近初中生日常生活（如校园生活、家庭、朋友、健康饮食、运动、旅行、志愿服务、兴趣爱好、环境保护、节日、动物、科技与生活、安全、劳动实践等），语言难度相当于人教版/沪教牛津版九年级水平，句子不宜过难，词汇不超纲。`;
 
-/** 课标话题项目表（用于在服务端预先确定话题，保证两次并行组卷内容一致） */
+ 
 export const TOPIC_POOL = [
   '校园生活与学习',
   '家庭与亲情',
@@ -283,7 +260,7 @@ const commonHead = ({ topic, difficulty, seed }) => `话题：${topic}（全套�
 难度：${difficulty}（对标九年级下学期中考水平）
 随机种子：${seed}（请在选材、人名、情景上体现差异化，不要与常见真题重复）`;
 
-/** 组卷第一批：模仿朗读 + 信息获取第一节（听选信息） */
+ 
 export function buildPaperPromptPartA({ topic, difficulty = '标准', seed }) {
   return `请命制广东省中考英语听说考试的以下部分。
 
@@ -317,7 +294,7 @@ ${commonHead({ topic, difficulty, seed })}
 再次强调：只输出一个 JSON 对象；chooseInfo 恰好 3 段，每段恰好 2 题，每题恰好 2 个选项。`;
 }
 
-/** 组卷第二批：回答问题 + 信息转述 + 询问信息 */
+ 
 export function buildPaperPromptPartB({ topic, difficulty = '标准', seed }) {
   return `请命制广东省中考英语听说考试的以下部分。
 
@@ -360,9 +337,7 @@ ${commonHead({ topic, difficulty, seed })}
 再次强调：只输出一个 JSON 对象；answerQuestions.questions 恰好 4 题；retell.outline 恰好 4 项；askQuestions 恰好 2 项。`;
 }
 
-/* ------------------------------------------------------------------ *
- * 评分（Scoring）提示词
- * ------------------------------------------------------------------ */
+ 
 
 export const SCORE_SYSTEM_PROMPT = `你是广东省中考英语听说考试（人机对话）的资深评卷员，严格依据官方评分标准定标给分。
 
@@ -405,7 +380,7 @@ function fmtMetrics(m) {
 
 export function buildReadAloudScorePrompt({ passage, transcript, metrics }) {
   const wordCount = passage.trim().split(/\s+/).filter(Boolean).length;
-  // 正常朗读 110–150 wpm → 估计读完这篇应耗时多久
+  
   const expectMs = Math.round((wordCount / 130) * 60000);
   const speechMs = Number(metrics?.speechMs) || 0;
   const voicedRatio = Number(metrics?.voicedRatio) || 0;
@@ -611,9 +586,7 @@ ${asks}
 其中 askQuestions 必须恰好 2 项（index 12、13）。`;
 }
 
-/* ------------------------------------------------------------------ *
- * 离线兜底试卷（当 API 不可用时仍可完整练习）
- * ------------------------------------------------------------------ */
+ 
 
 export const FALLBACK_PAPER = {
   topic: '志愿服务与校园生活',

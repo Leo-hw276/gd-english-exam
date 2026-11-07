@@ -1,21 +1,10 @@
-/**
- * app.js —— 广东省江门市中考英语听说考试（人机对话）在线模拟 · 主控程序
- *
- * 考试流程严格对齐江门考区官方录音时间分配：
- *   一、模仿朗读                    录音播放 1 遍 → 准备 50s → 朗读 70s
- *   二、信息获取 第一节 听选信息      阅题 10s → 录音 2 遍 → 每题作答 8s
- *   二、信息获取 第二节 回答问题      读题 15s → 录音 2 遍 → 每题作答 8s
- *   三、信息转述及询问 第一节 信息转述 读题 15s → 录音 2 遍 → 准备 50s → 转述 60s
- *   三、信息转述及询问 第二节 询问信息 每题 准备 15s → 提问 8s
- */
+ 
 
 import { Tts, Recorder, openMic, micTest, startCue, stopCue, audioCtx, listMicrophones, countdownBeeps } from './audio.js';
 import { Asr, AsrStatus, isAsrSupported, alignWords } from './speech.js';
 import { drawWave, bindWavePlayer } from './wave.js';
 
-/* ==================================================================
- *  基础工具
- * ================================================================== */
+ 
 
 export const $ = (sel, root = document) => root.querySelector(sel);
 export const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -55,7 +44,7 @@ const busy = (title, sub = '') =>
   showOverlay(`<div class="spinner"></div><h3 style="margin-bottom:6px">${esc(title)}</h3>
     <p class="muted" style="margin:0">${esc(sub)}</p>`);
 
-/** 路径 ↔ 页面映射 */
+ 
 const ROUTES = {
   '/': { screen: 'screen-intro' },
   '/login': { screen: 'screen-auth', tab: 'login' },
@@ -79,10 +68,10 @@ export function showScreen(id, opts = {}) {
   const { push = false, tab } = opts;
   $$('.screen').forEach((s) => s.classList.toggle('active', s.id === id));
   window.scrollTo(0, 0);
-  // 顶栏高亮当前页
+  
   $$('.topnav a').forEach((a) => a.classList.toggle('active', a.dataset.goto === id));
 
-  // 管理后台是独立入口：隐藏面向考生的导航与登录入口，只保留返回首页
+  
   const adminMode = id === 'screen-admin';
   document.body.classList.toggle('admin-mode', adminMode);
 
@@ -102,7 +91,7 @@ export function showScreen(id, opts = {}) {
   }
 }
 
-/** 根据当前 URL 打开对应页面（初始化 / 前进后退） */
+ 
 function syncScreenFromLocation() {
   if (location.hash === '#adminpowershell') {
     showScreen('screen-admin');
@@ -112,9 +101,7 @@ function syncScreenFromLocation() {
   showScreen(r.screen, { tab: r.tab });
 }
 
-/* ------------------------------------------------------------------ *
- *  公告栏 & 账号异常公示（登录页）
- * ------------------------------------------------------------------ */
+ 
 
 async function loadNotices() {
   const card = $('#notice-card');
@@ -132,7 +119,7 @@ async function loadNotices() {
     card.style.display = '';
     if (empty) empty.style.display = 'none';
 
-    // 公告按时间倒序，默认只显示前 3 条
+    
     const MAX_SHOW = 3;
     const renderAnns = (list) => list
       .map(
@@ -181,7 +168,7 @@ async function loadNotices() {
   }
 }
 
-/* 顶栏「公告」按钮：打开弹窗展示公告与异常公示 */
+ 
 function bindNoticeModal() {
   const openBtn = $('#btn-notice-open');
   const mask = $('#notice-modal');
@@ -225,9 +212,7 @@ function bindNoticeModal() {
   };
 }
 
-/* ==================================================================
- *  全局状态
- * ================================================================== */
+ 
 
 export const S = {
   cfg: null,
@@ -253,7 +238,7 @@ export const S = {
   startedRecording: false,
   marks: {},
   lastReport: null,
-  examAborted: false, // 考生主动结束考试 → 立刻中断所有播报与录音
+  examAborted: false, 
 };
 
 const PART_META = [
@@ -274,9 +259,7 @@ function cityCfg() {
   );
 }
 
-/* ==================================================================
- *  API 客户端
- * ================================================================== */
+ 
 
 async function api(path, body, method = 'POST') {
   const opt = { method, headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin' };
@@ -297,9 +280,7 @@ async function api(path, body, method = 'POST') {
   return data;
 }
 
-/* ==================================================================
- *  认证与账户
- * ================================================================== */
+ 
 
 async function refreshMe() {
   try {
@@ -313,7 +294,7 @@ async function refreshMe() {
   }
   renderUserChip();
   renderQuotaHint();
-  // 如果当前在账户页，登录态变化后自动刷新
+  
   if (document.querySelector('#screen-account.active')) renderAccount();
   window.dispatchEvent(new CustomEvent('jmkt:auth', { detail: { user: S.user, admin: S.isAdmin } }));
 }
@@ -355,7 +336,7 @@ function renderQuotaHint() {
   }
 }
 
-/* ---------- 验证码 ---------- */
+ 
 
 async function loadCaptcha(imgEl, idEl) {
   try {
@@ -372,9 +353,9 @@ function refreshAllCaptchas() {
   loadCaptcha($('#rg-captcha-img'), $('#rg-captcha-id'));
 }
 
-/* ---------- 邮箱验证码 ---------- */
+ 
 
-/** 根据后台开关显示/隐藏邮箱验证码输入行（图形验证码始终保留） */
+ 
 function applyEmailVerifyUi() {
   const on = Boolean(S.emailVerify);
   ['li-email-code-row', 'rg-email-code-row'].forEach((id) => {
@@ -387,10 +368,7 @@ function applyEmailVerifyUi() {
 
 let emailCodeTimer = null;
 
-/**
- * 获取邮箱验证码：必须先填图形验证码；按钮 60 秒倒计时（同一设备换邮箱也受限）
- * @param {'register'|'login'} purpose
- */
+ 
 async function requestEmailCode(purpose) {
   const isLogin = purpose === 'login';
   const email = (isLogin ? $('#li-email').value : $('#rg-email').value).trim();
@@ -404,7 +382,7 @@ async function requestEmailCode(purpose) {
     const d = await api('/api/auth/email-code', { email, purpose, captchaId, captchaCode });
     toast(d.message || '验证码已发送', 'ok', 5000);
     startResendCountdown(btn, d.resendSec || S.emailCodeResendSec || 60);
-    // 发码消耗了旧图形验证码，用服务端返回的新验证码替换
+    
     if (d.captcha) {
       const imgEl = isLogin ? $('#li-captcha-img') : $('#rg-captcha-img');
       const idEl  = isLogin ? $('#li-captcha-id')  : $('#rg-captcha-id');
@@ -421,7 +399,7 @@ async function requestEmailCode(purpose) {
   }
 }
 
-/** 60 秒倒计时：按钮禁用，结束后恢复 */
+ 
 function startResendCountdown(btn, sec) {
   if (!btn) return;
   clearInterval(emailCodeTimer);
@@ -440,13 +418,13 @@ function startResendCountdown(btn, sec) {
   }, 1000);
 }
 
-/* ---------- Cloudflare Turnstile 人机验证 ---------- */
+ 
 
-// 每个面板各一个挂件；token 为一次性，失败或提交后需要重置
+
 const turnstileWidgets = { login: null, register: null };
 const turnstileTokens = { login: '', register: '' };
 
-/** 渲染挂件（站点未配置 siteKey 时什么也不做）。Turnstile 脚本未加载完成时稍后重试 */
+ 
 function renderTurnstile(which) {
   const sk = S.turnstileSiteKey;
   const mount = document.getElementById(which === 'login' ? 'li-turnstile' : 'rg-turnstile');
@@ -457,7 +435,7 @@ function renderTurnstile(which) {
     setTimeout(() => renderTurnstile(which), 300);
     return;
   }
-  if (turnstileWidgets[which] !== null) return; // 已渲染
+  if (turnstileWidgets[which] !== null) return; 
   turnstileWidgets[which] = window.turnstile.render(mount, {
     sitekey: sk,
     callback: (token) => { turnstileTokens[which] = token; },
@@ -466,7 +444,7 @@ function renderTurnstile(which) {
   });
 }
 
-/** 失败或提交后重置挂件，拿新 token */
+ 
 function resetTurnstile(which) {
   turnstileTokens[which] = '';
   if (window.turnstile && turnstileWidgets[which] !== null) {
@@ -599,9 +577,7 @@ async function renderAccount() {
   renderHistory();
 }
 
-/* ------------------------------------------------------------------ *
- *  练习记录（复盘）
- * ------------------------------------------------------------------ */
+ 
 
 async function renderHistory() {
   const box = $('#acc-history');
@@ -652,16 +628,14 @@ async function openHistoryRecord(id) {
   }
 }
 
-/* ==================================================================
- *  收费标准页
- * ================================================================== */
+ 
 
 function renderPricing() {
   const p = S.pricing;
   const grid = $('#price-grid');
   if (!grid || !p) return;
 
-  // 购买卡密按钮：后台填了外链才显示，新窗口打开
+  
   const buyRow = $('#buy-card-row');
   const buyBtn = $('#btn-buy-card');
   if (buyRow && buyBtn) {
@@ -729,9 +703,7 @@ function renderPricing() {
   if (rg) rg.innerHTML = `<b>新用户福利：</b>${esc(p.freeTrialNote || `注册即送 ${free} 次免费听说模拟`)}`;
 }
 
-/* ==================================================================
- *  环境自检
- * ================================================================== */
+ 
 
 async function runEnvCheck() {
   const list = $('#env-list');
@@ -748,7 +720,7 @@ async function runEnvCheck() {
     S.emailCodeResendSec = health.emailCodeResendSec || 60;
     S.urgentNotice = health.urgentNotice || null;
     S.turnstileSiteKey = health.turnstileSiteKey || '';
-    // 后台绑定了语音 API → 优先使用服务端合成（音质统一），否则用浏览器本地方案
+    
     S.ttsEngine = health.ttsEngine === 'api' ? 'api' : 'edge';
     Tts.setPreferServer(S.ttsEngine === 'api');
     renderTurnstile('login');
@@ -777,7 +749,7 @@ async function runEnvCheck() {
     ok: typeof window.MediaRecorder !== 'undefined',
   });
 
-  // 语音合成：自动降级链（浏览器原生 → 服务端 edge-tts）
+  
   items.push({
     k: '语音合成（播放考试录音）',
     v: Tts.statusText(),
@@ -842,9 +814,7 @@ function fillCitySelect() {
   if (hint) hint.textContent = S.cities[S.city]?.note || '';
 }
 
-/* ==================================================================
- *  试卷结构表（江门考区）
- * ================================================================== */
+ 
 
 const SPEC_ROWS = [
   ['一、模仿朗读', '', '屏幕呈现一段 110–120 词的英语短文。录音播放 1 遍后，考生有 50 秒准备时间，在 70 秒内模仿朗读短文，须包含全部内容。', 1, 6],
@@ -866,9 +836,7 @@ function renderSpecTable() {
   ).join('');
 }
 
-/* ==================================================================
- *  舞台 & 进度
- * ================================================================== */
+ 
 
 function renderNav() {
   $('#nav-parts').innerHTML = PART_META.map((p) => {
@@ -963,9 +931,7 @@ function setRecState(on, label) {
   $('#recpanel')?.classList.toggle('live', on);
 }
 
-/* ==================================================================
- *  倒计时
- * ================================================================== */
+ 
 
 function countdown(seconds, { onTick, cancelRef } = {}) {
   return new Promise((resolve) => {
@@ -982,14 +948,12 @@ function countdown(seconds, { onTick, cancelRef } = {}) {
   });
 }
 
-/* ==================================================================
- *  录音作答（核心）
- * ================================================================== */
+ 
 
 async function recordAnswer({ seconds, key, label = '录音中', note = '', canFinishEarly = true }) {
   const cancelRef = { cancelled: false };
 
-  // 考生已提前交卷：不再开录音，直接返回空作答
+  
   if (S.examAborted) {
     markKey(key, 'done');
     return { transcript: '', metrics: null, envelope: null, audioUrl: null, endedEarly: true };
@@ -998,10 +962,10 @@ async function recordAnswer({ seconds, key, label = '录音中', note = '', canF
   renderRecPanel('#rec-mount', { timerText: seconds, note, stoppable: canFinishEarly });
   setPhase(label, 'brand');
 
-  // 关键：确保上一段考试录音彻底停下，绝不与录音作答重叠
+  
   await Tts.stopNow();
 
-  // ① 3.5 秒「滴滴」提示音 + 倒计时进度条
+  
   await countdownBeeps({
     totalMs: 3500,
     onTick: (p) => {
@@ -1014,10 +978,10 @@ async function recordAnswer({ seconds, key, label = '录音中', note = '', canF
     },
   });
 
-  // ② 语音播报「开始录音」，播报结束才开启麦克风采集
+  
   await Tts.speak(SAY.startRecord, { rate: Tts.getSpeed() });
 
-  // 播报期间考生可能已交卷，此时不能再开录音
+  
   if (S.examAborted) {
     markKey(key, 'done');
     return { transcript: '', metrics: null, envelope: null, audioUrl: null, endedEarly: true };
@@ -1069,7 +1033,7 @@ async function recordAnswer({ seconds, key, label = '录音中', note = '', canF
 
   setRecState(false, result === 'cancelled' ? '已提前结束' : '录音结束');
   await stopCue();
-  // ④ 录音结束语音播报
+  
   await Tts.speak(SAY.endRecord, { rate: Tts.getSpeed() });
 
   const asrText = asr.stop();
@@ -1078,7 +1042,7 @@ async function recordAnswer({ seconds, key, label = '录音中', note = '', canF
 
   markKey(key, 'done');
 
-  // 原生识别没拿到文字（不支持/被拒/网络不可达）→ 上传录音走服务端转写兜底
+  
   let transcript = asrText || '';
   if (!transcript && blob && blob.size > 2000) {
     transcript = await transcribeOnServer(blob);
@@ -1093,7 +1057,7 @@ async function recordAnswer({ seconds, key, label = '录音中', note = '', canF
   };
 }
 
-/** 服务端转写兜底：失败时静默返回空串，交卷仍可走纯声学评分 */
+ 
 async function transcribeOnServer(blob) {
   try {
     const r = await fetch('/api/asr', {
@@ -1117,9 +1081,7 @@ const recMountHtml = () => `
     <div class="transcript-box empty" id="reclive">等待开始录音…</div>
   </div>`;
 
-/* ==================================================================
- *  听力播放
- * ================================================================== */
+ 
 
 async function playListening(text, times, { label = '正在播放录音', asLines = null } = {}) {
   setPhase(label, 'brand');
@@ -1143,14 +1105,9 @@ async function playListening(text, times, { label = '正在播放录音', asLine
   if (box) box.innerHTML = `<b>录音播放完毕。</b>`;
 }
 
-/* ==================================================================
- *  题干播报（真实考场也是语音播报题目要求）
- * ================================================================== */
+ 
 
-/**
- * 朗读大题题干与作答要求（英文），走 TTS 降级链并受全局倍速控制。
- * @param {string} text 英文播报内容
- */
+ 
 async function announceRequirement(text, { label = '正在播报题目要求' } = {}) {
   if (!text || S.examAborted) return;
   setPhase(label, 'brand');
@@ -1159,7 +1116,7 @@ async function announceRequirement(text, { label = '正在播报题目要求' } 
   await Tts.speak(text, { rate: Tts.getSpeed() });
 }
 
-/** 供各小节使用的播报文案（考试指令用中文，只有题目内容本身是英文） */
+ 
 const SAY = {
   p1: (_playTimes, prepareSec, recordSec) =>
     `第一部分，模仿朗读。请听短文一遍。听完后有${prepareSec}秒钟准备时间，` +
@@ -1180,9 +1137,7 @@ const SAY = {
   endRecord: '录音结束。',
 };
 
-/* ==================================================================
- *  第一部分：模仿朗读
- * ================================================================== */
+ 
 
 async function runReadAloud() {
   const cfg = cityCfg().readAloud;
@@ -1207,10 +1162,10 @@ async function runReadAloud() {
   $('#nav-current').textContent = '模仿朗读';
   $('#nav-max').textContent = '6 分';
 
-  // 每大题开始前自动播报题干与作答要求
+  
   await announceRequirement(SAY.p1(cfg.playTimes, cfg.prepareSec, cfg.recordSec));
 
-  // 范文只朗读一遍，不提供重播
+  
   await playListening(p, 1, { label: '正在播放范文录音' });
 
   setPhase('准备中', 'warn');
@@ -1231,7 +1186,7 @@ async function runReadAloud() {
 
   highlightReadAloud(p, ans.transcript, ans.envelope);
   setPhase('本题结束', 'ok');
-  // 让考生看清自己的朗读波形再进入下一节（完整波形回看在成绩报告里）
+  
   if (ans.envelope) toast('朗读波形已生成，可在成绩报告中回看全部题目', 'ok', 3500);
   await sleep(2600);
 }
@@ -1263,9 +1218,7 @@ function highlightReadAloud(passage, transcript, envelope) {
   }
 }
 
-/* ==================================================================
- *  第二部分第一节：听选信息
- * ================================================================== */
+ 
 
 async function runChooseInfo() {
   const segs = S.paper.chooseInfo;
@@ -1328,9 +1281,7 @@ async function runChooseInfo() {
   }
 }
 
-/* ==================================================================
- *  第二部分第二节：回答问题
- * ================================================================== */
+ 
 
 async function runAnswerQuestions() {
   const { script, questions } = S.paper.answerQuestions;
@@ -1386,9 +1337,7 @@ async function runAnswerQuestions() {
   }
 }
 
-/* ==================================================================
- *  第三部分第一节：信息转述
- * ================================================================== */
+ 
 
 async function runRetell() {
   const cfg = cityCfg().retell;
@@ -1457,9 +1406,7 @@ async function runRetell() {
   await sleep(700);
 }
 
-/* ==================================================================
- *  第三部分第二节：询问信息
- * ================================================================== */
+ 
 
 async function runAskQuestions() {
   const asks = S.paper.askQuestions;
@@ -1503,9 +1450,7 @@ async function runAskQuestions() {
   }
 }
 
-/* ==================================================================
- *  完整流程
- * ================================================================== */
+ 
 
 async function runFullExam() {
   S.marks = {};
@@ -1551,9 +1496,7 @@ async function runFullExam() {
   await doScore();
 }
 
-/* ==================================================================
- *  评分
- * ================================================================== */
+ 
 
 function collectPayload() {
   const strip = (a) => ({ transcript: a?.transcript || '', metrics: a?.metrics || null });
@@ -1577,7 +1520,7 @@ function collectPayload() {
 }
 
 async function doScore() {
-  // 评分期间不允许任何播报或录音残留
+  
   S.examAborted = true;
   await Tts.stopNow();
   if (S.recording) {
@@ -1608,9 +1551,7 @@ async function doScore() {
   }
 }
 
-/* ==================================================================
- *  成绩报告
- * ================================================================== */
+ 
 
 function scoreColor(ratio) {
   if (ratio >= 0.85) return 'var(--ok)';
@@ -1685,7 +1626,7 @@ function renderReport(r) {
   mountAllWaves();
 }
 
-/* ---------- 录音波形回看 ---------- */
+ 
 
 function allAnswerEnvelopes() {
   const out = [];
@@ -1761,7 +1702,7 @@ function mountAllWaves() {
   });
 }
 
-/* ---------- 明细 ---------- */
+ 
 
 function verdictTag(v) {
   const map = {
@@ -1922,9 +1863,7 @@ function renderAskDetail(list) {
   </div>`;
 }
 
-/* ==================================================================
- *  作答原文 + 波形回看
- * ================================================================== */
+ 
 
 function showAnswerReview() {
   const blocks = [];
@@ -1980,9 +1919,7 @@ function showAnswerReview() {
   });
 }
 
-/* ==================================================================
- *  启动考试
- * ================================================================== */
+ 
 
 async function startExam({ offline = false } = {}) {
   if (!S.user) {
@@ -1997,7 +1934,7 @@ async function startExam({ offline = false } = {}) {
   showScreen('screen-exam');
   renderStage({ idx: '—', title: '正在组卷', body: '', phase: '生成中' });
 
-  // 百分比进度条覆层
+  
   const progressOverlay = showOverlay(
     `<div class="spinner"></div>
      <h3 style="margin-bottom:8px">${esc(offline ? '正在载入内置示例卷…' : 'DeepSeek 正在按官方题型自动命题…')}</h3>
@@ -2005,7 +1942,7 @@ async function startExam({ offline = false } = {}) {
      <div class="progress-bar"><div class="fill" id="paper-progress-fill"></div></div>
      <div class="progress-text" id="paper-progress-text">准备中…</div>`);
 
-  // 模拟进度（实际请求是单次 API，用定时器平滑推进到 90%，收到响应后跳到 100%）
+  
   let pct = 0;
   const fill = () => document.getElementById('paper-progress-fill');
   const txt = () => document.getElementById('paper-progress-text');
@@ -2063,9 +2000,7 @@ async function startExam({ offline = false } = {}) {
   }
 }
 
-/* ==================================================================
- *  麦克风试音（带实时波形）
- * ================================================================== */
+ 
 
 async function runMicTest() {
   const hint = $('#mic-hint');
@@ -2152,9 +2087,7 @@ async function runMicTest() {
   }
 }
 
-/* ==================================================================
- *  事件绑定 & 初始化
- * ================================================================== */
+ 
 
 function bind() {
   renderSpecTable();
@@ -2175,7 +2108,7 @@ function bind() {
   $('#btn-logout').onclick = doLogout;
   $('#btn-redeem').onclick = doRedeem;
 
-  // 验证码：点击图片刷新 + 切换 tab 时刷新
+  
   $('#li-captcha-img')?.addEventListener('click', () => loadCaptcha($('#li-captcha-img'), $('#li-captcha-id')));
   $('#rg-captcha-img')?.addEventListener('click', () => loadCaptcha($('#rg-captcha-img'), $('#rg-captcha-id')));
   $('#li-captcha')?.addEventListener('keydown', (e) => e.key === 'Enter' && doLogin());
@@ -2188,7 +2121,7 @@ function bind() {
   $('#rg-pass')?.addEventListener('keydown', (e) => e.key === 'Enter' && doRegister());
   $('#rd-code')?.addEventListener('keydown', (e) => e.key === 'Enter' && doRedeem());
 
-  // 全局播报倍速：原生语音用 rate，服务端音频用 playbackRate，两条通路都生效
+  
   const speedSel = $('#inp-speed');
   if (speedSel) {
     const saved = Number(localStorage.getItem('jmkt-speed') || 1);
@@ -2198,7 +2131,7 @@ function bind() {
     const applySpeed = (v) => {
       Tts.setSpeed(v);
       localStorage.setItem('jmkt-speed', String(v));
-      // 已存在的回放音频同步调速
+      
       $$('audio').forEach((a) => {
         try { a.playbackRate = v; } catch {}
       });
@@ -2214,7 +2147,7 @@ function bind() {
     $('#pane-register').style.display = btn.dataset.tab === 'register' ? '' : 'none';
   });
 
-  // 站内所有 data-goto 跳转（走 pushState，保持 URL 与页面同步）
+  
   document.addEventListener('click', (e) => {
     const a = e.target.closest('[data-goto]');
     if (!a) return;
@@ -2222,14 +2155,14 @@ function bind() {
     const target = a.dataset.goto;
     const tab = a.dataset.tab;
 
-    // 已登录用户点击「登录/注册」入口：不再跳登录页，明确提示已登录
+    
     if (target === 'screen-auth' && S.user) {
       toast(`您已登录（${S.user.email || S.user.phone}）`, 'ok', 3000);
       showScreen('screen-account', { push: true });
       return;
     }
 
-    // 离开后台时清掉 #adminpowershell，避免下次刷新又进后台
+    
     if (target !== 'screen-admin' && location.hash === '#adminpowershell') {
       try { history.replaceState(null, '', location.pathname + location.search); } catch {}
     }
@@ -2245,11 +2178,11 @@ function bind() {
 
   $('#btn-quit').onclick = async () => {
     if (!confirm('确定要结束考试并立即评分吗？未作答的题目将按 0 分计算。')) return;
-    // 1) 先立中止标记：后续所有 await 点都会立刻退出，不再继续播报/录音
+    
     S.examAborted = true;
-    // 2) 停掉正在播放的录音（原生语音 + 服务端音频）
+    
     await Tts.stopNow();
-    // 3) 停掉正在进行的录音
+    
     if (S.recording) {
       try {
         S.recording.asr?.stop();
@@ -2281,25 +2214,25 @@ function bind() {
     S.micStream?.getTracks().forEach((t) => t.stop());
   });
 
-  // 支持直接访问 /#adminpowershell 进入后台（含已在站内切换 hash 的情况）
+  
   const openAdminIfHash = () => {
     if (location.hash === '#adminpowershell') showScreen('screen-admin');
   };
   window.addEventListener('hashchange', openAdminIfHash);
 
-  // URL 路由：前进后退时按路径切换页面
+  
   window.addEventListener('popstate', () => {
-    // 浏览器前进/后退时若落在后台 hash，则进后台；否则按路径恢复
+    
     if (location.hash === '#adminpowershell') {
       showScreen('screen-admin');
     } else {
       syncScreenFromLocation();
     }
   });
-  // 首次加载的屏幕同步在 init() 里 refreshMe() 之后进行，避免 /account 未读到登录态
+  
 }
 
-/* ---------- 紧急通知弹窗 ---------- */
+ 
 
 function checkUrgentNotice() {
   const n = S.urgentNotice;
@@ -2325,13 +2258,13 @@ function checkUrgentNotice() {
 (async function init() {
   Tts.init();
   bind();
-  loadNotices(); // 立即加载公告，不等自检
-  // 调试/自动化测试入口
+  loadNotices(); 
+  
   window.__exam = { Tts, S, showScreen };
-  // 自检和登录态并行加载，加快首屏
+  
   await Promise.all([runEnvCheck(), refreshMe()]);
 
-  // 登录态就绪后再按 URL 打开对应页面（/login /signup /account /price；#adminpowershell 进后台）
+  
   syncScreenFromLocation();
   checkUrgentNotice();
 

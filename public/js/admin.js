@@ -1,13 +1,4 @@
-/**
- * admin.js —— 管理员后台
- *
- * 功能：
- *  · 配置 AI 接口（v1 地址 / API Key / 拉取模型列表 / 选择模型 / 连通性测试）
- *  · 设置定价（免费次数、次卡单价、月卡单价与天数、说明文案）→ 实时展示在「收费标准」页
- *  · 生成兑换码（次卡次数 / 月卡天数，随机字母+数字），作废、导出 CSV
- *  · 用户管理（加次数、加天数、重置免费次数、停用、删除、改密码）
- *  · 数据概览与流水日志
- */
+ 
 
 import { S, $, $$, esc, toast, showScreen } from './app.js';
 
@@ -35,13 +26,27 @@ async function api(path, body, method = 'POST') {
 const fmtTime = (t) => (t ? new Date(t).toLocaleString('zh-CN') : '—');
 const fmtDate = (t) => (t ? new Date(t).toLocaleDateString('zh-CN') : '—');
 
-/* ------------------------------------------------------------------ *
- *  登录
- * ------------------------------------------------------------------ */
+ 
+
+ 
+async function loadAdminCaptcha() {
+  const img = $('#ad-captcha-img');
+  const idEl = $('#ad-captcha-id');
+  try {
+    const d = await api('/api/captcha', undefined, 'GET');
+    if (img) { img.innerHTML = d.svg || ''; img.style.cursor = 'pointer'; }
+    if (idEl) idEl.value = d.id || '';
+  } catch {
+    if (img) img.innerHTML = '<span style="font-size:11px;color:#888">加载失败，点击重试</span>';
+  }
+}
 
 async function adminLogin() {
   const pw = $('#cfg-pass').value;
+  const captchaId = $('#ad-captcha-id')?.value || '';
+  const captchaCode = ($('#ad-captcha')?.value || '').trim();
   if (!pw) return toast('请输入密码', 'warn');
+  if (!captchaCode) return toast('请输入图形验证码', 'warn');
   const btn = $('#btn-admin-login');
   const old = btn ? btn.textContent : '';
   if (btn) {
@@ -49,10 +54,10 @@ async function adminLogin() {
     btn.textContent = '登录中…';
   }
   try {
-    await api('/api/admin/login', { account: 'admin', password: pw });
+    await api('/api/admin/login', { account: 'admin', password: pw, captchaId, captchaCode });
     $('#cfg-pass').value = '';
-    // 登录已成功：先把面板打开（配置卡片是静态 HTML，立刻可见可用），
-    // 再去读数据。这样即使部署平台冷启动慢、读取超时，也不会看不到接口配置。
+    
+    
     $('#admin-login-card').style.display = 'none';
     $('#admin-panel').style.display = '';
     adminReady = true;
@@ -60,10 +65,13 @@ async function adminLogin() {
     await loadOverview();
   } catch (e) {
     if (e.status === 401 || e.status === 403) {
-      toast('密码不正确', 'bad', 5000);
+      toast('密码或验证码不正确', 'bad', 5000);
     } else {
       toast('登录请求失败：' + e.message + '（部署平台首次访问较慢，请稍后重试）', 'bad', 7000);
     }
+    
+    if ($('#ad-captcha')) $('#ad-captcha').value = '';
+    loadAdminCaptcha();
   } finally {
     if (btn) {
       btn.disabled = false;
@@ -72,9 +80,7 @@ async function adminLogin() {
   }
 }
 
-/* ------------------------------------------------------------------ *
- *  读取概览
- * ------------------------------------------------------------------ */
+ 
 
 async function loadOverview() {
   try {
@@ -83,7 +89,7 @@ async function loadOverview() {
     $('#admin-panel').style.display = '';
     adminReady = true;
 
-    // 统计
+    
     const st = d.stats || {};
     $('#admin-stats').innerHTML = `
       <div class="stat"><div class="k">注册用户</div><div class="v">${st.users ?? 0}</div></div>
@@ -92,7 +98,7 @@ async function loadOverview() {
       <div class="stat"><div class="k">兑换码</div><div class="v">${st.codesUsed ?? 0} / ${st.codes ?? 0}</div></div>
       <div class="stat"><div class="k">估算营收</div><div class="v">¥${st.revenueEstimate ?? 0}</div></div>`;
 
-    // 接口配置（网站后台是唯一配置入口，数据库为权威来源）
+    
     const s = d.settings;
     const sources = s.sources || {};
 
@@ -115,7 +121,7 @@ async function loadOverview() {
       )}`;
     }
 
-    // 定价
+    
     const p = s.pricing || {};
     $('#cfg-free').value = p.freeTrials ?? 1;
     $('#cfg-peruse').value = p.perUse?.price ?? 1;
@@ -144,7 +150,7 @@ async function loadOverview() {
 
 const CUSTOM_MODEL = '__custom__';
 
-/** 读取当前选中的模型名（下拉框选自定义时取自定义输入框） */
+ 
 function currentModel() {
   const sel = $('#cfg-model');
   const custom = $('#cfg-model-custom');
@@ -152,10 +158,7 @@ function currentModel() {
   return (sel?.value || '').trim();
 }
 
-/**
- * 填充模型下拉框：真正的 <select>，可直接点选；
- * 末尾附「自定义模型名…」选项，供不在列表里的模型手填。
- */
+ 
 function fillModelSelect(models, current) {
   const sel = $('#cfg-model');
   const custom = $('#cfg-model-custom');
@@ -164,7 +167,7 @@ function fillModelSelect(models, current) {
 
   const arr = Array.from(new Set((models || []).filter(Boolean)));
   const cur = String(current || '').trim();
-  // 当前模型不在列表里 → 也加进去，避免被覆盖丢失
+  
   if (cur && cur !== CUSTOM_MODEL && !arr.includes(cur)) arr.unshift(cur);
 
   const opts = [`<option value="">（请选择模型）</option>`];
@@ -190,7 +193,7 @@ function fillModelSelect(models, current) {
   if (hint && arr.length) hint.textContent = `共 ${arr.length} 个可用模型`;
 }
 
-/** 下拉框切到「自定义」时显示输入框 */
+ 
 function bindModelSelect() {
   const sel = $('#cfg-model');
   const custom = $('#cfg-model-custom');
@@ -215,9 +218,7 @@ function fillRegionSelect(current) {
     : `<option value="${esc(current || 'jiangmen')}">${esc(current || 'jiangmen')}</option>`;
 }
 
-/* ------------------------------------------------------------------ *
- *  接口配置
- * ------------------------------------------------------------------ */
+ 
 
 async function fetchModels() {
   const hint = $('#cfg-model-hint');
@@ -240,7 +241,7 @@ async function testConn() {
   const hint = $('#cfg-save-hint');
   hint.textContent = '测试中，请稍候…';
   try {
-    // 传当前输入框的值：改了还没保存也能直接测
+    
     const d = await api('/api/admin/test', {
       apiBase: $('#cfg-base').value.trim() || undefined,
       apiKey: $('#cfg-key').value.trim() || undefined,
@@ -269,7 +270,7 @@ async function saveApi() {
     examRegion: $('#cfg-region').value,
     paperTemperature: Number($('#cfg-tpaper').value),
     scoreTemperature: Number($('#cfg-tscore').value),
-    // 语音服务一并保存
+    
     speechApi: {
       apiBase: $('#cfg-speech-base')?.value.trim() || '',
       apiKey: $('#cfg-speech-key')?.value.trim() || '',
@@ -292,17 +293,15 @@ async function saveApi() {
   }
 }
 
-/** 读 select 的值，如果有自定义输入框则优先读 */
+ 
 function currentSelectVal(id) {
   const sel = document.getElementById(id);
   return sel ? sel.value : '';
 }
 
-/* ------------------------------------------------------------------ *
- *  定价
- * ------------------------------------------------------------------ */
+ 
 
-/* ---------- 语音服务设置 ---------- */
+ 
 
 function renderSpeechForm(sp) {
   const el = (id) => document.getElementById(id);
@@ -316,14 +315,14 @@ function renderSpeechForm(sp) {
   if (key) key.value = '';
   if (hint) hint.textContent = sp.apiKeySet ? `已设置：${sp.apiKeyHint}（留空则不修改）` : '未设置（将使用主 API Key）';
   if (ttsV) ttsV.value = sp.ttsVoice || 'alloy';
-  // 填充 select，保留已有选项
+  
   fillSpeechSelect(ttsM, sp.ttsModel || 'tts-1');
   fillSpeechSelect(asrM, sp.asrModel || 'whisper-1');
 }
 
 function fillSpeechSelect(sel, current) {
   if (!sel) return;
-  // 如果当前值不在已有选项中，加一个
+  
   let found = false;
   for (const opt of sel.options) {
     if (opt.value === current) { found = true; break; }
@@ -341,7 +340,7 @@ async function fetchSpeechModels() {
   const hint = $('#cfg-speech-model-hint');
   hint.textContent = '拉取中…';
   try {
-    // 优先用语音 API 地址，否则用主地址
+    
     let base = $('#cfg-speech-base')?.value.trim() || $('#cfg-base')?.value.trim() || '';
     if (!base) { hint.textContent = '请先填写 API 地址'; return; }
     base = base.replace(/\/+$/, '');
@@ -354,14 +353,14 @@ async function fetchSpeechModels() {
     const d = await r.json();
     const list = (d.data || d.models || []).map((m) => m.id || m.name || m).filter(Boolean);
     if (!list.length) { hint.textContent = '未找到可用模型'; return; }
-    // 按名称分类：tts 相关放 TTS 下拉，其余放 ASR 下拉
+    
     const ttsSel = $('#cfg-speech-tts-model');
     const asrSel = $('#cfg-speech-asr-model');
     const curTts = ttsSel?.value || '';
     const curAsr = asrSel?.value || '';
     const ttsModels = list.filter((m) => /tts|speech|audio.*gen/i.test(m));
     const asrModels = list.filter((m) => /whisper|asr|transcri|audio/i.test(m));
-    // 如果分不出来，两边都放全部
+    
     const ttsOpts = ttsModels.length ? ttsModels : list;
     const asrOpts = asrModels.length ? asrModels : list;
     if (ttsSel) {
@@ -379,11 +378,11 @@ async function fetchSpeechModels() {
 }
 
 async function saveSpeech() {
-  // 语音设置已合并到 saveApi，这里直接调用
+  
   return saveApi();
 }
 
-/** 清除语音 API 绑定：朗读改用本地 Edge-TTS */
+ 
 async function useLocalSpeech() {
   const hint = $('#cfg-speech-model-hint');
   try {
@@ -397,7 +396,7 @@ async function useLocalSpeech() {
   }
 }
 
-/* ---------- 紧急通知弹窗 ---------- */
+ 
 
 function renderUrgentNotice(un) {
   const el = (id) => document.getElementById(id);
@@ -430,7 +429,7 @@ async function saveUrgentNotice() {
   }
 }
 
-/* ---------- Cloudflare Turnstile 设置 ---------- */
+ 
 
 function renderTurnstileForm(s) {
   const site = document.getElementById('cfg-ts-site');
@@ -459,7 +458,7 @@ async function saveTurnstile() {
   }
 }
 
-/** 邮箱验证码设置：Key 不回显，只显示是否已设置 */
+ 
 function renderBrevoForm(b) {
   $('#cfg-brevo-on').checked = Boolean(b.enabled);
   $('#cfg-brevo-from').value = b.senderEmail || '';
@@ -506,7 +505,7 @@ async function savePricing() {
     });
     hint.textContent = '已保存';
     toast('定价已更新，前台收费页立即生效', 'ok');
-    // 同步到本地状态，前台收费页立刻刷新
+    
     const h = await api('/api/health', undefined, 'GET');
     S.pricing = h.pricing;
     await loadOverview();
@@ -515,9 +514,7 @@ async function savePricing() {
   }
 }
 
-/* ------------------------------------------------------------------ *
- *  安全管控（紧急开关）
- * ------------------------------------------------------------------ */
+ 
 
 async function saveSecurity() {
   const hint = $('#sec-hint');
@@ -544,9 +541,7 @@ function renderSecurity(sec) {
   if ($('#sec-speech-off')) $('#sec-speech-off').checked = Boolean(s.speechOff);
 }
 
-/* ------------------------------------------------------------------ *
- *  公告栏 & 账号异常公示（管理员）
- * ------------------------------------------------------------------ */
+ 
 
 async function saveNotices() {
   const d = await api('/api/admin/notices', { action: 'list' });
@@ -645,9 +640,7 @@ async function addAbnormal() {
   }
 }
 
-/* ------------------------------------------------------------------ *
- *  IP 封禁
- * ------------------------------------------------------------------ */
+ 
 
 async function loadBanned() {
   const d = await api('/api/admin/notices', { action: 'listBanned' });
@@ -680,7 +673,7 @@ function renderBanned(list) {
   });
 }
 
-/** 脚本访问防护设置：阈值与窗口 */
+ 
 function renderScriptGuard(g) {
   const cb = $('#sg-enabled');
   if (!cb) return;
@@ -737,9 +730,7 @@ async function banIp() {
   }
 }
 
-/* ------------------------------------------------------------------ *
- *  定价说明配图
- * ------------------------------------------------------------------ */
+ 
 let currentImage = '';
 
 function renderImagePreview(url) {
@@ -788,9 +779,7 @@ async function uploadImage() {
   }
 }
 
-/* ------------------------------------------------------------------ *
- *  用户数据：导出 / 导入 / 一键清空
- * ------------------------------------------------------------------ */
+ 
 
 async function clearUsers() {
   const hint = $('#cfg-user-hint');
@@ -895,9 +884,7 @@ async function exportCodes() {
   }
 }
 
-/* ------------------------------------------------------------------ *
- *  用户管理
- * ------------------------------------------------------------------ */
+ 
 
 function renderUsers(users) {
   const tb = $('#cfg-user-table tbody');
@@ -961,9 +948,7 @@ async function userAction(patch, msg) {
   }
 }
 
-/* ------------------------------------------------------------------ *
- *  日志
- * ------------------------------------------------------------------ */
+ 
 
 function renderLogs(logs) {
   const tb = $('#cfg-log-table tbody');
@@ -981,9 +966,7 @@ function renderLogs(logs) {
     : '<tr><td colspan="3" class="muted">暂无日志。</td></tr>';
 }
 
-/* ------------------------------------------------------------------ *
- *  安全审计日志
- * ------------------------------------------------------------------ */
+ 
 
 const fmtKind = (k) => ({ login: '登录', register: '注册', read: '朗读', blocked: '拦截', visit: '访问', score: '评分', paper: '组卷', 'admin-login': '管理员登录' }[k] || k);
 
@@ -1054,13 +1037,13 @@ async function clearActivity() {
   }
 }
 
-/* ------------------------------------------------------------------ *
- *  绑定
- * ------------------------------------------------------------------ */
+ 
 
 function bind() {
   $('#btn-admin-login')?.addEventListener('click', adminLogin);
   $('#cfg-pass')?.addEventListener('keydown', (e) => e.key === 'Enter' && adminLogin());
+  $('#ad-captcha-img')?.addEventListener('click', loadAdminCaptcha);
+  loadAdminCaptcha();
   $('#btn-admin-refresh')?.addEventListener('click', () => loadOverview().then(() => toast('已刷新', 'ok', 1500)));
   bindModelSelect();
   $('#btn-brevo-save')?.addEventListener('click', saveBrevo);
@@ -1090,7 +1073,7 @@ function bind() {
   $('#btn-admin-gen')?.addEventListener('click', genCodes);
   $('#btn-admin-export')?.addEventListener('click', exportCodes);
 
-  // 活动日志
+  
   $('#btn-act-query')?.addEventListener('click', queryActivity);
   $('#btn-act-stats')?.addEventListener('click', activityStats);
   $('#btn-act-clear')?.addEventListener('click', clearActivity);
@@ -1099,7 +1082,7 @@ function bind() {
 
 bind();
 
-// 登录态变化时自动加载 / 卸载后台
+
 window.addEventListener('jmkt:auth', (e) => {
   if (e.detail?.admin) {
     loadOverview();
@@ -1110,13 +1093,13 @@ window.addEventListener('jmkt:auth', (e) => {
   }
 });
 
-// 进入后台时若已登录，自动拉数据
+
 document.addEventListener('click', (e) => {
   const a = e.target.closest('[data-goto="screen-admin"]');
   if (a && (adminReady || S.isAdmin)) setTimeout(loadOverview, 50);
 });
 
-// 首次进入显示提示
+
 (async () => {
   try {
     const d = await api('/api/auth/me', undefined, 'GET');

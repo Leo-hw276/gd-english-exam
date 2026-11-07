@@ -1,13 +1,4 @@
-/**
- * 广东中考英语听说考试在线练习系统 —— 后端服务
- *
- * 职责：
- *  1. 托管前端静态页面
- *  2. 代理 DeepSeek-V4-Flash，用于「自动组卷」与「智能评分」
- *  3. 把 5 个部分的得分合成为满分 30 分的总分
- *
- * 启动： node server.mjs [--port 8777]
- */
+ 
 
 import http from 'node:http';
 import fs from 'node:fs';
@@ -56,7 +47,7 @@ import * as DB from './data/store.mjs';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
-/* ---------- 活动审计日志（登录/注册/朗读/风控事件）---------- */
+ 
 const Activity = makeActivityStore((events) => {
   try {
     const db0 = DB.data();
@@ -64,15 +55,11 @@ const Activity = makeActivityStore((events) => {
     DB.save();
   } catch {}
 });
-// 从持久化数据中恢复
+
 try { Activity.load(DB.data().activity); } catch {}
 
-/**
- * 记录一次访问/操作到安全日志。
- * 统一补齐：时间、IP、浏览器、系统、地理位置（服务端静默反查）。
- * 不阻塞主流程：地址反查异步进行，事件先入日志、地址稍后补写。
- */
-const geoPromises = new Map(); // ip -> Promise
+ 
+const geoPromises = new Map(); 
 function logVisit(req, kind, fields = {}) {
   const ip = clientIp(req);
   const ua = req.headers['user-agent'] || '';
@@ -87,7 +74,7 @@ function logVisit(req, kind, fields = {}) {
     ua: ua.slice(0, 220),
     ...fields,
   });
-  // 异步补地址（不阻塞请求）
+  
   if (ip && ip !== 'unknown') {
     const doGeo = async () => {
       try {
@@ -104,37 +91,33 @@ function logVisit(req, kind, fields = {}) {
   return rec;
 }
 
-/* ---------- Edge-TTS 缓存目录 ---------- */
+ 
 try { setTtsCacheDir(path.join(__dirname, 'data', 'tts-cache')); } catch {}
 
-/* ---------- 限流预设 ---------- */
+ 
 const RL = {
-  // 注册：每 IP 每 10 分钟最多 5 次
+  
   register: (ip) => rateLimit(`reg:${ip}`, { windowMs: 10 * 60_000, max: 5 }),
-  // 登录：每 IP 每 5 分钟最多 10 次
+  
   login: (ip) => rateLimit(`login:${ip}`, { windowMs: 5 * 60_000, max: 10 }),
-  // 管理员登录：最敏感入口，比用户登录更严 —— 每 IP 每 5 分钟最多 5 次尝试
+  
   adminLogin: (ip) => rateLimit(`adm-login:${ip}`, { windowMs: 5 * 60_000, max: 5 }),
-  // 验证码请求：每 IP 每分钟最多 120 次
-  // 学校机房多台设备共用一个出口 IP，限得太死会导致整班同学都刷不出验证码
+  
+  
   captcha: (ip) => rateLimit(`cap:${ip}`, { windowMs: 60_000, max: 120 }),
-  // 邮件验证码发送：每 IP 每 10 分钟最多 10 次（防脚本批量轰炸）
+  
   emailCode: (ip) => rateLimit(`ec:${ip}`, { windowMs: 10 * 60_000, max: 10 }),
-  // 组卷：每用户每分钟 3 次
+  
   paper: (uid) => rateLimit(`paper:${uid}`, { windowMs: 60_000, max: 3 }),
-  // 通用 API：每 IP 每分钟 120 次
+  
   api: (ip) => rateLimit(`api:${ip}`, { windowMs: 60_000, max: 120 }),
-  // TTS：每 IP 每分钟 40 次
+  
   tts: (ip) => rateLimit(`tts:${ip}`, { windowMs: 60_000, max: 40 }),
 };
 
-/* ---------------------------- 配置 ---------------------------- */
+ 
 
-/**
- * 运行期配置全部来自「数据库设置」，管理员可在后台随时改：
- *   apiKey / apiBase / model / pricing ...
- * 环境变量在 store.load() 里已做最高优先级覆盖。
- */
+ 
 function getCfg() {
   const s = DB.getSettings();
   return {
@@ -151,7 +134,7 @@ function argValue(flag) {
   return i >= 0 ? process.argv[i + 1] : undefined;
 }
 
-/* ------------------------ LLM 调用封装 ------------------------ */
+ 
 
 class LlmError extends Error {
   constructor(message, status) {
@@ -160,25 +143,13 @@ class LlmError extends Error {
   }
 }
 
-/**
- * 调用模型（强制使用流式）
- *
- * 重要：本网关对**非流式**请求有约 30 秒的上游超时，超时即返回 524。
- * 组卷/评分的长输出必然超过 30 秒，因此这里始终使用 SSE 流式请求，
- * 边收边拼，既避免超时，也能更早发现连接异常。
- */
-/* ---- 模型调用的时间预算（可用环境变量覆盖）----
- * 网关偶发「连上了但一直不吐字」的情况，若不设停滞看门狗，请求会一直挂着，
- * 既拖垮体验，也让本地降级迟迟不触发。这里三层保护：
- *   1. 停滞看门狗：连续 STALL_MS 没有收到任何数据 → 主动断开
- *   2. 单次总超时：一次调用最长 TIMEOUT_MS
- *   3. 自动重试：可重试错误（超时/5xx/限流）再试 RETRIES 次
- */
+ 
+ 
 const LLM_TIMEOUT_MS = Math.max(15_000, Number(process.env.EXAM_LLM_TIMEOUT_MS || 120_000));
 const LLM_STALL_MS = Math.max(8_000, Number(process.env.EXAM_LLM_STALL_MS || 45_000));
 const LLM_RETRIES = Math.max(0, Math.min(3, Number(process.env.EXAM_LLM_RETRIES || 1)));
 
-/** 这些状态码值得重试；其余（如 401 令牌错误、400 参数错误）重试也没用 */
+ 
 const RETRYABLE = new Set([408, 409, 425, 429, 500, 502, 503, 504]);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -217,7 +188,7 @@ async function callChat({ apiKey, apiBase, model, system, user, temperature, max
       if (watchdog) clearTimeout(watchdog);
     };
 
-    bump(); // 连接/首字节也要受看门狗约束
+    bump(); 
 
     let res;
     try {
@@ -268,7 +239,7 @@ async function callChat({ apiKey, apiBase, model, system, user, temperature, max
             const legacyText = j.choices?.[0]?.message?.content;
             if (!d?.content && legacyText) content += legacyText;
             if (j.usage) usage = j.usage;
-            // 网关有时把上游错误塞在流里
+            
             if (j.error) {
               cleanup();
               return {
@@ -278,7 +249,7 @@ async function callChat({ apiKey, apiBase, model, system, user, temperature, max
               };
             }
           } catch {
-            /* 忽略无法解析的心跳片段 */
+             
           }
         }
       }
@@ -292,16 +263,16 @@ async function callChat({ apiKey, apiBase, model, system, user, temperature, max
     cleanup();
 
     if (!content.trim()) {
-      // 有内容但解析为空，也可能是被中断；内容本身为空则重试价值不大
+      
       return { error: stalled ? '模型服务无响应' : '模型返回内容为空', status: 502, retryable: stalled };
     }
     return { content, usage };
   };
 
-  /** 一次完整尝试：json 兼容性降级 + 可重试错误的退避重试 */
+   
   const attempt = async () => {
     let out = await run(Boolean(json));
-    // 部分网关不支持 response_format，去掉后重试
+    
     if (out.error && json && /response_format|json_object|unsupported|invalid.*param|bad_request/i.test(out.error)) {
       out = await run(false);
     }
@@ -324,7 +295,7 @@ async function callChat({ apiKey, apiBase, model, system, user, temperature, max
   return { content: out.content, usage: out.usage };
 }
 
-/** 计算补齐末尾括号所需的字符串 */
+ 
 function closeBrackets(s) {
   const stack = [];
   let inStr = false;
@@ -346,7 +317,7 @@ function closeBrackets(s) {
   return out;
 }
 
-/** 末尾是否有未闭合的字符串 */
+ 
 function endsInString(s) {
   let inStr = false;
   let esc = false;
@@ -363,33 +334,30 @@ function endsInString(s) {
   return inStr;
 }
 
-/**
- * 修复被截断的 JSON：逐级去掉残缺的尾部片段，再补齐括号，直到能解析。
- * 模型输出被 max_tokens 截断时，这样能救回大部分已生成的内容。
- */
+ 
 function repairTruncatedJson(tail) {
   let cur = String(tail).replace(/\s+$/, '');
   for (let round = 0; round < 60; round++) {
     let c = cur;
 
-    // 1) 去掉末尾的逗号/冒号
+    
     c = c.replace(/[,:\s]+$/, '');
 
-    // 2) 若结束在字符串内部：砍掉这个未完成的字符串及其键名
+    
     if (endsInString(c)) {
       const q = c.lastIndexOf('"');
       c = q >= 0 ? c.slice(0, q) : c;
       c = c.replace(/[,:\s]+$/, '');
-      c = c.replace(/"[^"]*"\s*:\s*$/, ''); // 去掉只剩键名的残缺项
+      c = c.replace(/"[^"]*"\s*:\s*$/, ''); 
       c = c.replace(/[,:\s]+$/, '');
     }
 
-    // 3) 补齐括号后尝试解析
+    
     const full = c + closeBrackets(c);
     const got = tryParseJson(full);
     if (got) return got;
 
-    // 4) 还是不行 → 去掉最后一个元素，继续
+    
     const idx = c.lastIndexOf(',');
     if (idx < 0) break;
     cur = c.slice(0, idx);
@@ -397,7 +365,7 @@ function repairTruncatedJson(tail) {
   return null;
 }
 
-/** 宽松解析：先直接解析，失败再修尾逗号 */
+ 
 function tryParseJson(str) {
   try {
     return JSON.parse(str);
@@ -410,7 +378,7 @@ function tryParseJson(str) {
   }
 }
 
-/** 从可能夹带解释文字/Markdown 围栏的回复中提取第一个完整 JSON 对象 */
+ 
 function extractJson(text) {
   if (!text) throw new LlmError('模型未返回内容', 502);
   let s = String(text).trim();
@@ -446,7 +414,7 @@ function extractJson(text) {
     }
   }
 
-  // JSON 被截断 → 尝试修复
+  
   const repaired = repairTruncatedJson(tail);
   if (repaired) {
     console.warn('[json] 输出被截断，已修复后解析成功');
@@ -455,7 +423,7 @@ function extractJson(text) {
   throw new LlmError('模型返回的 JSON 不完整', 502);
 }
 
-/* --------------------------- 组卷校验 --------------------------- */
+ 
 
 const num = (v, d = 0) => (typeof v === 'number' && isFinite(v) ? v : d);
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, num(v, lo)));
@@ -465,7 +433,7 @@ const arr = (v) => (Array.isArray(v) ? v : []);
 
 function normalizeQuestion(q, fallbackOptions, fallbackIndex) {
   const options = arr(q?.options).map((o) => str(o)).filter(Boolean);
-  // 兼容「一问两答」与官方三选项两种题型
+  
   const ok = options.length === 2 || options.length === 3;
   return {
     q: str(q?.q ?? q?.question, 'Question'),
@@ -475,7 +443,7 @@ function normalizeQuestion(q, fallbackOptions, fallbackIndex) {
   };
 }
 
-/** 校验并规整组卷第一批：模仿朗读 + 听选信息 */
+ 
 function validatePartA(raw) {
   const p = raw && typeof raw === 'object' ? raw : {};
   const errors = [];
@@ -499,7 +467,7 @@ function validatePartA(raw) {
   return { ok: true, data: { readAloud: { passage }, chooseInfo: segs.slice(0, 3) } };
 }
 
-/** 校验并规整组卷第二批：回答问题 + 信息转述 + 询问信息 */
+ 
 function validatePartB(raw) {
   const p = raw && typeof raw === 'object' ? raw : {};
   const errors = [];
@@ -543,7 +511,7 @@ function validatePartB(raw) {
   };
 }
 
-/** 把失败的那一半用内置备用卷补齐，保证考试一定能开始 */
+ 
 function mergeWithFallback({ partA, partB, topic, notes }) {
   const a = partA || { readAloud: FALLBACK_PAPER.readAloud, chooseInfo: FALLBACK_PAPER.chooseInfo };
   const b =
@@ -566,7 +534,7 @@ function mergeWithFallback({ partA, partB, topic, notes }) {
   };
 }
 
-/* --------------------------- 评分合成 --------------------------- */
+ 
 
 function normalizeReadAloud(raw) {
   const score = round1(clamp(raw?.score, 0, 6));
@@ -598,7 +566,7 @@ function normalizeReadAloud(raw) {
   const sum = round1(
     out.dimensions.pronunciation.score + out.dimensions.intonation.score + out.dimensions.fluency.score
   );
-  if (Math.abs(sum - out.score) <= 0.6) out.score = sum; // 让维度分与总分自洽
+  if (Math.abs(sum - out.score) <= 0.6) out.score = sum; 
   out.score = round1(clamp(out.score, 0, 6));
   return out;
 }
@@ -617,7 +585,7 @@ function normalizeItemList(rawList, { startIndex, count, perItem }) {
       ? it.verdict
       : 'wrong';
     let score = clamp(it?.score, 0, perItem);
-    if (verdict === 'correct' && score < perItem * 0.66) score = perItem; // 正确必给满分（除明确扣分说明）
+    if (verdict === 'correct' && score < perItem * 0.66) score = perItem; 
     if (verdict === 'blank') score = 0;
     if (verdict === 'wrong') score = 0;
     out.push({
@@ -693,7 +661,7 @@ function gradeLabel(total) {
   return { label: '待提高 D', color: '#f04438' };
 }
 
-/* ---------------------------- HTTP ---------------------------- */
+ 
 
 function sendJson(res, status, obj) {
   const body = JSON.stringify(obj);
@@ -724,7 +692,7 @@ function readBody(req, limit = 12 * 1024 * 1024) {
   });
 }
 
-/** 读取原始二进制请求体（用于音频上传） */
+ 
 function readBodyRaw(req, limit = 12 * 1024 * 1024) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -755,6 +723,25 @@ const MIME = {
   '.woff2': 'font/woff2',
 };
 
+ 
+const SEC_HEADERS = {
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'Referrer-Policy': 'no-referrer',
+};
+
+ 
+const HTML_CSP =
+  "default-src 'self'; " +
+  "script-src 'self' https://challenges.cloudflare.com; " +
+  "style-src 'self' 'unsafe-inline'; " +
+  "img-src 'self' data: blob:; " +
+  "media-src 'self' data: blob:; " +
+  "connect-src 'self'; " +
+  'frame-src https://challenges.cloudflare.com; ' +
+  "font-src 'self' data:; " +
+  "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
+
 function serveStatic(res, urlPath) {
   const rel = urlPath === '/' ? '/index.html' : urlPath;
   const safe = path.normalize(rel).replace(/^([/\\])+/, '');
@@ -765,7 +752,7 @@ function serveStatic(res, urlPath) {
   }
   fs.readFile(full, (err, buf) => {
     if (err) {
-      // SPA 路由兜底：无扩展名的页面路径返回 index.html（/login /signup /account /price）
+      
       if (!path.extname(urlPath)) {
         return fs.readFile(path.join(PUBLIC_DIR, 'index.html'), (e2, idx) => {
           if (e2) {
@@ -775,6 +762,8 @@ function serveStatic(res, urlPath) {
           res.writeHead(200, {
             'Content-Type': 'text/html; charset=utf-8',
             'Cache-Control': 'no-store',
+            'Content-Security-Policy': HTML_CSP,
+            ...SEC_HEADERS,
           });
           res.end(idx);
         });
@@ -782,15 +771,19 @@ function serveStatic(res, urlPath) {
       res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }).end('404 Not Found');
       return;
     }
-    res.writeHead(200, {
-      'Content-Type': MIME[path.extname(full).toLowerCase()] || 'application/octet-stream',
+    const ext = path.extname(full).toLowerCase();
+    const headers = {
+      'Content-Type': MIME[ext] || 'application/octet-stream',
       'Cache-Control': 'no-cache',
-    });
+      ...SEC_HEADERS,
+    };
+    if (ext === '.html') headers['Content-Security-Policy'] = HTML_CSP;
+    res.writeHead(200, headers);
     res.end(buf);
   });
 }
 
-/** 仅管理员可通过请求头临时覆盖 Key；普通用户一律用后台配置的 Key */
+ 
 function apiKeyFor(req, cfg, session) {
   if (session?.kind === 'admin') {
     const hdr = req.headers['x-api-key'];
@@ -799,12 +792,12 @@ function apiKeyFor(req, cfg, session) {
   return cfg.apiKey;
 }
 
-/* --------------------------- 路由处理 --------------------------- */
+ 
 
 async function handlePaper(req, res, cfg, session, user) {
   const raw = await readBody(req);
 
-  // 开考前先校验额度（真正的扣费在交卷评分时进行）
+  
   const q = DB.checkQuota(user);
   if (!q.ok) return sendJson(res, 402, { ok: false, error: q.reason, quota: q });
 
@@ -822,11 +815,11 @@ async function handlePaper(req, res, cfg, session, user) {
     return sendJson(res, 200, { ok: true, paper: { ...FALLBACK_PAPER, offline: true } });
   }
 
-  // 在服务端预先确定话题，保证两次并行组卷围绕同一话题
+  
   const topic = str(opts.topic, '') || pickTopic(seed);
   const difficulty = str(opts.difficulty, '标准');
 
-  /** 单批组卷：带一次重试 */
+   
   const generate = async (label, prompt, validate, maxTokens) => {
     for (let attempt = 1; attempt <= 2; attempt++) {
       const t0 = Date.now();
@@ -860,7 +853,7 @@ async function handlePaper(req, res, cfg, session, user) {
     return { error: '未知错误' };
   };
 
-  // 两批并行组卷 —— 输出更短、更快，且任何一批失败都能用备用材料补齐
+  
   const [resA, resB] = await Promise.all([
     generate('A', buildPaperPromptPartA({ topic, difficulty, seed }), validatePartA, 4500),
     generate('B', buildPaperPromptPartB({ topic, difficulty, seed }), validatePartB, 5000),
@@ -885,20 +878,11 @@ async function handlePaper(req, res, cfg, session, user) {
   });
 }
 
-/* ==================================================================
- *  本地降级评分
- *
- *  模型网关偶发 502/504 时，若直接报错，考生既拿不到报告、额度又被扣掉。
- *  因此这里用纯客观规则兜底：逐词比对 + 要点覆盖 + 声学指标，
- *  保证「任何情况下都能交卷拿到分数」，并在报告里明确标注哪几节是本地评分。
- * ================================================================== */
+ 
 
 const wordList = (s) => String(s || '').toLowerCase().match(/[a-z']+/g) || [];
 
-/**
- * 两个词是否「算读对了」——容忍语音识别误差。
- * 规则：完全相同 / 词干相同（think–thinking）/ 编辑距离很小 / 常见同音混淆。
- */
+ 
 const HOMOPHONE_GROUPS = [
   ['there', 'their', "they're"],
   ['to', 'too', 'two'],
@@ -952,18 +936,18 @@ function editDistance(a, b) {
 function sameWord(a, b) {
   if (!a || !b) return false;
   if (a === b) return true;
-  // 词干相同：thinking / think，books / book
+  
   const stem = (w) => w.replace(/(ing|ed|es|s|ly|er|est)$/, '');
   if (stem(a) === stem(b) && Math.min(a.length, b.length) >= 3) return true;
-  // 常见同音词
+  
   for (const g of HOMOPHONE_GROUPS) if (g.includes(a) && g.includes(b)) return true;
-  // 编辑距离：短词容 1，长词容 2
+  
   const d = editDistance(a, b);
   const toll = Math.min(a.length, b.length) <= 4 ? 1 : 2;
   return d <= toll;
 }
 
-/** 参考文本的词汇被覆盖的比例（0–1），容忍识别误差 */
+ 
 function wordCoverage(reference, heard) {
   const ref = [...new Set(wordList(reference))].filter((w) => w.length > 1);
   if (!ref.length) return 0;
@@ -975,7 +959,7 @@ function wordCoverage(reference, heard) {
   return hit / ref.length;
 }
 
-/** 逐词对齐正确率：用最长公共子序列估计朗读准确度（容忍识别误差） */
+ 
 function seqAccuracy(reference, heard) {
   const a = wordList(reference);
   const b = wordList(heard);
@@ -993,7 +977,7 @@ function seqAccuracy(reference, heard) {
   return clamp(dp[b.length] / a.length, 0, 1);
 }
 
-/** 由声学指标估计「开口质量」0–1 */
+ 
 function acousticQuality(metrics) {
   if (!metrics) return 0.4;
   const voiced = clamp(metrics.voicedRatio, 0, 1);
@@ -1028,7 +1012,7 @@ function localReadAloud(paper, answers) {
   const pauseCount = num(metrics?.pauseCount, 0);
   const expectMs = words ? Math.round((words / 130) * 60000) : 0;
   const durRatio = expectMs ? speechMs / expectMs : 0;
-  // 没有转写，但确实持续朗读了一段合理时长 → 属于识别不可用，不是没读
+  
   const spokeWithoutAsr = !transcript && voicedRatio >= 0.3 && durRatio >= 0.5;
 
   const acc = transcript ? seqAccuracy(passage, transcript) : 0;
@@ -1038,7 +1022,7 @@ function localReadAloud(paper, answers) {
   if (transcript) {
     ratio = clamp(acc * 0.65 + aq * 0.35, 0, 1);
   } else if (spokeWithoutAsr) {
-    // 仅凭声学指标估分：读完整篇 + 发声连贯 + 停顿少
+    
     const durScore = clamp(durRatio, 0, 1);
     const fluency = clamp(voicedRatio / 0.75, 0, 1);
     const pausePenalty = clamp(1 - pauseCount / Math.max(6, Math.round(words / 12)), 0, 1);
@@ -1058,7 +1042,7 @@ function localReadAloud(paper, answers) {
     [0, 'F'],
   ]);
 
-  // 找出漏读的词（参考里没被听到的实词）
+  
   const heardSet = new Set(wordList(transcript));
   const missed = [...new Set(wordList(passage))].filter((w) => w.length > 2 && !heardSet.has(w)).slice(0, 20);
 
@@ -1175,7 +1159,7 @@ function localRetellAsk(paper, answers) {
   const metrics = answers?.retell?.metrics || null;
 
   const covered = outline.filter((o) => wordCoverage(o, heard) >= 0.35 || wordCoverage(script, heard) >= 0.3);
-  // 若大纲要点识别不到，退化为「与原文词汇覆盖度」
+  
   const scriptCov = heard ? wordCoverage(script, heard) : 0;
   const corpus = covered.length ? covered.map((_, i) => outline[i]).join(' ') : script;
   const cov = heard ? Math.max(scriptCov, wordCoverage(corpus, heard)) : 0;
@@ -1260,12 +1244,12 @@ async function handleScore(req, res, cfg, session, user) {
     return sendJson(res, 400, { ok: false, error: '缺少 paper 或 answers' });
   }
 
-  // 先校验额度，但**先不扣**：只有成功产出报告才扣费
+  
   const preCheck = DB.checkQuota(user);
   if (!preCheck.ok) return sendJson(res, 402, { ok: false, error: preCheck.reason, quota: preCheck });
 
   const apiKey = apiKeyFor(req, cfg, session);
-  // 评分要输出较长 JSON，给比组卷更宽裕的停滞超时
+  
   const common = { apiKey, apiBase: cfg.apiBase, model: cfg.model, stallMs: 90_000 };
 
   const tasks = [
@@ -1332,7 +1316,7 @@ async function handleScore(req, res, cfg, session, user) {
     console.warn('[score] 三路 AI 评分全部失败，全部降级为本地规则评分：', errors.join('；'));
   }
 
-  // AI 评委不可用时改用本地客观规则，保证考生始终拿得到报告、额度不白扣
+  
   const localWarnings = [];
   if (!result.readAloud) {
     result.readAloud = localReadAloud(paper, answers);
@@ -1347,7 +1331,7 @@ async function handleScore(req, res, cfg, session, user) {
     localWarnings.push('「信息转述及询问」本次由本地规则评分（要点覆盖匹配），AI 评委暂不可用');
   }
 
-  /* ---- 合成 30 分总分 ---- */
+   
   const readAloud = normalizeReadAloud(result.readAloud || {});
   const chooseInfo = normalizeItemList(result.info?.chooseInfo, {
     startIndex: 1,
@@ -1418,7 +1402,7 @@ async function handleScore(req, res, cfg, session, user) {
         .join(' ')
   );
 
-  // 报告已成功生成，此刻才真正扣减额度（评分失败不扣费）
+  
   const quota = DB.consumeQuota(user);
   report.quotaAfter = {
     source: quota.source,
@@ -1427,7 +1411,7 @@ async function handleScore(req, res, cfg, session, user) {
     proActive: Boolean(user.proUntil && user.proUntil > Date.now()),
   };
 
-  // 保存历史记录，供考生复盘
+  
   try {
     report.recordId = DB.addRecord({
       userId: user.id,
@@ -1475,28 +1459,26 @@ async function handleHealth(req, res, cfg) {
     pricing: s.pricing,
     siteName: s.siteName,
     authRequired: true,
-    // 卡密购买外链（空 = 不显示按钮）
+    
     cardBuyUrl: String(s.cardBuyUrl || '').trim(),
-    // 邮箱验证码是否开启（前端据此显示验证码输入框；Key 不下发）
+    
     emailVerify: emailVerifyOn(),
     emailCodeResendSec: Brevo.RESEND_SEC,
-    // Turnstile 站点密钥（公开，前端渲染挂件用；未配置则为空）
+    
     turnstileSiteKey: String(s.turnstile?.siteKey || '').trim(),
-    // 朗读引擎：后台绑定了语音 API → 'api'（前端优先走服务端 TTS）；否则 'edge'
+    
     ttsEngine: (() => {
       const sp = s.speechApi || {};
       const base = String(sp.apiBase || '').trim();
       const key = String(sp.apiKey || s.apiKey || '').trim();
       return base && key ? 'api' : 'edge';
     })(),
-    // 紧急通知弹窗（前端据此弹窗；未开启时不下发）
+    
     urgentNotice: s.urgentNotice?.enabled ? { id: s.urgentNotice.id, title: s.urgentNotice.title, body: s.urgentNotice.body } : null,
   });
 }
 
-/* ==================================================================
- *  认证 / 会员 / 兑换码 / 管理员 接口
- * ================================================================== */
+ 
 
 const cookieVal = (req, name) => {
   const raw = req.headers.cookie || '';
@@ -1507,7 +1489,7 @@ const cookieVal = (req, name) => {
   return '';
 };
 
-/** 按令牌取会话，可限定类型（'user' / 'admin'） */
+ 
 function sessionByToken(token, wantKind) {
   if (!token) return null;
   const s = DB.getSession(token);
@@ -1516,12 +1498,7 @@ function sessionByToken(token, wantKind) {
   return s;
 }
 
-/**
- * 取当前会话。
- * 用户会话与管理会话使用两个独立 Cookie（jmkt_session / jmkt_admin），互不覆盖，
- * 因此同一个人可以「一边用普通账号练题、一边在后台当管理员」。
- * wantKind 指定优先读取哪一个 Cookie，避免管理员登录后抢走用户会话。
- */
+ 
 function getSessionFrom(req, wantKind = '') {
   const hdr = req.headers.authorization || '';
   const bearer = hdr.startsWith('Bearer ') ? hdr.slice(7).trim() : '';
@@ -1544,11 +1521,13 @@ function getSessionFrom(req, wantKind = '') {
   return { token: '', session: null, user: null };
 }
 
-function setSessionCookie(res, token, kind = 'user') {
+function setSessionCookie(res, token, kind = 'user', req = null) {
   const name = kind === 'admin' ? 'jmkt_admin' : 'jmkt_session';
+  
+  const proto = String(req?.headers?.['x-forwarded-proto'] || '').split(',')[0].trim().toLowerCase();
+  const isHttps = proto === 'https' || Boolean(req?.socket?.encrypted) || process.env.NODE_ENV === 'production';
   const cookie =
-    `${name}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${30 * 86400}` +
-    (process.env.NODE_ENV === 'production' ? '; Secure' : '');
+    `${name}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${30 * 86400}` + (isHttps ? '; Secure' : '');
   const prev = res.getHeader('Set-Cookie');
   res.setHeader('Set-Cookie', prev ? [...(Array.isArray(prev) ? prev : [prev]), cookie] : [cookie]);
 }
@@ -1584,14 +1563,14 @@ async function jsonBody(req) {
   }
 }
 
-/* ---------------- 用户认证 ---------------- */
+ 
 
-/** 邮箱验证码是否启用（后台配置了 Brevo 且开关打开） */
-/** Cloudflare Turnstile 服务端校验；未配置 Secret 时直接放行 */
+ 
+ 
 async function verifyTurnstile(token, ip) {
   const t = DB.getSettings().turnstile || {};
-  // 必须同时配好 Site Key 与 Secret Key 才启用；只配一项视为未开启，
-  // 否则前端渲染不出挂件、后端却强制校验，会把登录注册彻底锁死。
+  
+  
   if (!t.siteKey || !t.secretKey) return { ok: true, skipped: true };
   if (!token) return { ok: false, error: '请完成人机验证' };
   try {
@@ -1616,11 +1595,7 @@ function emailVerifyOn() {
   return Boolean(b.enabled && b.apiKey && b.senderEmail);
 }
 
-/**
- * 发送邮箱验证码
- * 规则：必须先通过图形验证码；同一设备 60 秒内只能发一次（与邮箱无关）；
- *       单邮箱每小时上限；邮件发送成功后才记录冷却与验证码。
- */
+ 
 async function handleEmailCode(req, res) {
   const ip = clientIp(req);
   const rl = RL.emailCode(ip);
@@ -1628,11 +1603,11 @@ async function handleEmailCode(req, res) {
 
   const b = await jsonBody(req);
 
-  // 1. 图形验证码必须通过（每次发码都要验，防止脚本刷邮件）
+  
   const cap = verifyCaptcha(b.captchaId, b.captchaCode, ip);
   if (!cap.ok) return sendJson(res, 400, { ok: false, error: cap.error });
 
-  // 2. 设备冷却：同一设备 60 秒内只能发一次
+  
   const cd = Brevo.checkCooldown(ip);
   if (!cd.ok) return sendJson(res, 429, { ok: false, error: `发送太频繁，请 ${cd.waitSec} 秒后再获取`, waitSec: cd.waitSec });
 
@@ -1640,18 +1615,18 @@ async function handleEmailCode(req, res) {
   const purpose = b.purpose === 'login' ? 'login' : 'register';
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return sendJson(res, 400, { ok: false, error: '邮箱格式不正确' });
 
-  // 3. 单邮箱每小时上限
+  
   const hourly = Brevo.checkEmailHourlyLimit(email);
   if (!hourly.ok) return sendJson(res, 429, { ok: false, error: hourly.error });
 
-  // 4. 账号存在性：注册不允许已注册邮箱；登录必须是已注册邮箱
+  
   const exists = Boolean(DB.findUserByEmail(email));
   if (purpose === 'register' && exists) return sendJson(res, 409, { ok: false, error: '该邮箱已注册，请直接登录' });
   if (purpose === 'login' && !exists) return sendJson(res, 404, { ok: false, error: '该邮箱尚未注册' });
 
   if (!emailVerifyOn()) return sendJson(res, 503, { ok: false, error: '邮箱验证码服务未开启，请联系管理员' });
 
-  // 5. 生成验证码 → 发送；失败则不留痕（不占用冷却，验证码作废）
+  
   const code = Brevo.createCode(purpose, email);
   const cfgB = DB.getSettings().brevo;
   const subject = purpose === 'register' ? '注册验证码' : '登录验证码';
@@ -1671,7 +1646,7 @@ async function handleEmailCode(req, res) {
   Brevo.markSent(ip, email);
   logVisit(req, 'email-code', { action: 'ok', email, ip, detail: purpose });
 
-  // 发码消耗了图形验证码，自动生成新的供后续登录/注册使用
+  
   const newCap = createCaptcha(ip);
   sendJson(res, 200, {
     ok: true,
@@ -1686,12 +1661,12 @@ async function handleRegister(req, res) {
   const ip = clientIp(req);
   const ua = req.headers['user-agent'] || '';
 
-  // 管理员紧急关闭注册
+  
   if (DB.getSettings()?.security?.registrationOff) {
     return sendJson(res, 503, { ok: false, error: '本站当前暂停新用户注册，请稍后再试' });
   }
 
-  // 限流
+  
   if (isBanned(ip)) return sendJson(res, 429, { ok: false, error: '操作过于频繁，请稍后再试' });
   const rl = RL.register(ip);
   if (!rl.ok) return sendJson(res, 429, { ok: false, error: `注册过于频繁，请 ${rl.retryAfterSec} 秒后重试` });
@@ -1702,19 +1677,19 @@ async function handleRegister(req, res) {
   const password = String(b.password || '');
   const name = String(b.name || '').trim();
 
-  // Cloudflare Turnstile 人机验证（已配置时必过）
+  
   const tsReg = await verifyTurnstile(b.turnstileToken, ip);
   if (!tsReg.ok) return sendJson(res, 403, { ok: false, error: tsReg.error });
 
-  // 图形验证码始终必填（防止脚本批量注册）
+  
   const cap = verifyCaptcha(b.captchaId, b.captchaCode, ip);
   if (!cap.ok) return sendJson(res, 400, { ok: false, error: cap.error });
 
-  // 邮箱、手机号至少填一个；两个都填则双重绑定
+  
   if (!email && !phone) return sendJson(res, 400, { ok: false, error: '请填写邮箱或手机号（填一个即可）' });
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return sendJson(res, 400, { ok: false, error: '邮箱格式不正确' });
 
-  // 开启邮箱验证时：必须填邮箱（验证码在全部校验通过、真正建号前再核对，避免失败后验证码被白白消耗）
+  
   if (emailVerifyOn() && !email) return sendJson(res, 400, { ok: false, error: '注册需要验证邮箱，请填写邮箱' });
 
   if (String(b.phone || '').trim() && !phone) return sendJson(res, 400, { ok: false, error: '手机号格式不正确（11 位中国大陆手机号）' });
@@ -1722,7 +1697,7 @@ async function handleRegister(req, res) {
   if (email && DB.findUserByEmail(email)) return sendJson(res, 409, { ok: false, error: '该邮箱已注册，请直接登录' });
   if (phone && DB.findUserByPhone(phone)) return sendJson(res, 409, { ok: false, error: '该手机号已注册，请直接登录' });
 
-  // 风控评分
+  
   const recent = Activity.query({ kind: 'register', ip, since: Date.now() - 30 * 60_000 });
   const risk = riskScore({ ip, ua, email: email || phone, recentSameIp: recent.length });
   if (risk.score >= 70) {
@@ -1731,7 +1706,7 @@ async function handleRegister(req, res) {
     return sendJson(res, 403, { ok: false, error: '检测到异常注册行为，请稍后重试或联系管理员' });
   }
 
-  // 邮箱验证码：全部业务校验通过后再核对并消耗（一次性）
+  
   if (emailVerifyOn()) {
     const ev = Brevo.verifyCode('register', email, b.emailCode);
     if (!ev.ok) return sendJson(res, 400, { ok: false, error: ev.error });
@@ -1739,7 +1714,7 @@ async function handleRegister(req, res) {
 
   const user = DB.createUser({ email, phone, password, name });
   const token = DB.createSession(user.id, 'user');
-  setSessionCookie(res, token);
+  setSessionCookie(res, token, 'user', req);
   const p = DB.getSettings().pricing;
 
   logVisit(req, 'register', { action: 'ok', userId: user.id, email: email || phone, ip, riskScore: risk.score });
@@ -1756,7 +1731,7 @@ async function handleLogin(req, res) {
   const ip = clientIp(req);
   const ua = req.headers['user-agent'] || '';
 
-  // 管理员紧急关闭登录（已登录用户的会话不受影响）
+  
   if (DB.getSettings()?.security?.loginOff) {
     return sendJson(res, 503, { ok: false, error: '本站当前暂停登录，请稍后再试' });
   }
@@ -1766,29 +1741,29 @@ async function handleLogin(req, res) {
   if (!rl.ok) return sendJson(res, 429, { ok: false, error: `登录过于频繁，请 ${rl.retryAfterSec} 秒后重试` });
 
   const b = await jsonBody(req);
-  // 账号框可填邮箱或手机号，按是否含 @ 自动识别
+  
   const account = String(b.account || b.email || b.phone || '').trim();
   const password = String(b.password || '');
 
-  // Cloudflare Turnstile 人机验证（已配置时必过）
+  
   const tsLogin = await verifyTurnstile(b.turnstileToken, ip);
   if (!tsLogin.ok) return sendJson(res, 403, { ok: false, error: tsLogin.error });
 
-  // 图形验证码始终必填
+  
   const cap = verifyCaptcha(b.captchaId, b.captchaCode, ip);
   if (!cap.ok) return sendJson(res, 400, { ok: false, error: cap.error });
 
   const user = DB.findUserByAccount(account);
   if (!user || !DB.verifyPassword(password, user.passHash)) {
     logVisit(req, 'login', { action: 'fail', ip, email: account, detail: '密码错误' });
-    // 连续失败 5 次 → 临时封 3 分钟
+    
     const fails = Activity.query({ kind: 'login', action: 'fail', ip, since: Date.now() - 3 * 60_000 });
     if (fails.length >= 5) banKey(ip, 3 * 60_000);
     return sendJson(res, 401, { ok: false, error: '邮箱或密码错误' });
   }
   if (user.disabled) return sendJson(res, 403, { ok: false, error: '账号已被停用，请联系管理员' });
 
-  // 邮箱登录 + 开启邮箱验证：密码正确后还需核对邮箱验证码（手机号登录不走邮箱验证）
+  
   if (account.includes('@') && emailVerifyOn()) {
     const ev = Brevo.verifyCode('login', account.toLowerCase(), b.emailCode);
     if (!ev.ok) return sendJson(res, 400, { ok: false, error: ev.error, needEmailCode: true });
@@ -1797,7 +1772,7 @@ async function handleLogin(req, res) {
   DB.save();
 
   const token = DB.createSession(user.id, 'user');
-  setSessionCookie(res, token, 'user');
+  setSessionCookie(res, token, 'user', req);
 
   logVisit(req, 'login', { action: 'ok', userId: user.id, email: account, ip });
 
@@ -1847,18 +1822,18 @@ async function handleRedeem(req, res) {
   }
 }
 
-/* ---------------- 管理员 ---------------- */
+ 
 
 async function handleAdminLogin(req, res) {
   const ip = clientIp(req);
   const ua = req.headers['user-agent'] || '';
 
-  // 1) 全局封禁检查（风控 / 多次失败封禁）
+  
   if (isBanned(`adm:${ip}`)) {
     return sendJson(res, 429, { ok: false, error: '尝试次数过多，请 3 分钟后再试' });
   }
 
-  // 2) 限流：每 IP 每 5 分钟最多 5 次尝试
+  
   const rl = RL.adminLogin(ip);
   if (!rl.ok) {
     return sendJson(res, 429, { ok: false, error: `尝试次数过多，请 ${rl.retryAfterSec} 秒后再试` });
@@ -1867,27 +1842,32 @@ async function handleAdminLogin(req, res) {
   const b = await jsonBody(req);
   const account = String(b.account || 'admin').trim();
   const pw = String(b.password || '');
+
+  
+  const capAd = verifyCaptcha(b.captchaId, b.captchaCode, ip);
+  if (!capAd.ok) return sendJson(res, 400, { ok: false, error: capAd.error });
+
   const s = DB.getSettings();
 
   if (!s.adminUsername) s.adminUsername = 'admin';
 
   const bad = () => {
-    // 记录失败审计（含 IP / 浏览器 / 系统 / 地址）
+    
     logVisit(req, 'admin-login', { action: 'fail', ip, detail: '账号或密码错误' });
-    // 连续失败 5 次 → 临时封 3 分钟（比用户登录更狠）
+    
     const fails = Activity.query({ kind: 'admin-login', action: 'fail', ip, since: Date.now() - 3 * 60_000 });
     if (fails.length >= 5) banKey(`adm:${ip}`, 3 * 60_000);
     return sendJson(res, 401, { ok: false, error: '账号或密码错误' });
   };
 
-  // 账号错误 / 密码未设置 / 密码错误 —— 统一返回「账号或密码错误」，不暴露具体原因
+  
   if (account !== s.adminUsername) return bad();
   if (!s.adminPasswordHash) return bad();
   if (!DB.checkAdminPassword(pw)) return bad();
 
   logVisit(req, 'admin-login', { action: 'ok', ip, detail: s.adminUsername });
   const token = DB.createSession('admin', 'admin');
-  setSessionCookie(res, token, 'admin');
+  setSessionCookie(res, token, 'admin', req);
   sendJson(res, 200, { ok: true, token, account: s.adminUsername });
 }
 
@@ -1910,7 +1890,7 @@ async function handleAdminSettings(req, res) {
   const cur = DB.getSettings();
   const patch = {};
 
-  // v1 地址 / 密钥 / 模型 全部来自网站后台，保存即生效（数据库是权威来源）
+  
   for (const k of ['apiKey', 'apiBase', 'model', 'siteName', 'examRegion', 'paperTemperature', 'scoreTemperature']) {
     if (b[k] === undefined) continue;
     patch[k] = String(b[k]).trim();
@@ -1920,15 +1900,15 @@ async function handleAdminSettings(req, res) {
     if (!/^https?:\/\//.test(patch.apiBase)) {
       return sendJson(res, 400, { ok: false, error: '接口地址需要以 http:// 或 https:// 开头' });
     }
-    // 兼容只填域名的情况：自动补 /v1
+    
     if (!/\/v\d+$/.test(patch.apiBase)) {
       patch.apiBase += '/v1';
       console.log('[settings] 接口地址自动补全为', patch.apiBase);
     }
   }
-  if (patch.apiKey === '') delete patch.apiKey; // 空字符串 = 不修改
+  if (patch.apiKey === '') delete patch.apiKey; 
   if (b.pricing && typeof b.pricing === 'object') patch.pricing = b.pricing;
-  // 卡密购买外链：只允许 http(s)，留空 = 不显示按钮
+  
   if (b.cardBuyUrl !== undefined) {
     const u = String(b.cardBuyUrl || '').trim();
     if (u && !/^https?:\/\/[^\s]+$/i.test(u)) {
@@ -1936,7 +1916,7 @@ async function handleAdminSettings(req, res) {
     }
     patch.cardBuyUrl = u;
   }
-  // Brevo 邮箱验证码配置（API Key 留空 = 不修改）
+  
   if (b.brevo && typeof b.brevo === 'object') {
     const cb = cur.brevo || {};
     const next = {
@@ -1953,7 +1933,7 @@ async function handleAdminSettings(req, res) {
     }
     patch.brevo = next;
   }
-  // 紧急开关
+  
   if (b.security && typeof b.security === 'object') {
     const cur2 = cur.security || {};
     patch.security = {
@@ -1962,26 +1942,26 @@ async function handleAdminSettings(req, res) {
       speechOff: Boolean(b.security.speechOff ?? cur2.speechOff),
     };
   }
-  // Cloudflare Turnstile（Secret 留空 = 不修改；Site Key 公开，可直接保存）
+  
   if (b.turnstile && typeof b.turnstile === 'object') {
     const ct = cur.turnstile || {};
     const siteKey = String(b.turnstile.siteKey ?? ct.siteKey ?? '').trim();
     if (siteKey && !/^[A-Za-z0-9_\-]{8,80}$/.test(siteKey)) {
       return sendJson(res, 400, { ok: false, error: 'Turnstile Site Key 格式不正确' });
     }
-    // Site Key 留空 = 关闭人机验证，同时清掉 Secret，避免残留旧密钥；
-    // 未填 Secret 表示「沿用原值」（不回显密钥）。
+    
+    
     const secretKey = siteKey ? String(b.turnstile.secretKey || '').trim() || ct.secretKey || '' : '';
     patch.turnstile = { siteKey, secretKey };
   }
-  // 紧急通知弹窗
+  
   if (b.urgentNotice !== undefined) {
     if (b.urgentNotice && typeof b.urgentNotice === 'object') {
       const title = String(b.urgentNotice.title || '').trim().slice(0, 100);
       const body  = String(b.urgentNotice.body  || '').trim().slice(0, 2000);
       const enabled = Boolean(b.urgentNotice.enabled);
       const oldUn = cur.urgentNotice || {};
-      // 内容变化或首次开启时生成新 id，让前端重新弹窗
+      
       const contentChanged = title !== (oldUn.title || '') || body !== (oldUn.body || '');
       const id = (enabled && contentChanged) ? crypto.randomUUID().slice(0, 8) : (oldUn.id || crypto.randomUUID().slice(0, 8));
       patch.urgentNotice = { enabled, id, title, body };
@@ -1989,9 +1969,9 @@ async function handleAdminSettings(req, res) {
       patch.urgentNotice = { enabled: false, id: '', title: '', body: '' };
     }
   }
-  // 语音服务 API 配置（TTS + ASR）
+  
   if (b.clearSpeech) {
-    // 显式「改用本地合成」：清空语音 API 绑定，TTS 走 Edge-TTS
+    
     patch.speechApi = { apiBase: '', apiKey: '', ttsModel: 'tts-1', ttsVoice: 'alloy', asrModel: 'whisper-1' };
   } else if (b.speechApi && typeof b.speechApi === 'object') {
     const cs = cur.speechApi || {};
@@ -2001,7 +1981,7 @@ async function handleAdminSettings(req, res) {
     }
     if (base && !/\/v\d+$/.test(base)) base += '/v1';
     patch.speechApi = {
-      // 留空时沿用原值：主接口每次保存都会带上 speechApi，若不沿用会把已绑定的语音 API 抹掉
+      
       apiBase: base || cs.apiBase || '',
       apiKey: String(b.speechApi.apiKey || '').trim() || cs.apiKey || '',
       ttsModel: String(b.speechApi.ttsModel || cs.ttsModel || 'tts-1').trim(),
@@ -2024,7 +2004,7 @@ async function handleAdminSettings(req, res) {
   });
 }
 
-/** 拉取上游 /v1/models 列表，供管理员选择 */
+ 
 async function handleAdminModels(req, res) {
   if (!requireAdmin(req, res)) return;
   const b = await jsonBody(req);
@@ -2061,14 +2041,7 @@ async function handleAdminModels(req, res) {
   }
 }
 
-/**
- * 连通性测试
- * 之前的问题：只测了 chat，而且用的是「已保存」的配置 —— 管理员改了输入框里
- * 的地址/密钥后点测试，测的还是旧的，容易误判。现在：
- *   1. 优先用请求体里传来的地址/密钥/模型（即当前输入框的值），没传才回退到已保存配置
- *   2. 分两步测：先 GET /models（快，验证地址+密钥），再发一次 chat（验证模型可用）
- *   3. 每一步都返回耗时与失败原因，前端可以逐条显示
- */
+ 
 async function handleAdminTest(req, res) {
   if (!requireAdmin(req, res)) return;
   const b = await jsonBody(req).catch(() => ({}));
@@ -2084,7 +2057,7 @@ async function handleAdminTest(req, res) {
   const steps = [];
   const t0 = Date.now();
 
-  /* --- 第 1 步：拉模型列表，验证「地址 + 密钥」是否可用 --- */
+   
   let modelCount = 0;
   if (!b.skipModels) {
     const t = Date.now();
@@ -2142,7 +2115,7 @@ async function handleAdminTest(req, res) {
     }
   }
 
-  /* --- 第 2 步：真发一次对话，验证「模型」是否可用 --- */
+   
   const tChat = Date.now();
   let content = '';
   try {
@@ -2186,7 +2159,7 @@ async function handleAdminTest(req, res) {
   });
 }
 
-/* ---------------- 图片上传（定价说明配图等） ---------------- */
+ 
 
 const UPLOAD_DIR = process.env.EXAM_UPLOAD_DIR
   ? path.resolve(process.env.EXAM_UPLOAD_DIR)
@@ -2201,7 +2174,7 @@ const MIME_EXT = {
   'image/svg+xml': 'svg',
 };
 
-const MAX_UPLOAD_BYTES = 3 * 1024 * 1024; // 单张图最大 3MB
+const MAX_UPLOAD_BYTES = 3 * 1024 * 1024; 
 
 async function handleAdminUpload(req, res) {
   if (!requireAdmin(req, res)) return;
@@ -2230,7 +2203,7 @@ async function handleAdminUpload(req, res) {
 
   try {
     fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-    // 文件名用时间戳 + 随机串，避免中文名与重名问题
+    
     const name = `${Date.now().toString(36)}-${randomUUID().slice(0, 8)}.${ext}`;
     fs.writeFileSync(path.join(UPLOAD_DIR, name), buf);
     const url = `/uploads/${name}`;
@@ -2241,7 +2214,7 @@ async function handleAdminUpload(req, res) {
   }
 }
 
-/** 托管已上传的图片 */
+ 
 function serveUpload(res, urlPath) {
   const name = path.basename(decodeURIComponent(urlPath));
   if (!name || name.includes('..')) return sendJson(res, 400, { ok: false, error: 'Bad name' });
@@ -2251,8 +2224,8 @@ function serveUpload(res, urlPath) {
   const type =
     Object.entries(MIME_EXT).find(([, e]) => e === ext)?.[0] || 'application/octet-stream';
   const buf = fs.readFileSync(file);
-  // SVG 可能内嵌 <script>，直接以 image/svg+xml 返回存在存储型 XSS 风险。
-  // 处理：SVG 一律加 Content-Disposition: attachment + 严格 CSP，禁止脚本执行。
+  
+  
   const headers = {
     'Content-Type': type,
     'Content-Length': buf.length,
@@ -2267,7 +2240,7 @@ function serveUpload(res, urlPath) {
 }
 
 
-/* ---------------- 用户数据 导出 / 导入 / 清空 ---------------- */
+ 
 
 async function handleAdminUsers(req, res) {
   if (!requireAdmin(req, res)) return;
@@ -2275,7 +2248,7 @@ async function handleAdminUsers(req, res) {
   const b = req.method === 'POST' ? await jsonBody(req).catch(() => ({})) : {};
   const action = String(b.action || '');
 
-  // 一键清空
+  
   if (action === 'clear') {
     if (b.confirm !== 'CLEAR') {
       return sendJson(res, 400, { ok: false, error: '危险操作：需要在请求里带 confirm: "CLEAR"' });
@@ -2297,7 +2270,7 @@ async function handleAdminUsers(req, res) {
     });
   }
 
-  // 删除单个用户 / 更新单个用户
+  
   if (action === 'delete') {
     try {
       DB.deleteUser(b.id);
@@ -2315,7 +2288,7 @@ async function handleAdminUsers(req, res) {
     }
   }
 
-  // 默认：列出用户
+  
   sendJson(res, 200, { ok: true, users: DB.listUsers() });
 }
 
@@ -2347,10 +2320,10 @@ async function handleAdminCodes(req, res) {
 }
 
 async function handleAdminUsersLegacyRemoved() {
-  /* 旧实现已合并到上面的 handleAdminUsers */
+   
 }
 
-/* ---------------- 验证码 ---------------- */
+ 
 
 function handleCaptcha(req, res) {
   const ip = clientIp(req);
@@ -2360,12 +2333,15 @@ function handleCaptcha(req, res) {
   sendJson(res, 200, { ok: true, id: cap.id, svg: cap.svg, ttlSec: cap.ttlSec });
 }
 
-/* ---------------- Edge-TTS 语音合成 ---------------- */
+ 
 
 async function handleTts(req, res) {
   if (DB.getSettings()?.security?.speechOff) {
     return sendJson(res, 503, { ok: false, error: '语音合成服务当前已关闭' });
   }
+  
+  const ctx = requireUser(req, res);
+  if (!ctx) return;
   const ip = clientIp(req);
   const rl = RL.tts(ip);
   if (!rl.ok) {
@@ -2381,7 +2357,7 @@ async function handleTts(req, res) {
   const speechBase = sp.apiBase || '';
   const speechKey = sp.apiKey || s.apiKey || '';
 
-  // 优先走大模型语音 API（OpenAI 兼容 /audio/speech）
+  
   if (speechBase && speechKey) {
     try {
       const ttsModel = sp.ttsModel || 'tts-1';
@@ -2406,13 +2382,13 @@ async function handleTts(req, res) {
         return res.end(buf);
       }
       console.warn('[tts-api]', r.status, (await r.text()).slice(0, 160));
-      // API 失败时降级到 edge-tts
+      
     } catch (e) {
       console.warn('[tts-api]', e.message);
     }
   }
 
-  // 降级：edge-tts
+  
   const fallback = /[\u4e00-\u9fff]/.test(text) ? 'zh-CN-XiaoxiaoNeural' : 'en-US-AriaNeural';
   const voice = TTS_VOICES[b.voice] ? b.voice : fallback;
   const rate = ttsRateStr(b.speed || 1);
@@ -2435,15 +2411,9 @@ function handleTtsVoices(req, res) {
   sendJson(res, 200, { ok: true, voices: TTS_VOICES });
 }
 
-/* ---------------- ASR 服务端兜底转写 ---------------- */
+ 
 
-/**
- * 浏览器原生 SpeechRecognition 不可用（微信/Via/网络受限）时，
- * 前端把录音上传到这里转写，结果再交给 LLM 评分。
- *
- * 转写走「模型网关的 OpenAI 兼容 /audio/transcriptions」接口（若网关支持）。
- * 网关不支持时返回 501，前端静默降级为纯声学评分，不影响交卷。
- */
+ 
 async function handleAsr(req, res, cfg) {
   if (DB.getSettings()?.security?.speechOff) {
     return sendJson(res, 503, { ok: false, error: '语音识别服务当前已关闭' });
@@ -2465,7 +2435,7 @@ async function handleAsr(req, res, cfg) {
   if (!asrKey) return sendJson(res, 400, { ok: false, error: '服务端未配置 API Key' });
 
   const lang = 'en';
-  // 优先用后台配置的 ASR 模型，然后尝试常用降级模型
+  
   const configModel = sp.asrModel || '';
   const fallbackModels = ['whisper-1', 'whisper-large-v3', 'qwen-audio-asr'];
   const models = configModel ? [configModel, ...fallbackModels.filter((m) => m !== configModel)] : fallbackModels;
@@ -2486,7 +2456,7 @@ async function handleAsr(req, res, cfg) {
       });
       const txt = await r.text();
       if (!r.ok) {
-        // 404/400 多为网关不支持该模型或接口，换下一个
+        
         if (r.status === 404 || r.status === 400 || r.status === 422) continue;
         return sendJson(res, 502, { ok: false, error: `转写失败（HTTP ${r.status}）：${txt.slice(0, 160)}` });
       }
@@ -2502,13 +2472,13 @@ async function handleAsr(req, res, cfg) {
         return sendJson(res, 200, { ok: true, text: out, model, engine: 'server' });
       }
     } catch (e) {
-      // 网络/超时：继续试下一个模型
+      
       const msg = String(e.message || e);
       if (/timeout|abort/i.test(msg)) continue;
     }
   }
 
-  // 网关不支持语音转写：明确告知，前端据此降级
+  
   return sendJson(res, 501, {
     ok: false,
     error: '当前模型网关不支持语音转写接口（/audio/transcriptions），已自动降级为纯声学评分',
@@ -2516,7 +2486,7 @@ async function handleAsr(req, res, cfg) {
   });
 }
 
-/* ---------------- 管理员活动日志 ---------------- */
+ 
 
 async function handleAdminActivity(req, res) {
   if (!requireAdmin(req, res)) return;
@@ -2529,7 +2499,7 @@ async function handleAdminActivity(req, res) {
     if (b.action === 'stats') {
       return sendJson(res, 200, { ok: true, stats: Activity.stats({ since: Number(b.since) || 0 }) });
     }
-    // 筛选查询
+    
     const list = Activity.query({
       kind: b.kind || '',
       userId: b.userId || '',
@@ -2541,13 +2511,13 @@ async function handleAdminActivity(req, res) {
     });
     return sendJson(res, 200, { ok: true, events: list, total: list.length });
   }
-  // GET: 返回最近 200 条 + 统计
+  
   const events = Activity.query({ limit: 200 });
   const stats = Activity.stats({ since: Date.now() - 24 * 3600_000 });
   sendJson(res, 200, { ok: true, events, stats });
 }
 
-/* ---------------- 公告栏 & 账号异常公示（管理员） ---------------- */
+ 
 
 async function handleAdminNotices(req, res) {
   if (!requireAdmin(req, res)) return;
@@ -2634,7 +2604,7 @@ async function handleAdminNotices(req, res) {
 }
 
 
-/* ---------------------------- 启动 ---------------------------- */
+ 
 
 const PORT = Number(argValue('--port') || process.env.PORT || process.env.EXAM_PORT || 8777);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -2644,12 +2614,8 @@ const server = http.createServer((req, res) => {
   const p = url.pathname;
 
   if (req.method === 'OPTIONS') {
-    res.writeHead(204, {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type,x-api-key,Authorization',
-      'Access-Control-Allow-Credentials': 'true',
-    });
+    
+    res.writeHead(204, { 'Cache-Control': 'no-store' });
     return res.end();
   }
 
@@ -2657,9 +2623,9 @@ const server = http.createServer((req, res) => {
     const cfg = getCfg();
     const ip = clientIp(req);
 
-    // 脚本访问防护：同一 IP 在窗口内脚本访问超过阈值 → 自动封禁
-    // 只统计外网「脚本/程序」请求；内网与本机不计数（避免本地调试被锁）；
-    // 静态资源（js/css/图片/字体）不计入，避免一次正常页面加载请求过多被误封。
+    
+    
+    
     const isStaticAsset = /\.(js|css|png|jpg|jpeg|webp|gif|svg|ico|woff2|woff|ttf|map|txt|xml|json)$/i.test(p);
     if (!isPrivateIp(ip) && !isStaticAsset && !p.startsWith('/uploads/')) {
       const guard = DB.getSettings().scriptGuard || {};
@@ -2687,7 +2653,7 @@ const server = http.createServer((req, res) => {
       }
     }
 
-    // 持久化 IP 封禁：被封 IP 直接拒绝（页面显示封禁页，API 返回 403）
+    
     if (DB.isIpBanned(ip)) {
       logVisit(req, 'blocked', { action: 'ip-banned', ip, detail: '当前 IP 已被封禁' });
       if (p.startsWith('/api/')) {
@@ -2706,26 +2672,26 @@ const server = http.createServer((req, res) => {
       );
     }
 
-    // 访问日志：页面加载（/ 或 /index.html）→ visit，含地址异步反查；
-    // API 动作在各自 handler 内记录（login/register/score…），不在此重复。
+    
+    
     const isStatic = /\.(js|css|png|jpg|jpeg|webp|gif|svg|ico|woff2|json)$/i.test(p);
     if (!isStatic && (p === '/' || p === '/index.html')) {
       logVisit(req, 'visit', { action: 'open', detail: '首页' });
     }
 
-    // 全局限流（每 IP 每分钟 120 次 API 调用）
+    
     if (p.startsWith('/api/')) {
       if (isBanned(ip)) return sendJson(res, 429, { ok: false, error: '请求过于频繁，已临时限制访问' });
       const rl = RL.api(ip);
       if (!rl.ok) return sendJson(res, 429, { ok: false, error: `请求过于频繁，请 ${rl.retryAfterSec} 秒后重试` });
     }
 
-    // ---------- 公开 ----------
+    
     if (p === '/api/health') return handleHealth(req, res, cfg);
     if (p === '/api/pricing') return sendJson(res, 200, { ok: true, pricing: DB.getSettings().pricing });
     if (p === '/api/spec') return sendJson(res, 200, { ok: true, exam: EXAM, cities: CITY_PROFILES });
     if (p === '/api/captcha') return handleCaptcha(req, res);
-    // 公告栏 + 账号异常公示（登录页展示）
+    
     if (p === '/api/notices') {
       return sendJson(res, 200, {
         ok: true,
@@ -2734,12 +2700,12 @@ const server = http.createServer((req, res) => {
       });
     }
 
-    // ---------- TTS（语音合成，公开但限流）----------
+    
     if (p === '/api/tts' && req.method === 'POST') return handleTts(req, res);
     if (p === '/api/tts/voices') return handleTtsVoices(req, res);
     if (p === '/api/asr' && req.method === 'POST') return handleAsr(req, res, cfg);
 
-    // ---------- 认证 ----------
+    
     if (p === '/api/auth/register' && req.method === 'POST') return handleRegister(req, res);
     if (p === '/api/auth/login' && req.method === 'POST') return handleLogin(req, res);
     if (p === '/api/auth/logout' && req.method === 'POST') return handleLogout(req, res);
@@ -2748,7 +2714,7 @@ const server = http.createServer((req, res) => {
     if (p === '/api/auth/me') return handleMe(req, res);
     if (p === '/api/redeem' && req.method === 'POST') return handleRedeem(req, res);
 
-    // ---------- 考试（需登录 + 额度）----------
+    
     if (p === '/api/paper' && (req.method === 'POST' || req.method === 'GET')) {
       const ctx = requireUser(req, res);
       if (!ctx) return;
@@ -2760,7 +2726,7 @@ const server = http.createServer((req, res) => {
       return handleScore(req, res, cfg, ctx.session, ctx.user);
     }
 
-    // ---------- 历史记录（复盘）----------
+    
     if (p === '/api/records' && req.method === 'GET') {
       const ctx = requireUser(req, res);
       if (!ctx) return;
@@ -2774,7 +2740,7 @@ const server = http.createServer((req, res) => {
       return sendJson(res, 200, { ok: true, record: rec });
     }
 
-    // ---------- 管理员 ----------
+    
     if (p === '/api/admin/login' && req.method === 'POST') return handleAdminLogin(req, res);
     if (p === '/api/admin/overview') return handleAdminOverview(req, res);
     if (p === '/api/admin/settings' && req.method === 'POST') return handleAdminSettings(req, res);
@@ -2784,10 +2750,10 @@ const server = http.createServer((req, res) => {
     if (p === '/api/admin/codes') return handleAdminCodes(req, res);
     if (p === '/api/admin/users') return handleAdminUsers(req, res);
     if (p === '/api/admin/activity') return handleAdminActivity(req, res);
-    // 公告栏 / 账号异常公示（管理员）
+    
     if (p === '/api/admin/notices' && req.method === 'POST') return handleAdminNotices(req, res);
 
-    // 已上传的图片（定价说明配图等）
+    
     if (p.startsWith('/uploads/')) return serveUpload(res, p);
 
     if (p.startsWith('/api/')) return sendJson(res, 404, { ok: false, error: 'Unknown API' });

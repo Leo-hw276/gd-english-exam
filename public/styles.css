@@ -53,7 +53,7 @@ button { font-family: inherit; }
   padding: 28px 20px 80px;
 }
 
-/* ---------------- 顶部 ---------------- */
+ 
 
 .topbar {
   position: sticky;
@@ -110,7 +110,7 @@ button { font-family: inherit; }
 .pill.warn { background: var(--warn-soft); color: #b54708; }
 .pill.brand { background: var(--brand-soft); color: var(--brand); }
 
-/* ---------------- 通用组件 ---------------- */
+ 
 
 .card {
   background: var(--card);
@@ -167,7 +167,7 @@ input[type="text"], select {
 }
 input[type="text"]:focus, select:focus { border-color: var(--brand-2); box-shadow: 0 0 0 3px rgba(97, 114, 243, 0.16); }
 
-/* ---------------- 首页 ---------------- */
+ 
 
 .hero {
   background: linear-gradient(150deg, #1b1f4b 0%, #3538cd 55%, #6172f3 100%);
@@ -229,7 +229,7 @@ table.spec tr:last-child td { border-bottom: 0; }
 table.spec td.num { font-variant-numeric: tabular-nums; font-weight: 700; white-space: nowrap; }
 table.spec tfoot td { font-weight: 800; background: #fafbfc; }
 
-/* ---------------- 考试界面 ---------------- */
+ 
 
 .exam-grid {
   display: grid;
@@ -406,7 +406,7 @@ table.spec tfoot td { font-weight: 800; background: #fafbfc; }
   padding: 16px 18px;
 }
 
-/* ---------------- 录音面板 ---------------- */
+ 
 
 .recpanel {
   margin-top: 20px;
@@ -474,7 +474,7 @@ table.spec tfoot td { font-weight: 800; background: #fafbfc; }
   transition: height 0.09s ease-out; opacity: 0.85;
 }
 
-/* ---------------- 报告 ---------------- */
+ 
 
 .score-hero {
   display: grid;
@@ -568,7 +568,7 @@ ul.tips li { margin-bottom: 5px; font-size: 14px; color: var(--ink-2); }
 }
 .transcript-box.empty { color: var(--ink-3); font-style: italic; }
 
-/* ---------------- 遮罩 / Toast ---------------- */
+ 
 
 .overlay {
   position: fixed; inset: 0; z-index: 100;
@@ -611,7 +611,7 @@ ul.tips li { margin-bottom: 5px; font-size: 14px; color: var(--ink-2); }
 
 .hidden { display: none !important; }
 
-/* ---------------- 波形图 ---------------- */
+ 
 
 .wavestrip { margin-top: 10px; }
 .wavelabel {
@@ -673,7 +673,7 @@ ul.tips li { margin-bottom: 5px; font-size: 14px; color: var(--ink-2); }
   vertical-align: -1px;
 }
 
-/* 试音面板 */
+ 
 .mictest-panel {
   margin-top: 14px;
   border: 1px solid var(--line);
@@ -699,9 +699,7 @@ ul.tips li { margin-bottom: 5px; font-size: 14px; color: var(--ink-2); }
 .callout.bad { background: var(--bad-soft); border-color: #fecdca; color: #912018; }
 .callout.ok { background: var(--ok-soft); border-color: #a6f4c5; color: #05603a; }
 
-/* ==================================================================
- *  顶栏导航 + 用户区
- * ================================================================== */
+ 
 
 .topnav { display: flex; gap: 4px; margin-left: 18px; }
 .topnav a {
@@ -731,9 +729,7 @@ ul.tips li { margin-bottom: 5px; font-size: 14px; color: var(--ink-2); }
 .userchip .uc-quota.ok { background: #12b76a; color: #fff; }
 .userchip .uc-quota.bad { background: #f04438; color: #fff; }
 
-/* ==================================================================
- *  窄容器 / 标签页 / 行内元素
- * ================================================================== */
+ 
 
 .wrap.narrow { max-width: 760px; }
 .nowrap { white-space: nowrap; }
@@ -814,9 +810,7 @@ input:focus, select:focus, textarea:focus {
 textarea { resize: vertical; line-height: 1.6; }
 label.muted { display: block; font-size: 12.5px; margin-bottom: 5px; }
 
-/* ==================================================================
- *  收费标准
- * ================================================================== */
+ 
 
 .price-grid {
   display: grid;
@@ -876,9 +870,7 @@ label.muted { display: block; font-size: 12.5px; margin-bottom: 5px; }
 .faq b { color: var(--ink); }
 .faq a { color: var(--brand); }
 
-/* ==================================================================
- *  管理后台表格
- * ================================================================== */
+ 
 
 #ad-code-table td, #ad-user-table td, #ad-log-table td { vertical-align: middle; font-size: 13px; }
 #ad-user-table .btn + .btn { margin-left: 4px; }
@@ -907,7 +899,7 @@ label.muted { display: block; font-size: 12.5px; margin-bottom: 5px; }
   .topbar, .btn, .nav-card, #toast { display: none !important; }
 }
 
-/* ---------- 环境变量锁定提示（管理后台） ---------- */
+ 
 .notice {
   padding: 11px 14px;
   border-radius: 10px;
@@ -928,9 +920,7 @@ textarea:disabled {
 }
 
 
-/* ==================================================================
- *  通用补充（识别结果框 / 按钮变体 / 提示）
- * ================================================================== */
+ 
 
 .transcript-box {
   min-height: 60px;
@@ -987,7 +977,7 @@ textarea:disabled {
   border-radius: 8px;
 }
 
-/* ---------- 手机端适配 ---------- */
+ 
 @media (max-width: 720px) {
   .topbar-inner { flex-wrap: wrap; gap: 8px; padding: 8px 12px; }
   .topnav {
@@ -1014,7 +1004,7 @@ textarea:disabled {
   .topnav a { font-size: 12px; padding: 5px 8px; }
 }
 
-/* 定价说明配图 */
+ 
 .price-source-img {
   display: block;
   max-width: 100%;
@@ -1032,7 +1022,7 @@ textarea:disabled {
   display: block;
 }
 
-/* 验证码 */
+ 
 .captcha-row { gap: 10px; }
 .captcha-img {
   width: 132px; height: 46px;
@@ -1047,7 +1037,7 @@ textarea:disabled {
 .captcha-img svg { display: block; width: 130px; height: 44px; }
 .captcha-img:hover { border-color: var(--brand, #4f46e5); }
 
-/* 进度条（组卷 / 倒计时等通用） */
+ 
 .progress-bar {
   width: 100%; height: 8px;
   background: #e9edf3;
@@ -1070,7 +1060,7 @@ textarea:disabled {
   margin-top: 4px;
 }
 
-/* 全局倍速控件 */
+ 
 .speed-ctrl {
   display: inline-flex; align-items: center; gap: 6px;
   font-size: 13px; color: var(--ink-2, #414651);
@@ -1081,7 +1071,7 @@ textarea:disabled {
   background: #fff;
 }
 
-/* 答题侧栏的倍速下拉 */
+ 
 .speed-select {
   padding: 3px 8px;
   font-size: 13px;
@@ -1092,7 +1082,7 @@ textarea:disabled {
   cursor: pointer;
 }
 
-/* 管理后台模式：隐藏考生导航与登录入口，只保留「返回首页」 */
+ 
 .admin-head {
   display: flex;
   align-items: center;
@@ -1114,7 +1104,7 @@ body.admin-mode #pill-api,
 body.admin-mode #pill-asr,
 body.admin-mode #pill-tts { display: none !important; }
 
-/* AI 接口配置：强制显示（防止浏览器插件把这些输入框当广告位隐藏） */
+ 
 #card-ai-config input,
 #card-ai-config select {
   display: block !important;
@@ -1136,7 +1126,7 @@ body.admin-mode #pill-tts { display: none !important; }
   box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12);
 }
 
-/* ============ 信息转述：思维导图 ============ */
+ 
 .mindmap {
   margin: 14px 0 6px;
   padding: 16px;
@@ -1197,7 +1187,7 @@ body.admin-mode #pill-tts { display: none !important; }
   line-height: 1.5;
 }
 
-/* 听选信息：一问两答选项 */
+ 
 .qopts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 .qopt {
   padding: 6px 14px;
@@ -1210,7 +1200,7 @@ body.admin-mode #pill-tts { display: none !important; }
 .qitem.active .qopt { border-color: var(--brand, #4f46e5); }
 .qitem.done .qopt.correct { border-color: var(--ok, #12b76a); background: #ecfdf3; }
 
-/* 安全管控开关 */
+ 
 .switch-row {
   display: inline-flex;
   align-items: center;
@@ -1225,7 +1215,7 @@ body.admin-mode #pill-tts { display: none !important; }
 }
 .switch-row input { width: 16px; height: 16px; cursor: pointer; }
 
-/* 历史记录 */
+ 
 .hist-item {
   display: flex;
   align-items: center;
@@ -1241,7 +1231,7 @@ body.admin-mode #pill-tts { display: none !important; }
 .hist-score { font-size: 17px; font-weight: 700; color: var(--brand, #4f46e5); }
 .hist-score small { font-size: 12px; font-weight: 400; color: #667085; }
 
-/* 公告栏 / 账号异常公示（登录页） */
+ 
 .notice-item {
   padding: 10px 12px;
   border: 1px solid var(--line, #e4e7ec);
@@ -1258,7 +1248,7 @@ body.admin-mode #pill-tts { display: none !important; }
 .notice-item.lv-alert { border-left-color: #ef4444; background: #fef2f2; }
 .notice-item.lv-info { border-left-color: #4f46e5; }
 
-/* 管理员：公告 / 公示列表项 */
+ 
 .nt-row, .ab-row {
   display: flex;
   align-items: center;
@@ -1273,7 +1263,7 @@ body.admin-mode #pill-tts { display: none !important; }
 .nt-row .muted, .ab-row .muted { font-size: 12px; }
 .nt-row textarea, .ab-row textarea { width: 100%; resize: vertical; }
 
-/* 公告弹窗 */
+ 
 .modal-mask {
   position: fixed;
   inset: 0;
@@ -1309,7 +1299,7 @@ body.admin-mode #pill-tts { display: none !important; }
   overflow: auto;
 }
 
-/* ========== 首页布局 ========== */
+ 
 .intro-wrap {
   max-width: 1100px;
   margin: 0 auto;
@@ -1353,7 +1343,7 @@ body.admin-mode #pill-tts { display: none !important; }
   padding: 20px;
   min-height: 120px;
 }
-/* 公告时间线 */
+ 
 .notice-item {
   position: relative;
   padding: 10px 0 10px 18px;

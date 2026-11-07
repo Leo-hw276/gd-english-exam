@@ -1,39 +1,21 @@
-/**
- * Brevo 邮件服务（Transactional Email API）
- *
- * 用法：
- *   const { sendMail, createCode, verifyCode, getCooldown } = ...
- *
- * 官网文档：https://developers.brevo.com/reference/sendtransacemail
- * 接口地址：POST https://api.brevo.com/v3/smtp/email
- * 鉴权头：  api-key: xkeysib-xxxxxxxx
- *
- * 说明：
- * - 发件邮箱（senderEmail）必须先在 Brevo 后台完成验证，否则接口会拒绝。
- * - 验证码为 6 位纯数字，10 分钟有效，错误 5 次作废，验证通过后立即失效（一次性）。
- * - 同一邮箱 60 秒内只能重发一次，防止被刷邮件。
- */
+ 
 
-/** 验证码存储：key = purpose:email（purpose: register / login） */
-const codeStore = new Map(); // -> { code, expiresAt, tries }
-const lastSent = new Map(); // 设备(IP) -> 上次发送时间戳（同一设备换邮箱同样受限）
-const emailSentCount = new Map(); // email -> [时间戳...]（每小时最多 10 封，防轰炸单个邮箱）
+ 
+const codeStore = new Map(); 
+const lastSent = new Map(); 
+const emailSentCount = new Map(); 
 
-const CODE_TTL_MS = 10 * 60 * 1000; // 10 分钟
-const RESEND_COOLDOWN_MS = 60 * 1000; // 60 秒重发间隔（按设备）
-const MAX_TRIES = 5; // 最多错 5 次
-const MAX_SEND_PER_HOUR = 10; // 单邮箱每小时最多 10 封
+const CODE_TTL_MS = 10 * 60 * 1000; 
+const RESEND_COOLDOWN_MS = 60 * 1000; 
+const MAX_TRIES = 5; 
+const MAX_SEND_PER_HOUR = 10; 
 
-/** 生成 6 位数字验证码 */
+ 
 function randomCode() {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
 
-/**
- * 发送邮件（Brevo）
- * @param {{apiKey:string, senderEmail:string, senderName?:string}} cfg
- * @param {{to:string, subject:string, html:string}} msg
- */
+ 
 export async function sendMail(cfg, msg) {
   const apiKey = String(cfg?.apiKey || '').trim();
   const senderEmail = String(cfg?.senderEmail || '').trim();
@@ -76,11 +58,7 @@ export async function sendMail(cfg, msg) {
   }
 }
 
-/**
- * 检查重发冷却：同一设备（IP）60 秒内只能发一次，换邮箱也一样受限
- * @param {string} ip 设备标识（客户端 IP）
- * @returns {{ok:boolean, waitSec?:number, error?:string}}
- */
+ 
 export function checkCooldown(ip) {
   const key = String(ip || '').trim();
   const last = lastSent.get(key) || 0;
@@ -91,10 +69,7 @@ export function checkCooldown(ip) {
   return { ok: true };
 }
 
-/**
- * 生成并保存验证码（发送失败时由调用方清除）
- * @returns {string} 验证码明文（仅用于发邮件）
- */
+ 
 export function createCode(purpose, email) {
   const key = `${purpose}:${String(email || '').trim().toLowerCase()}`;
   const code = randomCode();
@@ -102,7 +77,7 @@ export function createCode(purpose, email) {
   return code;
 }
 
-/** 记录一次发送：设备冷却 + 单邮箱每小时频次 */
+ 
 export function markSent(ip, email) {
   const dev = String(ip || '').trim();
   lastSent.set(dev, Date.now());
@@ -114,7 +89,7 @@ export function markSent(ip, email) {
   emailSentCount.set(mail, arr);
 }
 
-/** 单邮箱每小时发送次数检查（防止不停轰炸同一个邮箱） */
+ 
 export function checkEmailHourlyLimit(email) {
   const mail = String(email || '').trim().toLowerCase();
   const now = Date.now();
@@ -126,15 +101,12 @@ export function checkEmailHourlyLimit(email) {
   return { ok: true };
 }
 
-/** 清除某邮箱的验证码（发送失败时调用） */
+ 
 export function clearCode(purpose, email) {
   codeStore.delete(`${purpose}:${String(email || '').trim().toLowerCase()}`);
 }
 
-/**
- * 校验验证码
- * @returns {{ok:boolean, error?:string}}
- */
+ 
 export function verifyCode(purpose, email, input) {
   const key = `${purpose}:${String(email || '').trim().toLowerCase()}`;
   const rec = codeStore.get(key);
@@ -152,10 +124,10 @@ export function verifyCode(purpose, email, input) {
     rec.tries += 1;
     return { ok: false, error: `邮箱验证码错误（还可尝试 ${MAX_TRIES - rec.tries} 次）` };
   }
-  codeStore.delete(key); // 一次性使用
+  codeStore.delete(key); 
   return { ok: true };
 }
 
-/** 验证码有效期（秒），供前端提示 */
+ 
 export const CODE_TTL_SEC = Math.floor(CODE_TTL_MS / 1000);
 export const RESEND_SEC = Math.floor(RESEND_COOLDOWN_MS / 1000);

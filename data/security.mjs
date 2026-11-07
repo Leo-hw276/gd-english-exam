@@ -1,39 +1,66 @@
-/**
- * security.mjs —— 安全与审计（零依赖）
- *
- * 提供四件事：
- *  1. 真实访客 IP 提取（兼容 Vercel / Railway / Nginx / Cloudflare 等反代）
- *  2. User-Agent 解析（浏览器 / 系统 / 是否疑似机器人）
- *  3. 令牌桶限流（防批量注册、防接口刷量、缓解应用层 DDoS）
- *  4. 图形验证码（SVG 生成 + 大小写不敏感校验，无需任何第三方库）
- */
+ 
 
 import crypto from 'node:crypto';
 
-/* ==================================================================
- *  1. 访客 IP
- * ================================================================== */
+ 
 
-/**
- * 取真实 IP。部署在 Vercel / Railway / Nginx / Cloudflare 后面时，
- * req.socket.remoteAddress 拿到的是反代地址，必须优先读转发头。
- */
+ 
+const CF_IPV4 = [
+  '173.245.48.0/20', '103.21.244.0/22', '103.22.200.0/22', '103.31.4.0/22',
+  '141.101.64.0/18', '108.162.192.0/18', '190.93.240.0/20', '188.114.96.0/20',
+  '197.234.240.0/22', '198.41.128.0/17', '162.158.0.0/15', '104.16.0.0/13',
+  '104.24.0.0/14', '172.64.0.0/13', '131.0.72.0/22',
+];
+
+function ipv4ToInt(ip) {
+  const p = String(ip).split('.').map(Number);
+  if (p.length !== 4 || p.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return null;
+  return ((p[0] << 24) >>> 0) + (p[1] << 16) + (p[2] << 8) + p[3];
+}
+
+function inCidr4(ip, cidr) {
+  const [net, bitsStr] = String(cidr).split('/');
+  const bits = Number(bitsStr);
+  if (!Number.isFinite(bits) || bits <= 0 || bits > 32) return false;
+  const a = ipv4ToInt(ip);
+  const b = ipv4ToInt(net);
+  if (a === null || b === null) return false;
+  const mask = bits === 32 ? 0xffffffff : ((0xffffffff << (32 - bits)) >>> 0);
+  return ((a & mask) >>> 0) === ((b & mask) >>> 0);
+}
+
+ 
+function isTrustedProxy(addr) {
+  const v = String(addr || '').replace(/^::ffff:/, '');
+  if (!v) return false;
+  if (isPrivateIp(v)) return true;
+  const extra = String(process.env.TRUSTED_PROXY_CIDRS || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  for (const c of [...CF_IPV4, ...extra]) if (inCidr4(v, c)) return true;
+  return false;
+}
+
+ 
 export function clientIp(req) {
   const h = req.headers || {};
+  const peer = String(req.socket?.remoteAddress || '').replace(/^::ffff:/, '');
+  if (!isTrustedProxy(peer)) return peer || 'unknown';
+
   const pick = (v) => String(v || '').split(',')[0].trim();
   const cand =
     pick(h['cf-connecting-ip']) ||
+    pick(h['true-client-ip']) ||
     pick(h['x-real-ip']) ||
     pick(h['x-forwarded-for']) ||
     pick(h['x-vercel-forwarded-for']) ||
-    pick(h['true-client-ip']) ||
-    req.socket?.remoteAddress ||
-    '';
-  // IPv6 映射地址归一化成 IPv4
+    peer;
+  
   return cand.replace(/^::ffff:/, '') || 'unknown';
 }
 
-/** 只保留前两段，用于「同网段聚集」判断（IPv6 保留前四段） */
+ 
 export function ipPrefix(ip) {
   if (!ip || ip === 'unknown') return 'unknown';
   if (ip.includes(':')) return ip.split(':').slice(0, 4).join(':');
@@ -41,15 +68,10 @@ export function ipPrefix(ip) {
   return p.length === 4 ? `${p[0]}.${p[1]}` : ip;
 }
 
-/* ==================================================================
- *  1.5 访客地理位置（IP 反查，服务端静默）
- *
- *  绝不使用浏览器 Geolocation API（会弹权限框、被用户发现）。
- *  统一由服务端根据访客 IP 反查城市，带内存缓存，失败静默降级。
- * ================================================================== */
+ 
 
-const geoCache = new Map(); // ip -> { str, country, region, city, at }
-const GEO_TTL = 24 * 3600 * 1000; // 同一 IP 一天内不重复反查
+const geoCache = new Map(); 
+const GEO_TTL = 24 * 3600 * 1000; 
 
 export function isPrivateIp(ip) {
   if (!ip) return true;
@@ -64,10 +86,7 @@ export function isPrivateIp(ip) {
   );
 }
 
-/**
- * 取访客地址字符串（如「广东省 江门市」）。纯内存 + 服务端反查，
- * 永不抛出；失败返回空字符串（界面显示「未知」）。
- */
+ 
 export async function ipToLocation(ip) {
   if (!ip || ip === 'unknown') return { str: '', country: '', region: '', city: '' };
   const key = ip.replace(/^::ffff:/, '');
@@ -79,15 +98,15 @@ export async function ipToLocation(ip) {
     return rec;
   }
 
-  // 并发去重：同一 IP 只发起一次反查，其余等待
+  
   const pending = geoCache.get(`p:${key}`);
   if (pending) return pending;
 
   const rec = { str: '', country: '', region: '', city: '', at: Date.now() };
-  geoCache.set(key, rec); // 先占位，避免重复请求
+  geoCache.set(key, rec); 
   const task = (async () => {
     try {
-      // 优先 ip-api.com（免费、无需密钥），失败再试 ipapi.co
+      
       const sources = [
         { url: `http://ip-api.com/json/${key}?lang=zh-CN&fields=status,country,regionName,city`, parse: (d) => (d.status === 'success' ? { country: d.country || '', region: d.regionName || '', city: d.city || '' } : null) },
         { url: `https://ipapi.co/${key}/json/`, parse: (d) => (d && d.city ? { country: d.country_name || '', region: d.region || '', city: d.city || '' } : null) },
@@ -105,11 +124,11 @@ export async function ipToLocation(ip) {
           rec.str = [geo.region, geo.city].filter(Boolean).join(' ');
           break;
         } catch {
-          // 尝试下一个数据源
+          
         }
       }
     } catch {
-      // 静默：反查失败保持空地址
+      
     } finally {
       rec.at = Date.now();
       geoCache.set(key, rec);
@@ -121,9 +140,7 @@ export async function ipToLocation(ip) {
   return task;
 }
 
-/* ==================================================================
- *  2. User-Agent 解析
- * ================================================================== */
+ 
 
 export function parseUa(ua = '') {
   const s = String(ua);
@@ -146,7 +163,7 @@ export function parseUa(ua = '') {
   else if (has(/Mac OS X/)) os = 'macOS';
   else if (has(/Linux/)) os = 'Linux';
 
-  // 微信 / QQ / 抖音等内置浏览器
+  
   const inApp = has(/MicroMessenger/i)
     ? '微信'
     : has(/\bQQ\//i)
@@ -157,19 +174,17 @@ export function parseUa(ua = '') {
     ? '支付宝'
     : '';
 
-  // 疑似自动化：无浏览器标识、含无头关键字
+  
   const bot = !browser || browser === '未知' || browser === '脚本/程序' || has(/HeadlessChrome|bot|crawler|spider|scrapy/i);
 
   return { browser, os, inApp, bot, raw: s.slice(0, 220) };
 }
 
-/* ==================================================================
- *  3. 限流（令牌桶 + 滑动窗口）
- * ================================================================== */
+ 
 
-const buckets = new Map(); // key -> { tokens, ts, hits: [] }
+const buckets = new Map(); 
 
-/** 定期清理，避免长期运行内存膨胀 */
+ 
 const SWEEP_MS = 10 * 60 * 1000;
 let sweeper = null;
 function ensureSweeper() {
@@ -183,10 +198,7 @@ function ensureSweeper() {
   sweeper.unref?.();
 }
 
-/**
- * 滑动窗口限流。
- * @returns {{ok:boolean, remaining:number, retryAfterSec:number, count:number}}
- */
+ 
 export function rateLimit(key, { windowMs = 60_000, max = 60 } = {}) {
   ensureSweeper();
   const now = Date.now();
@@ -210,8 +222,8 @@ export function rateLimit(key, { windowMs = 60_000, max = 60 } = {}) {
   return { ok: true, remaining: max - b.hits.length, count: b.hits.length, retryAfterSec: 0 };
 }
 
-/** 手动封禁一个键（用于风控命中后临时拉黑） */
-const bans = new Map(); // key -> until
+ 
+const bans = new Map(); 
 export function banKey(key, ms) {
   bans.set(key, Date.now() + ms);
 }
@@ -225,27 +237,17 @@ export function isBanned(key) {
   return true;
 }
 
-/* ------------------------------------------------------------------ *
- *  脚本访问计数（超过阈值 → 自动封禁 IP）
- *
- *  只统计「脚本/程序」类型的请求（curl、python、node-fetch 等），
- *  普通浏览器访问不计入。内网 / 本机 IP 不计数，也不自动封禁，
- *  避免本地开发或内网调试把自己锁在门外。
- * ------------------------------------------------------------------ */
-const scriptHits = new Map(); // ip -> number[]（时间戳，滑动窗口内）
+ 
+const scriptHits = new Map(); 
 
-/**
- * 记录一次脚本访问，返回该 IP 在窗口内的累计次数。
- * @param {string} ip
- * @param {number} windowMs 统计窗口
- */
+ 
 export function countScriptHit(ip, windowMs = 10 * 60_000) {
   if (!ip || isPrivateIp(ip)) return 0;
   const now = Date.now();
   const arr = (scriptHits.get(ip) || []).filter((t) => now - t < windowMs);
   arr.push(now);
   scriptHits.set(ip, arr);
-  // 防止内存无限增长：条目过多时清理过期键
+  
   if (scriptHits.size > 5000) {
     for (const [k, v] of scriptHits) {
       if (!v.length || now - v[v.length - 1] > windowMs) scriptHits.delete(k);
@@ -254,50 +256,40 @@ export function countScriptHit(ip, windowMs = 10 * 60_000) {
   return arr.length;
 }
 
-/** 查询某 IP 在窗口内的脚本访问次数（不计数） */
+ 
 export function getScriptHits(ip, windowMs = 10 * 60_000) {
   const arr = scriptHits.get(ip) || [];
   const now = Date.now();
   return arr.filter((t) => now - t < windowMs).length;
 }
 
-/** 清零某 IP 的脚本计数（解封时调用） */
+ 
 export function resetScriptHits(ip) {
   scriptHits.delete(ip);
 }
 
-/* ==================================================================
- *  4. 图形验证码
- *
- *  要求：图像 + 字母数字混合，且【同时包含大写与小写字母】，
- *  校验时【大小写敏感】——用户输入的字母大小写必须与图中完全一致。
- *  实现：纯 SVG（无 canvas 依赖，服务端直出），带干扰线与噪点，
- *  答案为内存态，5 分钟过期，一次性使用。
- * ================================================================== */
+ 
 
 const CAPTCHA_TTL_MS = 5 * 60 * 1000;
-const captchas = new Map(); // id -> { answer, exp, ip }
+const captchas = new Map(); 
 
 function sweepCaptchas() {
   const now = Date.now();
   for (const [k, v] of captchas) if (now > v.exp) captchas.delete(k);
 }
 
-// 去掉容易混淆的字符（0/O、1/I/l），保留大小写两套字母
+
 const UPPER = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
 const LOWER = 'abcdefghjkmnpqrstuvwxyz';
 const DIGITS = '23456789';
 
-/**
- * 生成 4 位验证码：强制至少 1 个大写 + 1 个小写 + 1 个数字，
- * 剩余一位从三类中随机，避免全是同一类字符。
- */
+ 
 function pickAnswer(len = 4) {
   const rnd = (s) => s[crypto.randomInt(s.length)];
   const chars = [rnd(UPPER), rnd(LOWER), rnd(DIGITS)];
   const pools = [UPPER, LOWER, DIGITS];
   while (chars.length < len) chars.push(rnd(pools[crypto.randomInt(pools.length)]));
-  // 随机打乱位置，避免固定「大写-小写-数字」顺序被猜中
+  
   for (let i = chars.length - 1; i > 0; i--) {
     const j = crypto.randomInt(i + 1);
     [chars[i], chars[j]] = [chars[j], chars[i]];
@@ -316,7 +308,7 @@ export function createCaptcha(ip = '') {
   const H = 44;
   const rand = (a, b) => a + Math.random() * (b - a);
 
-  // 每个字符独立旋转/偏移，防止被简单切割识别
+  
   let glyphs = '';
   for (let i = 0; i < answer.length; i++) {
     const x = 16 + i * 28 + rand(-3, 3);
@@ -330,7 +322,7 @@ export function createCaptcha(ip = '') {
       ` transform="rotate(${rot} ${x.toFixed(1)} ${y.toFixed(1)})">${answer[i]}</text>`;
   }
 
-  // 干扰线
+  
   let lines = '';
   for (let i = 0; i < 5; i++) {
     lines +=
@@ -338,7 +330,7 @@ export function createCaptcha(ip = '') {
       `${rand(110, W).toFixed(0)},${rand(0, H).toFixed(0)}" stroke="hsl(${Math.floor(rand(180, 320))} 60% 70%)"` +
       ` stroke-width="${rand(0.8, 1.8).toFixed(1)}" fill="none" opacity="0.75"/>`;
   }
-  // 噪点
+  
   let dots = '';
   for (let i = 0; i < 34; i++) {
     dots += `<circle cx="${rand(0, W).toFixed(0)}" cy="${rand(0, H).toFixed(0)}" r="${rand(0.6, 1.7).toFixed(1)}" fill="hsl(${Math.floor(rand(0, 360))} 65% 62%)" opacity="0.7"/>`;
@@ -355,10 +347,7 @@ export function createCaptcha(ip = '') {
   return { id, svg, ttlSec: Math.round(CAPTCHA_TTL_MS / 1000) };
 }
 
-/**
- * 校验验证码：**大小写敏感**，字母大小写必须与图中一致（空格忽略）。
- * 无论对错都立即销毁该 id（防重放）。
- */
+ 
 export function verifyCaptcha(id, input, ip = '') {
   sweepCaptchas();
   const rec = captchas.get(String(id || ''));
@@ -368,7 +357,7 @@ export function verifyCaptcha(id, input, ip = '') {
   const norm = (s) => String(s || '').replace(/\s+/g, '');
   if (!norm(input)) return { ok: false, error: '请输入图形验证码' };
   if (norm(input) !== norm(rec.answer)) {
-    // 大小写写错时给出明确提示，避免用户以为是 bug
+    
     if (norm(input).toUpperCase() === norm(rec.answer).toUpperCase()) {
       return { ok: false, error: '验证码大小写不正确，请输入已保存的验证码重试' };
     }
@@ -377,14 +366,9 @@ export function verifyCaptcha(id, input, ip = '') {
   return { ok: true };
 }
 
-/* ==================================================================
- *  5. 风控评分（识别批量注册 / 水军）
- * ================================================================== */
+ 
 
-/**
- * 依据「同 IP 前缀近期注册数、UA 是否为脚本、是否一次性邮箱」给出风险分。
- * 分数越高越可疑；由调用方决定是否拒绝或仅记录。
- */
+ 
 const disposableEmailDomains = new Set([
   'mailinator.com', 'guerrillamail.com', '10minutemail.com', 'tempmail.com',
   'throwawaymail.com', 'yopmail.com', 'trashmail.com', 'sharklasers.com',
@@ -420,9 +404,7 @@ export function riskScore({ ip, ua, email, recentSamePrefix = 0, recentSameIp = 
   return { score: Math.min(100, score), reasons, bot };
 }
 
-/* ==================================================================
- *  6. 活动日志（登录 / 朗读 / 风控）
- * ================================================================== */
+ 
 
 const MAX_EVENTS = 4000;
 
@@ -448,7 +430,7 @@ export function makeActivityStore(persist) {
     return rec;
   }
 
-  /** 按条件筛选：kind / userId / ip / 关键字 / 时间范围 */
+   
   function query({ kind = '', userId = '', ip = '', q = '', since = 0, until = 0, limit = 200 } = {}) {
     const kw = String(q || '').toLowerCase();
     return events
@@ -470,7 +452,7 @@ export function makeActivityStore(persist) {
       .slice(0, Math.max(1, Math.min(1000, limit)));
   }
 
-  /** 汇总统计：按 IP / 网段 / 用户聚合，便于发现批量注册 */
+   
   function stats({ since = 0 } = {}) {
     const byIp = new Map();
     const byPrefix = new Map();

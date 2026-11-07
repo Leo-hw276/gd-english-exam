@@ -1,15 +1,4 @@
-/**
- * speech.js —— 浏览器语音识别（Web Speech API）封装
- *
- * 作用：把考生朗读/作答的语音实时转写成文本。
- * 这份转写文本是判分的关键证据：
- *   - 与参考文本逐词比对 → 判断漏读 / 发音不准（识别系统对发音标准的英语识别率高）
- *   - 文本内容语义比对   → 判断信息获取、转述要点、询问信息是否答对
- *
- * 兼容性：Chrome / Edge 支持最好。若浏览器不支持或识别服务不可达
- * （例如离线、企业网络限制），系统会自动降级为「纯声学评分」，
- * 只依据流利度、发声时长、语速等客观音频指标给分，并在报告中明确标注。
- */
+ 
 
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 
@@ -32,12 +21,12 @@ export class Asr {
     this.maxAlternatives = maxAlternatives;
     this.recognition = null;
     this.active = false;
-    this.finals = [];        // 最终识别片段
-    this.interim = '';       // 临时结果
+    this.finals = [];        
+    this.interim = '';       
     this.status = isAsrSupported() ? AsrStatus.UNKNOWN : AsrStatus.UNSUPPORTED;
     this.lastError = null;
-    this.onUpdate = null;    // (text, interim) => void
-    this.onStatus = null;    // (status, detail) => void
+    this.onUpdate = null;    
+    this.onStatus = null;    
   }
 
   _setStatus(s, detail) {
@@ -80,7 +69,7 @@ export class Asr {
         const txt = (res[0]?.transcript || '').trim();
         if (!txt) continue;
         if (res.isFinal) {
-          // 保留多候选中的最优（第 0 个通常最可信）
+          
           this.finals.push(txt);
           this._setStatus(AsrStatus.OK);
         } else {
@@ -102,16 +91,16 @@ export class Asr {
         this._setStatus(AsrStatus.NETWORK_FAIL, '语音识别服务不可达（可能无外网或被网络策略拦截）');
         this.active = false;
       } else if (err === 'no-speech') {
-        // 正常情况：这段时间没人说话，交给 onend 自动重启
+        
       } else if (err === 'aborted') {
-        // 主动停止，忽略
+        
       } else {
         this._setStatus(AsrStatus.NETWORK_FAIL, `语音识别异常：${err}`);
       }
     };
 
     rec.onend = () => {
-      // Chrome 会在静音后自动结束，只要还在录音就重启，保证全程覆盖
+      
       if (this.active) {
         try {
           rec.start();
@@ -152,9 +141,7 @@ export class Asr {
   }
 }
 
-/* ------------------------------------------------------------------ *
- *  离线兜底：文本比对工具（供前端即时反馈使用）
- * ------------------------------------------------------------------ */
+ 
 
 export function normalizeWords(text) {
   return String(text || '')
@@ -166,7 +153,7 @@ export function normalizeWords(text) {
     .filter(Boolean);
 }
 
-/** 逐词对齐（编辑距离回溯），返回命中/漏读/增读 */
+ 
 export function alignWords(reference, hypothesis) {
   const a = normalizeWords(reference);
   const b = normalizeWords(hypothesis);

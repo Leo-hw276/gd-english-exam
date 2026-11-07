@@ -9,12 +9,12 @@
 <title>广东中考英语听说考试 · 在线模拟练习</title>
 <meta name="description" content="严格按照广东省江门市中考英语听说考试（人机对话）官方题型与评分标准设计的在线模拟练习系统，AI 自动组卷、录音作答、满分 30 分智能评分。" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%233538cd'/%3E%3Ctext x='50' y='68' font-size='54' text-anchor='middle' fill='white' font-family='sans-serif' font-weight='bold'%3E%E5%90%AC%3C/text%3E%3C/svg%3E" />
-<link rel="stylesheet" href="/styles.css?v=20261108d" />
+<link rel="stylesheet" href="/styles.css?v=20261108e" />
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
 </head>
 <body>
 
-<!-- ============================ 顶栏 ============================ -->
+
 <div class="topbar">
   <div class="topbar-inner">
     <a class="brand" href="#" id="brand-home">
@@ -37,11 +37,11 @@
   </div>
 </div>
 
-<!-- ============================ 首页 ============================ -->
+
 <section id="screen-intro" class="screen active">
   <div class="wrap intro-wrap">
 
-    <!-- 两栏：左公告 右自检 -->
+    
     <div class="intro-cols">
       <div class="intro-col">
         <h2 class="sec-title">公告</h2>
@@ -72,7 +72,7 @@
       </div>
     </div>
 
-    <!-- 开始考试 -->
+    
     <div class="exam-start">
       <h2 class="sec-title">开始考试</h2>
       <div class="row" style="margin-bottom:14px">
@@ -102,7 +102,7 @@
       <p class="muted" id="quota-hint" style="margin-top:12px"></p>
     </div>
 
-    <!-- 评分细则 -->
+    
     <div class="exam-spec">
       <h2 class="sec-title">试卷结构</h2>
       <table class="spec">
@@ -119,7 +119,7 @@
   </div>
 </section>
 
-<!-- ============================ 考试 ============================ -->
+
 <section id="screen-exam" class="screen">
   <div class="wrap">
     <div class="exam-grid">
@@ -166,7 +166,7 @@
   </div>
 </section>
 
-<!-- ============================ 成绩报告 ============================ -->
+
 <section id="screen-report" class="screen">
   <div class="wrap">
     <div class="card">
@@ -216,7 +216,7 @@
   </div>
 </section>
 
-<!-- ============================ 登录 / 注册 ============================ -->
+
 <section id="screen-auth" class="screen">
   <div class="wrap narrow">
     <div class="card" id="notice-card" style="display:none">
@@ -293,7 +293,7 @@
   </div>
 </section>
 
-<!-- ============================ 收费标准 ============================ -->
+
 <section id="screen-pricing" class="screen">
   <div class="wrap">
     <div class="hero" style="padding:8px 0 4px">
@@ -334,7 +334,7 @@
   </div>
 </section>
 
-<!-- ============================ 我的账户 ============================ -->
+
 <section id="screen-account" class="screen">
   <div class="wrap narrow">
     <div class="card" id="acc-card">
@@ -367,7 +367,7 @@
   </div>
 </section>
 
-<!-- ============================ 管理后台 ============================ -->
+
 <section id="screen-admin" class="screen">
   <div class="wrap">
     <div class="admin-head">
@@ -379,6 +379,16 @@
       <p class="muted" style="margin-top:0">登录后可配置接口地址、密钥与模型。</p>
       <div class="row">
         <input type="password" id="cfg-pass" placeholder="管理员密码" style="flex:1;min-width:220px" />
+      </div>
+      <div class="row captcha-row" style="margin-top:12px;align-items:flex-end">
+        <div style="flex:1;min-width:140px">
+          <label class="muted">图形验证码（区分大小写）</label>
+          <input type="text" id="ad-captcha" placeholder="照图中大小写输入" autocomplete="off" maxlength="6" autocapitalize="off" spellcheck="false" />
+        </div>
+        <div class="captcha-img" id="ad-captcha-img" title="点击刷新"></div>
+      </div>
+      <input type="hidden" id="ad-captcha-id" />
+      <div class="row" style="margin-top:14px">
         <button class="btn" id="btn-admin-login">登录</button>
       </div>
     </div>
@@ -785,7 +795,7 @@
 
 <div id="toast"></div>
 
-<!-- 公告弹窗 -->
+
 <div class="modal-mask hidden" id="notice-modal">
   <div class="modal-box">
     <div class="modal-head">
@@ -796,7 +806,7 @@
   </div>
 </div>
 
-<script type="module" src="/js/app.js?v=20261108d"></script>
-<script type="module" src="/js/admin.js?v=20261108d"></script>
+<script type="module" src="/js/app.js?v=20261108e"></script>
+<script type="module" src="/js/admin.js?v=20261108e"></script>
 </body>
 </html>

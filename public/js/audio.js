@@ -1,18 +1,6 @@
-/**
- * audio.js —— 语音合成（播放考试录音）、录音与声学指标分析
- *
- * 考试系统需要：
- *  1. 用 TTS 播放「模仿朗读」范文与听力材料（模仿真实考场录音）
- *  2. 采集考生作答音频，并实时分析声学指标，为流利度评分提供客观依据
- */
+ 
 
-/* ==================================================================
- *  1. 语音合成 —— TTS 自动降级
- *
- *  优先：后台绑定语音 API 时走服务端 /api/tts；否则浏览器原生 speechSynthesis（en-US / en-GB 音色）
- *  降级：另一条通路兜底，用户无感知
- *  自检时分别标注状态。
- * ================================================================== */
+ 
 
 const PREFERRED_EN = [
   'Microsoft Aria Online (Natural) - English (United States)',
@@ -39,19 +27,19 @@ const PREFERRED_ZH = [
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// 中文播报文案（与 app.js 的 SAY 保持一致）
+
 const SAY_RECORD_START = '开始录音。';
 const SAY_RECORD_DONE = '录音结束。';
 
 export const Tts = {
   _voices: [],
-  _mode: 'unknown', // 'native' | 'server' | 'none'（仅用于状态展示）
-  _preferServer: false, // 后台配置了语音 API 时置 true：优先走服务端合成
-  _speed: 1,        // 全局倍速
-  _audio: null,     // 服务端音频对象（必须能被 stopNow 中止）
-  _token: 0,        // 中止令牌：每次 stopNow 自增，旧朗读自动作废
+  _mode: 'unknown', 
+  _preferServer: false, 
+  _speed: 1,        
+  _audio: null,     
+  _token: 0,        
 
-  /** 由 app.js 依据 /api/health 的 ttsEngine 设置 */
+   
   setPreferServer(on) {
     this._preferServer = Boolean(on);
     if (this._preferServer) this._mode = 'server';
@@ -66,12 +54,12 @@ export const Tts = {
     }
     const load = () => {
       this._voices = synth.getVoices() || [];
-      // 音量列表异步加载：加载到就绪后重新判定模式（服务端优先时不改）
+      
       if (this._voices.length && this._mode !== 'native' && !this._preferServer) this._mode = 'native';
     };
     load();
     synth.onvoiceschanged = load;
-    // 有些浏览器首帧拿不到音色，稍后再取一次
+    
     setTimeout(load, 400);
     setTimeout(load, 1500);
     if (this._preferServer) this._mode = 'server';
@@ -128,49 +116,44 @@ export const Tts = {
     return hit[0] || all.find((v) => new RegExp(prefix, 'i').test(v.lang || '')) || null;
   },
 
-  /** 兼容旧调用 */
+   
   pickVoice() {
     return this._enVoice();
   },
 
-  /** 文本是否含中文 */
+   
   isZh(text) {
     return /[\u4e00-\u9fff]/.test(String(text || ''));
   },
 
-  /**
-   * 朗读一段文本，真正读完才 resolve。
-   * 后台配置了语音 API（_preferServer）时：服务端 → 浏览器原生 → 跳过
-   * 未配置时：浏览器原生 → 服务端 → 跳过
-   * 中文用中文音色，英文用英文音色。
-   */
+   
   async speak(text, { rate, pitch = 1, lang } = {}) {
     if (!text) return;
     const speed = rate ?? this._speed;
     const useLang = lang || (this.isZh(text) ? 'zh' : 'en');
     const token = this._token;
 
-    // 服务端优先（后台已绑定语音合成 API）
+    
     if (this._preferServer) {
       const ok0 = await this._speakServer(text, { speed, lang: useLang, token });
       if (ok0) {
         this._mode = 'server';
         return;
       }
-      if (token !== this._token) return; // 已被中止
+      if (token !== this._token) return; 
     }
 
-    // 浏览器原生
+    
     if (window.speechSynthesis) {
       const ok = await this._speakNative(text, { rate: speed, pitch, lang: useLang, token });
       if (ok) {
         if (!this._preferServer) this._mode = 'native';
         return;
       }
-      if (token !== this._token) return; // 已被中止
+      if (token !== this._token) return; 
     }
 
-    // 服务端（已配 API 时上面已试过，这里只在未配置时作为兜底）
+    
     if (!this._preferServer) {
       const ok2 = await this._speakServer(text, { speed, lang: useLang, token });
       if (ok2) {
@@ -180,15 +163,12 @@ export const Tts = {
     }
 
     if (token === this._token) {
-      // 所有通路都失败：本次跳过，但下次仍会重新尝试（不永久降级）
+      
       this._mode = this._preferServer ? 'server' : window.speechSynthesis ? 'native' : 'none';
     }
   },
 
-  /**
-   * 原生 speechSynthesis 朗读
-   * @returns {Promise<boolean>} 是否真的播放成功
-   */
+   
   _speakNative(text, { rate = 0.95, pitch = 1, lang = 'en', token = 0 } = {}) {
     return new Promise((resolve) => {
       const synth = window.speechSynthesis;
@@ -196,7 +176,7 @@ export const Tts = {
 
       const str = String(text);
       const words = str.trim().split(/\s+/).filter(Boolean).length;
-      // 中文按字数估时长
+      
       const estMs = lang === 'zh' ? Math.max(4000, str.length * 320) : Math.max(6000, words * 600);
 
       let done = false;
@@ -233,7 +213,7 @@ export const Tts = {
           return;
         }
 
-        // 看门狗：800ms 内既没开始也没排队 → 视为失败，触发降级
+        
         setTimeout(() => {
           if (done || started) return;
           if (synth.speaking || synth.pending) return;
@@ -251,13 +231,13 @@ export const Tts = {
       hardCap = setTimeout(() => finish(started), estMs + 15000);
       poll = setInterval(() => {
         if (done) return;
-        if (token !== this._token) return finish(false); // 被 stopNow 中止
+        if (token !== this._token) return finish(false); 
         if (synth.speaking || synth.pending) return;
-        // 已开始且结束 → 正常收尾
+        
         if (started) return finish(true);
       }, 250);
 
-      // Chrome 已知问题：cancel() 紧跟 speak() 会丢句，先等一下
+      
       if (synth.speaking || synth.pending) {
         try {
           synth.cancel();
@@ -269,7 +249,7 @@ export const Tts = {
     });
   },
 
-  /** 服务端 edge-tts 朗读（失败自动重试 2 次） */
+   
   async _speakServer(text, { speed = 1, lang = 'en', token = 0 } = {}) {
     if (!text) return false;
     for (let attempt = 1; attempt <= 3; attempt++) {
@@ -334,7 +314,7 @@ export const Tts = {
     } catch {}
   },
 
-  /** 立刻停止所有朗读（含服务端音频），供提前交卷/切屏使用 */
+   
   async stopNow() {
     this._token++;
     const synth = window.speechSynthesis;
@@ -359,9 +339,7 @@ export const Tts = {
   },
 };
 
-/* ==================================================================
- *  2. 提示音（模拟考场「开始录音」提示音）
- * ================================================================== */
+ 
 
 let sharedCtx = null;
 export function audioCtx() {
@@ -398,12 +376,7 @@ export function beep({ freq = 880, durMs = 130, gain = 0.09 } = {}) {
 export const startCue = () => beep({ freq: 920, durMs: 140 });
 export const stopCue = () => beep({ freq: 620, durMs: 180 });
 
-/**
- * 播放 3~4 秒的「滴滴」提示音序列（模拟考场倒计时），
- * 每 500ms 滴一声，最后一声频率升高表示开始。
- * @param {(progress01:number) => void} [onTick] 进度回调（0→1）
- * @param {number} [totalMs=3500] 总时长
- */
+ 
 export async function countdownBeeps({ onTick, totalMs = 3500 } = {}) {
   const INTERVAL = 500;
   const count = Math.round(totalMs / INTERVAL);
@@ -415,12 +388,7 @@ export async function countdownBeeps({ onTick, totalMs = 3500 } = {}) {
   }
 }
 
-/**
- * 完整录音前准备序列：
- *  1. 滴滴倒计时（3.5s）+ 进度条
- *  2. TTS 播报 "Please start recording now."
- *  3. 播报结束后 resolve → 调用方打开麦克风
- */
+ 
 export async function recordingPrepare({ onProgress } = {}) {
   await countdownBeeps({ onTick: (p) => onProgress?.(p * 0.7), totalMs: 3500 });
   onProgress?.(0.75);
@@ -428,17 +396,13 @@ export async function recordingPrepare({ onProgress } = {}) {
   onProgress?.(1);
 }
 
-/**
- * 录音结束后的播报序列
- */
+ 
 export async function recordingFinish() {
   await stopCue();
   await Tts.speak(SAY_RECORD_DONE, { rate: Tts.getSpeed() });
 }
 
-/* ==================================================================
- *  3. 麦克风 & 录音
- * ================================================================== */
+ 
 
 export async function listMicrophones() {
   try {
@@ -449,7 +413,7 @@ export async function listMicrophones() {
   }
 }
 
-/** 申请麦克风权限并返回 MediaStream */
+ 
 export async function openMic(deviceId) {
   if (!navigator.mediaDevices?.getUserMedia) {
     throw new Error('当前浏览器不支持录音（需要 HTTPS 或 localhost 环境）');
@@ -472,22 +436,11 @@ const percentile = (sorted, p) => {
   return sorted[i];
 };
 
-/**
- * Recorder —— 录音 + 实时声学指标
- *
- * 指标说明（全部为评分提供客观证据）：
- *  durationMs    录音总时长
- *  speechMs      判定为「发声」的时长（RMS 高于自适应噪声门限）
- *  voicedRatio   发声占比 = speechMs / durationMs
- *  pauseCount    ≥300ms 的内部停顿次数
- *  longestPauseMs / meanPauseMs
- *  meanRms       发声段的平均音量
- *  levels        实时电平序列（用于界面波形）
- */
+ 
 export class Recorder {
   constructor(stream) {
     this.stream = stream;
-    this.frames = [];       // 每 50ms 一个 RMS
+    this.frames = [];       
     this.levelSeq = [];
     this.chunks = [];
     this.blob = null;
@@ -495,7 +448,7 @@ export class Recorder {
     this.metrics = null;
     this._timer = null;
     this._active = false;
-    this.onTick = null;     // (level01) => void
+    this.onTick = null;     
   }
 
   static pickMime() {
@@ -530,7 +483,7 @@ export class Recorder {
     this.srcNode.connect(this.analyser);
     this._buf = new Float32Array(this.analyser.fftSize);
 
-    // MediaRecorder（用于回放考生自己的作答）
+    
     try {
       const mime = Recorder.pickMime();
       this.mr = mime ? new MediaRecorder(this.stream, { mimeType: mime }) : new MediaRecorder(this.stream);
@@ -558,7 +511,7 @@ export class Recorder {
     }
     this.frames.push(rms);
 
-    // 电平映射到 0..1（用于界面）
+    
     const lvl = Math.min(1, Math.pow(rms / 0.22, 0.6));
     this.levelSeq.push(lvl);
     this.onTick?.(lvl);
@@ -568,10 +521,7 @@ export class Recorder {
     return this._active ? performance.now() - this._t0 : 0;
   }
 
-  /**
-   * 把实时电平序列压缩成 n 个点的包络，用于绘制波形图。
-   * 直接复用录音时采集的 RMS 数据，无需解码音频，任何浏览器都能画。
-   */
+   
   envelope(n = 150) {
     const src = this.levelSeq.length
       ? this.levelSeq
@@ -589,7 +539,7 @@ export class Recorder {
     return out;
   }
 
-  /** 结束录音，返回 { blob, blobUrl, metrics, envelope } */
+   
   async stop() {
     if (!this._active) {
       return { blob: null, blobUrl: null, metrics: this.metrics, envelope: this.envelope() };
@@ -635,18 +585,18 @@ export class Recorder {
       };
     }
 
-    // 自适应噪声门限：取 RMS 分布的 20 分位作为环境噪声，再乘以 2.6
+    
     const sorted = [...f].sort((a, b) => a - b);
     const noise = percentile(sorted, 0.2);
     const peak = sorted[sorted.length - 1];
     let th = Math.max(0.009, noise * 2.6);
-    if (th > peak * 0.5) th = peak * 0.5; // 极安静环境下避免门限过高
+    if (th > peak * 0.5) th = peak * 0.5; 
 
     const voiced = f.map((v) => v > th);
     const voicedCount = voiced.filter(Boolean).length;
     const speechMs = voicedCount * FRAME_MS;
 
-    // 统计「发声段之间」的静音段（≥300ms = 6 帧）
+    
     const pauses = [];
     let run = 0;
     let seenVoice = false;
@@ -658,7 +608,7 @@ export class Recorder {
         run = 0;
         seenVoice = true;
       }
-    } // 结尾的静音不计入停顿
+    } 
 
     const voicedRms = f.filter((v) => v > th);
     const meanRms = voicedRms.length ? voicedRms.reduce((a, b) => a + b, 0) / voicedRms.length : 0;
@@ -677,7 +627,7 @@ export class Recorder {
   }
 }
 
-/** 由转写文本补全语速指标 */
+ 
 export function attachWpm(metrics, transcript) {
   if (!metrics) return metrics;
   const words = String(transcript || '').trim().split(/\s+/).filter(Boolean).length;
@@ -685,9 +635,7 @@ export function attachWpm(metrics, transcript) {
   return { ...metrics, wordCount: words, wordsPerMinute: Math.round(words / minutes) };
 }
 
-/* ==================================================================
- *  4. 麦克风试音
- * ================================================================== */
+ 
 
 export async function micTest(ms = 4000, onLevel) {
   const stream = await openMic();
