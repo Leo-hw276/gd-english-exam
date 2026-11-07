@@ -431,6 +431,44 @@
             <select id="cfg-region"></select>
           </div>
         </div>
+
+        <hr style="margin:20px 0;border:none;border-top:1px solid var(--line,#e4e7ec)" />
+        <h3 style="font-size:15px;margin:0 0 10px">语音服务（朗读 TTS + 转写 ASR）</h3>
+        <p class="muted" style="font-size:12.5px;margin-bottom:12px">留空则 TTS 降级到 Edge-TTS，ASR 使用上方主 API。单独配置语音 API 可提升朗读和转写质量。</p>
+        <div class="row">
+          <div style="flex:2;min-width:240px">
+            <label class="muted">语音 API 地址（留空用主地址）</label>
+            <input type="text" id="cfg-speech-base" placeholder="https://api.openai.com/v1" />
+          </div>
+          <div style="flex:1;min-width:200px">
+            <label class="muted">语音 API Key（留空用主 Key）</label>
+            <input type="password" id="cfg-speech-key" placeholder="留空则不修改" autocomplete="off" />
+            <div class="muted" id="cfg-speech-key-hint" style="font-size:12px;margin-top:4px"></div>
+          </div>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <div style="min-width:200px">
+            <label class="muted">TTS 朗读模型</label>
+            <select id="cfg-speech-tts-model" style="width:100%;margin-top:6px">
+              <option value="tts-1">tts-1</option>
+            </select>
+          </div>
+          <div style="min-width:140px">
+            <label class="muted">TTS 音色</label>
+            <input type="text" id="cfg-speech-tts-voice" placeholder="alloy" />
+          </div>
+          <div style="min-width:200px">
+            <label class="muted">ASR 转写模型</label>
+            <select id="cfg-speech-asr-model" style="width:100%;margin-top:6px">
+              <option value="whisper-1">whisper-1</option>
+            </select>
+          </div>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <button class="btn ghost" id="btn-speech-models">拉取语音模型列表</button>
+          <span class="muted" id="cfg-speech-model-hint"></span>
+        </div>
+
         <div class="row" style="margin-top:16px">
           <button class="btn" id="btn-admin-save">保存接口配置</button>
           <span class="muted" id="cfg-save-hint"></span>
@@ -610,6 +648,7 @@
       </div>
 
       <div class="card">
+        <h2>邮箱验证码（Brevo）</h2>
         <p class="muted">开启后，注册与邮箱登录都需要输入邮箱验证码。图形验证码始终保留。同一设备 60 秒内只能获取一次验证码。发件邮箱需先在 Brevo 后台完成验证。</p>
         <label class="muted" style="display:flex;align-items:center;gap:6px;margin-top:8px">
           <input type="checkbox" id="cfg-brevo-on" style="width:auto" /> 开启邮箱验证码

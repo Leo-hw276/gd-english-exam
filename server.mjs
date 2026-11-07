@@ -1935,6 +1935,22 @@ async function handleAdminSettings(req, res) {
       patch.urgentNotice = { enabled: false, id: '', title: '', body: '' };
     }
   }
+  // 语音服务 API 配置（TTS + ASR）
+  if (b.speechApi && typeof b.speechApi === 'object') {
+    const cs = cur.speechApi || {};
+    let base = String(b.speechApi.apiBase || '').trim().replace(/\/+$/, '');
+    if (base && !/^https?:\/\//i.test(base)) {
+      return sendJson(res, 400, { ok: false, error: '语音服务地址需以 http:// 或 https:// 开头' });
+    }
+    if (base && !/\/v\d+$/.test(base)) base += '/v1';
+    patch.speechApi = {
+      apiBase: base,
+      apiKey: String(b.speechApi.apiKey || '').trim() || cs.apiKey || '',
+      ttsModel: String(b.speechApi.ttsModel || cs.ttsModel || 'tts-1').trim(),
+      ttsVoice: String(b.speechApi.ttsVoice || cs.ttsVoice || 'alloy').trim(),
+      asrModel: String(b.speechApi.asrModel || cs.asrModel || 'whisper-1').trim(),
+    };
+  }
   if (b.newPassword) {
     if (String(b.newPassword).length < 6) return sendJson(res, 400, { ok: false, error: '管理员密码至少 6 位' });
     patch.adminPasswordHash = DB.hashPassword(String(b.newPassword));
@@ -2301,7 +2317,43 @@ async function handleTts(req, res) {
   const b = await jsonBody(req);
   const text = String(b.text || '').trim().slice(0, 2000);
   if (!text) return sendJson(res, 400, { ok: false, error: '文本不能为空' });
-  // 未指定/不支持的音色时，按文本语种自动选（中文指令用中文音色）
+
+  const s = DB.getSettings();
+  const sp = s.speechApi || {};
+  const speechBase = sp.apiBase || '';
+  const speechKey = sp.apiKey || s.apiKey || '';
+
+  // 优先走大模型语音 API（OpenAI 兼容 /audio/speech）
+  if (speechBase && speechKey) {
+    try {
+      const ttsModel = sp.ttsModel || 'tts-1';
+      const voice = sp.ttsVoice || 'alloy';
+      const r = await fetch(`${speechBase}/audio/speech`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${speechKey}`,
+        },
+        body: JSON.stringify({ model: ttsModel, input: text, voice }),
+        signal: AbortSignal.timeout(30000),
+      });
+      if (r.ok) {
+        const buf = Buffer.from(await r.arrayBuffer());
+        res.writeHead(200, {
+          'Content-Type': r.headers.get('content-type') || 'audio/mpeg',
+          'Content-Length': buf.length,
+          'Cache-Control': 'public, max-age=86400',
+        });
+        return res.end(buf);
+      }
+      console.warn('[tts-api]', r.status, (await r.text()).slice(0, 160));
+      // API 失败时降级到 edge-tts
+    } catch (e) {
+      console.warn('[tts-api]', e.message);
+    }
+  }
+
+  // 降级：edge-tts
   const fallback = /[\u4e00-\u9fff]/.test(text) ? 'zh-CN-XiaoxiaoNeural' : 'en-US-AriaNeural';
   const voice = TTS_VOICES[b.voice] ? b.voice : fallback;
   const rate = ttsRateStr(b.speed || 1);
@@ -2346,11 +2398,17 @@ async function handleAsr(req, res, cfg) {
   const audio = await readBodyRaw(req, 8 * 1024 * 1024).catch(() => null);
   if (!audio || !audio.length) return sendJson(res, 400, { ok: false, error: '未收到音频数据' });
 
-  const apiKey = apiKeyFor(req, cfg, ctx.session);
-  if (!apiKey) return sendJson(res, 400, { ok: false, error: '服务端未配置 API Key' });
+  const s = DB.getSettings();
+  const sp = s.speechApi || {};
+  const asrBase = sp.apiBase || cfg.apiBase;
+  const asrKey = sp.apiKey || apiKeyFor(req, cfg, ctx.session);
+  if (!asrKey) return sendJson(res, 400, { ok: false, error: '服务端未配置 API Key' });
 
   const lang = 'en';
-  const models = ['whisper-1', 'whisper-large-v3', 'qwen-audio-asr'];
+  // 优先用后台配置的 ASR 模型，然后尝试常用降级模型
+  const configModel = sp.asrModel || '';
+  const fallbackModels = ['whisper-1', 'whisper-large-v3', 'qwen-audio-asr'];
+  const models = configModel ? [configModel, ...fallbackModels.filter((m) => m !== configModel)] : fallbackModels;
 
   for (const model of models) {
     try {
@@ -2360,9 +2418,9 @@ async function handleAsr(req, res, cfg) {
       fd.append('language', lang);
       fd.append('response_format', 'json');
 
-      const r = await fetch(`${cfg.apiBase}/audio/transcriptions`, {
+      const r = await fetch(`${asrBase}/audio/transcriptions`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${apiKey}` },
+        headers: { Authorization: `Bearer ${asrKey}` },
         body: fd,
         signal: AbortSignal.timeout(45000),
       });

@@ -128,6 +128,7 @@ async function loadOverview() {
     $('#cfg-card-buy').value = s.cardBuyUrl || '';
     renderBrevoForm(s.brevo || {});
     renderUrgentNotice(s.urgentNotice || {});
+    renderSpeechForm(s.speechApi || {});
     renderImagePreview(p.sourceImage || '');
 
     renderCodes(d.codes || []);
@@ -267,6 +268,14 @@ async function saveApi() {
     examRegion: $('#cfg-region').value,
     paperTemperature: Number($('#cfg-tpaper').value),
     scoreTemperature: Number($('#cfg-tscore').value),
+    // 语音服务一并保存
+    speechApi: {
+      apiBase: $('#cfg-speech-base')?.value.trim() || '',
+      apiKey: $('#cfg-speech-key')?.value.trim() || '',
+      ttsModel: currentSelectVal('cfg-speech-tts-model'),
+      ttsVoice: $('#cfg-speech-tts-voice')?.value.trim() || 'alloy',
+      asrModel: currentSelectVal('cfg-speech-asr-model'),
+    },
   };
   const key = $('#cfg-key').value.trim();
   if (key) body.apiKey = key;
@@ -275,15 +284,103 @@ async function saveApi() {
     hint.textContent = '已保存';
     toast('接口配置已保存', 'ok');
     $('#cfg-key').value = '';
+    if ($('#cfg-speech-key')) $('#cfg-speech-key').value = '';
     await loadOverview();
   } catch (e) {
     toast('保存失败：' + e.message, 'bad', 5000);
   }
 }
 
+/** 读 select 的值，如果有自定义输入框则优先读 */
+function currentSelectVal(id) {
+  const sel = document.getElementById(id);
+  return sel ? sel.value : '';
+}
+
 /* ------------------------------------------------------------------ *
  *  定价
  * ------------------------------------------------------------------ */
+
+/* ---------- 语音服务设置 ---------- */
+
+function renderSpeechForm(sp) {
+  const el = (id) => document.getElementById(id);
+  const base = el('cfg-speech-base');
+  const key = el('cfg-speech-key');
+  const hint = el('cfg-speech-key-hint');
+  const ttsM = el('cfg-speech-tts-model');
+  const ttsV = el('cfg-speech-tts-voice');
+  const asrM = el('cfg-speech-asr-model');
+  if (base) base.value = sp.apiBase || '';
+  if (key) key.value = '';
+  if (hint) hint.textContent = sp.apiKeySet ? `已设置：${sp.apiKeyHint}（留空则不修改）` : '未设置（将使用主 API Key）';
+  if (ttsV) ttsV.value = sp.ttsVoice || 'alloy';
+  // 填充 select，保留已有选项
+  fillSpeechSelect(ttsM, sp.ttsModel || 'tts-1');
+  fillSpeechSelect(asrM, sp.asrModel || 'whisper-1');
+}
+
+function fillSpeechSelect(sel, current) {
+  if (!sel) return;
+  // 如果当前值不在已有选项中，加一个
+  let found = false;
+  for (const opt of sel.options) {
+    if (opt.value === current) { found = true; break; }
+  }
+  if (!found && current) {
+    const o = document.createElement('option');
+    o.value = current;
+    o.textContent = current;
+    sel.insertBefore(o, sel.firstChild);
+  }
+  sel.value = current;
+}
+
+async function fetchSpeechModels() {
+  const hint = $('#cfg-speech-model-hint');
+  hint.textContent = '拉取中…';
+  try {
+    // 优先用语音 API 地址，否则用主地址
+    let base = $('#cfg-speech-base')?.value.trim() || $('#cfg-base')?.value.trim() || '';
+    if (!base) { hint.textContent = '请先填写 API 地址'; return; }
+    base = base.replace(/\/+$/, '');
+    if (!/\/v\d+$/.test(base)) base += '/v1';
+    const key = $('#cfg-speech-key')?.value.trim() || $('#cfg-key')?.value.trim() || '';
+    const r = await fetch(base + '/models', {
+      headers: key ? { Authorization: 'Bearer ' + key } : {},
+    });
+    if (!r.ok) { hint.textContent = `拉取失败（${r.status}）`; return; }
+    const d = await r.json();
+    const list = (d.data || d.models || []).map((m) => m.id || m.name || m).filter(Boolean);
+    if (!list.length) { hint.textContent = '未找到可用模型'; return; }
+    // 按名称分类：tts 相关放 TTS 下拉，其余放 ASR 下拉
+    const ttsSel = $('#cfg-speech-tts-model');
+    const asrSel = $('#cfg-speech-asr-model');
+    const curTts = ttsSel?.value || '';
+    const curAsr = asrSel?.value || '';
+    const ttsModels = list.filter((m) => /tts|speech|audio.*gen/i.test(m));
+    const asrModels = list.filter((m) => /whisper|asr|transcri|audio/i.test(m));
+    // 如果分不出来，两边都放全部
+    const ttsOpts = ttsModels.length ? ttsModels : list;
+    const asrOpts = asrModels.length ? asrModels : list;
+    if (ttsSel) {
+      ttsSel.innerHTML = ttsOpts.map((m) => `<option value="${m}">${m}</option>`).join('');
+      if (ttsOpts.includes(curTts)) ttsSel.value = curTts;
+    }
+    if (asrSel) {
+      asrSel.innerHTML = asrOpts.map((m) => `<option value="${m}">${m}</option>`).join('');
+      if (asrOpts.includes(curAsr)) asrSel.value = curAsr;
+    }
+    hint.textContent = `找到 ${list.length} 个模型（TTS ${ttsOpts.length} · ASR ${asrOpts.length}）`;
+  } catch (e) {
+    hint.textContent = '拉取失败：' + e.message;
+  }
+}
+
+async function saveSpeech() {
+  // 语音设置已合并到 saveApi，这里直接调用
+  return saveApi();
+}
 
 /* ---------- 紧急通知弹窗 ---------- */
 
@@ -924,6 +1021,8 @@ function bind() {
   bindModelSelect();
   $('#btn-brevo-save')?.addEventListener('click', saveBrevo);
   $('#btn-urgent-save')?.addEventListener('click', saveUrgentNotice);
+  $('#btn-speech-save')?.addEventListener('click', saveSpeech);
+  $('#btn-speech-models')?.addEventListener('click', fetchSpeechModels);
   $('#btn-admin-models')?.addEventListener('click', fetchModels);
   $('#btn-admin-test')?.addEventListener('click', testConn);
   $('#btn-admin-save')?.addEventListener('click', saveApi);

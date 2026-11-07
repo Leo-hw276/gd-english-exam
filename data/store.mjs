@@ -93,6 +93,14 @@ export const DEFAULT_SETTINGS = {
     title: '',
     body: '',
   },
+  // 语音服务 API（TTS 朗读 + ASR 转写），留空时 TTS 降级到 edge-tts，ASR 用主 API
+  speechApi: {
+    apiBase: '',     // 如 https://api.openai.com/v1
+    apiKey: '',      // 语音服务专用 Key（留空则用主 API Key）
+    ttsModel: 'tts-1',
+    ttsVoice: 'alloy',
+    asrModel: 'whisper-1',
+  },
   // 脚本访问防护：同一 IP 在窗口内脚本访问超过 scriptMax 次 → 自动封禁
   scriptGuard: {
     enabled: true,
@@ -249,6 +257,15 @@ export function getPublicSettings() {
     security: s.security || { registrationOff: false, loginOff: false, speechOff: false },
     // 紧急通知弹窗（前端根据 id 判断是否已读）
     urgentNotice: s.urgentNotice?.enabled ? { id: s.urgentNotice.id, title: s.urgentNotice.title, body: s.urgentNotice.body } : null,
+    // 语音服务配置（Key 不下发）
+    speechApi: {
+      apiBase: s.speechApi?.apiBase || '',
+      apiKeySet: Boolean(s.speechApi?.apiKey),
+      apiKeyHint: s.speechApi?.apiKey ? s.speechApi.apiKey.slice(0, 6) + '••••' + s.speechApi.apiKey.slice(-4) : '',
+      ttsModel: s.speechApi?.ttsModel || 'tts-1',
+      ttsVoice: s.speechApi?.ttsVoice || 'alloy',
+      asrModel: s.speechApi?.asrModel || 'whisper-1',
+    },
     // 配置来源（db=网站后台保存；环境变量仅作新库初始值，不锁定）
     sources: configSources(s),
     locked: envLocked(s),
