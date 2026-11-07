@@ -126,7 +126,7 @@ async function loadNotices() {
     const abs = d.abnormal || [];
     if (!anns.length && !abs.length) {
       card.style.display = 'none';
-      if (empty) empty.style.display = '';
+      if (empty) { empty.style.display = ''; empty.innerHTML = '<p class="muted" style="text-align:center;padding:20px 0">暂无公告</p>'; }
       return;
     }
     card.style.display = '';
@@ -177,6 +177,7 @@ async function loadNotices() {
       .join('');
   } catch {
     card.style.display = 'none';
+    if (empty) { empty.style.display = ''; empty.innerHTML = '<p class="muted" style="text-align:center;padding:20px 0">暂无公告</p>'; }
   }
 }
 
@@ -2272,6 +2273,7 @@ function checkUrgentNotice() {
 (async function init() {
   Tts.init();
   bind();
+  loadNotices(); // 立即加载公告，不等自检
   // 调试/自动化测试入口
   window.__exam = { Tts, S, showScreen };
   await runEnvCheck();
