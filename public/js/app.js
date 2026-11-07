@@ -131,7 +131,10 @@ async function loadNotices() {
     }
     card.style.display = '';
     if (empty) empty.style.display = 'none';
-    $('#notice-announcements').innerHTML = anns
+
+    // 公告按时间倒序，默认只显示前 3 条
+    const MAX_SHOW = 3;
+    const renderAnns = (list) => list
       .map(
         (a) =>
           `<div class="notice-item lv-${esc(a.level)}">
@@ -140,6 +143,28 @@ async function loadNotices() {
           </div>`
       )
       .join('');
+
+    const shown = anns.slice(0, MAX_SHOW);
+    const rest = anns.slice(MAX_SHOW);
+    $('#notice-announcements').innerHTML = renderAnns(shown);
+
+    const moreWrap = $('#notice-more-wrap');
+    if (moreWrap) {
+      if (rest.length) {
+        moreWrap.style.display = '';
+        const btn = $('#btn-notice-more');
+        if (btn) {
+          btn.textContent = `显示更多（${rest.length}条）`;
+          btn.onclick = () => {
+            $('#notice-announcements').innerHTML = renderAnns(anns);
+            moreWrap.style.display = 'none';
+          };
+        }
+      } else {
+        moreWrap.style.display = 'none';
+      }
+    }
+
     $('#notice-abnormal').innerHTML = abs
       .map((a) => {
         const t = a.type === 'ip' ? 'IP' : a.type === 'account' ? '账号' : '地址';

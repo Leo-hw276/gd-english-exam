@@ -180,8 +180,8 @@ export const ITEM_NUMBERING = {
 export const CITY_PROFILES = {
   jiangmen: {
     name: '江门市',
-    note: '模仿朗读播放录音 2 遍，准备 50 秒后朗读。',
-    readAloud: { playTimes: 2, prepareSec: 50, recordSec: 70 },
+    note: '模仿朗读播放录音 1 遍，准备 50 秒后朗读。',
+    readAloud: { playTimes: 1, prepareSec: 50, recordSec: 70 },
     retell: { prepareSec: 50, recordSec: 60 },
   },
   guangzhou: {

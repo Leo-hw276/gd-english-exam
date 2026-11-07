@@ -1346,6 +1346,13 @@ body.admin-mode #pill-tts { display: none !important; }
   padding: 24px;
   margin-bottom: 24px;
 }
+.panel {
+  background: #fff;
+  border: 1px solid var(--line, #e4e7ec);
+  border-radius: 10px;
+  padding: 20px;
+  min-height: 120px;
+}
 /* 公告时间线 */
 .notice-item {
   position: relative;

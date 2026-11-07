@@ -41,17 +41,22 @@
     <div class="intro-cols">
       <div class="intro-col">
         <h2 class="sec-title">公告</h2>
-        <div id="notice-card" style="display:none">
-          <div id="notice-announcements"></div>
-          <div id="notice-abnormal"></div>
-        </div>
-        <div id="notice-empty">
-          <p class="muted">暂无公告</p>
+        <div class="panel" id="notice-panel">
+          <div id="notice-card" style="display:none">
+            <div id="notice-announcements"></div>
+            <div id="notice-abnormal"></div>
+            <div id="notice-more-wrap" style="display:none;text-align:center;margin-top:12px">
+              <button class="btn ghost sm" id="btn-notice-more">显示更多</button>
+            </div>
+          </div>
+          <div id="notice-empty">
+            <p class="muted" style="text-align:center;padding:20px 0">暂无公告</p>
+          </div>
         </div>
       </div>
       <div class="intro-col">
         <h2 class="sec-title">环境自检</h2>
-        <div id="card-env">
+        <div class="panel" id="card-env">
           <div class="kv" id="env-list"></div>
           <div class="row" style="margin-top:14px">
             <button class="btn ghost sm" id="btn-check">重新自检</button>
