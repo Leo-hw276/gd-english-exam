@@ -1583,7 +1583,9 @@ async function jsonBody(req) {
 /** Cloudflare Turnstile 服务端校验；未配置 Secret 时直接放行 */
 async function verifyTurnstile(token, ip) {
   const t = DB.getSettings().turnstile || {};
-  if (!t.secretKey) return { ok: true, skipped: true };
+  // 必须同时配好 Site Key 与 Secret Key 才启用；只配一项视为未开启，
+  // 否则前端渲染不出挂件、后端却强制校验，会把登录注册彻底锁死。
+  if (!t.siteKey || !t.secretKey) return { ok: true, skipped: true };
   if (!token) return { ok: false, error: '请完成人机验证' };
   try {
     const body = new URLSearchParams({ secret: t.secretKey, response: String(token), remoteip: ip || '' });
@@ -1957,10 +1959,12 @@ async function handleAdminSettings(req, res) {
   if (b.turnstile && typeof b.turnstile === 'object') {
     const ct = cur.turnstile || {};
     const siteKey = String(b.turnstile.siteKey ?? ct.siteKey ?? '').trim();
-    const secretKey = String(b.turnstile.secretKey || '').trim() || ct.secretKey || '';
     if (siteKey && !/^[A-Za-z0-9_\-]{8,80}$/.test(siteKey)) {
       return sendJson(res, 400, { ok: false, error: 'Turnstile Site Key 格式不正确' });
     }
+    // Site Key 留空 = 关闭人机验证，同时清掉 Secret，避免残留旧密钥；
+    // 未填 Secret 表示「沿用原值」（不回显密钥）。
+    const secretKey = siteKey ? String(b.turnstile.secretKey || '').trim() || ct.secretKey || '' : '';
     patch.turnstile = { siteKey, secretKey };
   }
   // 紧急通知弹窗
