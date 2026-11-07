@@ -1480,6 +1480,8 @@ async function handleHealth(req, res, cfg) {
     // 邮箱验证码是否开启（前端据此显示验证码输入框；Key 不下发）
     emailVerify: emailVerifyOn(),
     emailCodeResendSec: Brevo.RESEND_SEC,
+    // Turnstile 站点密钥（公开，前端渲染挂件用；未配置则为空）
+    turnstileSiteKey: String(s.turnstile?.siteKey || '').trim(),
     // 紧急通知弹窗（前端据此弹窗；未开启时不下发）
     urgentNotice: s.urgentNotice?.enabled ? { id: s.urgentNotice.id, title: s.urgentNotice.title, body: s.urgentNotice.body } : null,
   });
@@ -1578,6 +1580,28 @@ async function jsonBody(req) {
 /* ---------------- 用户认证 ---------------- */
 
 /** 邮箱验证码是否启用（后台配置了 Brevo 且开关打开） */
+/** Cloudflare Turnstile 服务端校验；未配置 Secret 时直接放行 */
+async function verifyTurnstile(token, ip) {
+  const t = DB.getSettings().turnstile || {};
+  if (!t.secretKey) return { ok: true, skipped: true };
+  if (!token) return { ok: false, error: '请完成人机验证' };
+  try {
+    const body = new URLSearchParams({ secret: t.secretKey, response: String(token), remoteip: ip || '' });
+    const r = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      body,
+      signal: AbortSignal.timeout(10000),
+    });
+    const j = await r.json();
+    if (j.success) return { ok: true };
+    console.warn('[turnstile] 校验失败', j['error-codes']);
+    return { ok: false, error: '人机验证未通过，请刷新后重试' };
+  } catch (e) {
+    console.warn('[turnstile] 校验异常', e.message);
+    return { ok: false, error: '人机验证服务暂时不可用，请稍后重试' };
+  }
+}
+
 function emailVerifyOn() {
   const b = DB.getSettings().brevo || {};
   return Boolean(b.enabled && b.apiKey && b.senderEmail);
@@ -1669,6 +1693,10 @@ async function handleRegister(req, res) {
   const password = String(b.password || '');
   const name = String(b.name || '').trim();
 
+  // Cloudflare Turnstile 人机验证（已配置时必过）
+  const tsReg = await verifyTurnstile(b.turnstileToken, ip);
+  if (!tsReg.ok) return sendJson(res, 403, { ok: false, error: tsReg.error });
+
   // 图形验证码始终必填（防止脚本批量注册）
   const cap = verifyCaptcha(b.captchaId, b.captchaCode, ip);
   if (!cap.ok) return sendJson(res, 400, { ok: false, error: cap.error });
@@ -1732,6 +1760,10 @@ async function handleLogin(req, res) {
   // 账号框可填邮箱或手机号，按是否含 @ 自动识别
   const account = String(b.account || b.email || b.phone || '').trim();
   const password = String(b.password || '');
+
+  // Cloudflare Turnstile 人机验证（已配置时必过）
+  const tsLogin = await verifyTurnstile(b.turnstileToken, ip);
+  if (!tsLogin.ok) return sendJson(res, 403, { ok: false, error: tsLogin.error });
 
   // 图形验证码始终必填
   const cap = verifyCaptcha(b.captchaId, b.captchaCode, ip);
@@ -1920,6 +1952,16 @@ async function handleAdminSettings(req, res) {
       loginOff: Boolean(b.security.loginOff ?? cur2.loginOff),
       speechOff: Boolean(b.security.speechOff ?? cur2.speechOff),
     };
+  }
+  // Cloudflare Turnstile（Secret 留空 = 不修改；Site Key 公开，可直接保存）
+  if (b.turnstile && typeof b.turnstile === 'object') {
+    const ct = cur.turnstile || {};
+    const siteKey = String(b.turnstile.siteKey ?? ct.siteKey ?? '').trim();
+    const secretKey = String(b.turnstile.secretKey || '').trim() || ct.secretKey || '';
+    if (siteKey && !/^[A-Za-z0-9_\-]{8,80}$/.test(siteKey)) {
+      return sendJson(res, 400, { ok: false, error: 'Turnstile Site Key 格式不正确' });
+    }
+    patch.turnstile = { siteKey, secretKey };
   }
   // 紧急通知弹窗
   if (b.urgentNotice !== undefined) {

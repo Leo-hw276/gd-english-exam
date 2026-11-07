@@ -440,6 +440,40 @@ function startResendCountdown(btn, sec) {
   }, 1000);
 }
 
+/* ---------- Cloudflare Turnstile 人机验证 ---------- */
+
+// 每个面板各一个挂件；token 为一次性，失败或提交后需要重置
+const turnstileWidgets = { login: null, register: null };
+const turnstileTokens = { login: '', register: '' };
+
+/** 渲染挂件（站点未配置 siteKey 时什么也不做）。Turnstile 脚本未加载完成时稍后重试 */
+function renderTurnstile(which) {
+  const sk = S.turnstileSiteKey;
+  const mount = document.getElementById(which === 'login' ? 'li-turnstile' : 'rg-turnstile');
+  if (!mount) return;
+  if (!sk) { mount.style.display = 'none'; return; }
+  mount.style.display = '';
+  if (!window.turnstile) {
+    setTimeout(() => renderTurnstile(which), 300);
+    return;
+  }
+  if (turnstileWidgets[which] !== null) return; // 已渲染
+  turnstileWidgets[which] = window.turnstile.render(mount, {
+    sitekey: sk,
+    callback: (token) => { turnstileTokens[which] = token; },
+    'expired-callback': () => { turnstileTokens[which] = ''; },
+    'error-callback': () => { turnstileTokens[which] = ''; },
+  });
+}
+
+/** 失败或提交后重置挂件，拿新 token */
+function resetTurnstile(which) {
+  turnstileTokens[which] = '';
+  if (window.turnstile && turnstileWidgets[which] !== null) {
+    try { window.turnstile.reset(turnstileWidgets[which]); } catch {}
+  }
+}
+
 export async function doLogin() {
   const account = $('#li-email').value.trim();
   const password = $('#li-pass').value;
@@ -449,8 +483,10 @@ export async function doLogin() {
   if (!account || !password) return toast('请填写邮箱或手机号，以及密码', 'warn');
   if (!captchaCode) return toast('请输入图形验证码', 'warn');
   if (S.emailVerify && account.includes('@') && !emailCode) return toast('请输入邮箱验证码', 'warn');
+  if (S.turnstileSiteKey && !turnstileTokens.login) return toast('请先完成人机验证', 'warn');
+  const turnstileToken = turnstileTokens.login;
   try {
-    const d = await api('/api/auth/login', { account, password, captchaId, captchaCode, emailCode });
+    const d = await api('/api/auth/login', { account, password, captchaId, captchaCode, emailCode, turnstileToken });
     S.user = d.user;
     S.isAdmin = Boolean(d.admin);
     await refreshMe();
@@ -458,6 +494,7 @@ export async function doLogin() {
     showScreen('screen-intro', { push: true });
   } catch (e) {
     toast('登录失败：' + e.message, 'bad', 5000);
+    resetTurnstile('login');
     loadCaptcha($('#li-captcha-img'), $('#li-captcha-id'));
     if ($('#li-captcha')) $('#li-captcha').value = '';
   }
@@ -477,14 +514,17 @@ export async function doRegister() {
   if (password.length < 6) return toast('密码至少 6 位', 'warn');
   if (!captchaCode) return toast('请输入图形验证码', 'warn');
   if (S.emailVerify && !emailCode) return toast('请输入邮箱验证码', 'warn');
+  if (S.turnstileSiteKey && !turnstileTokens.register) return toast('请先完成人机验证', 'warn');
+  const turnstileToken = turnstileTokens.register;
   try {
-    const d = await api('/api/auth/register', { email, phone, password, name, captchaId, captchaCode, emailCode });
+    const d = await api('/api/auth/register', { email, phone, password, name, captchaId, captchaCode, emailCode, turnstileToken });
     S.user = d.user;
     await refreshMe();
     toast(d.message || '注册成功！', 'ok', 5000);
     showScreen('screen-intro', { push: true });
   } catch (e) {
     toast('注册失败：' + e.message, 'bad', 5000);
+    resetTurnstile('register');
     loadCaptcha($('#rg-captcha-img'), $('#rg-captcha-id'));
     if ($('#rg-captcha')) $('#rg-captcha').value = '';
   }
@@ -707,6 +747,9 @@ async function runEnvCheck() {
     S.emailVerify = Boolean(health.emailVerify);
     S.emailCodeResendSec = health.emailCodeResendSec || 60;
     S.urgentNotice = health.urgentNotice || null;
+    S.turnstileSiteKey = health.turnstileSiteKey || '';
+    renderTurnstile('login');
+    renderTurnstile('register');
     applyEmailVerifyUi();
     items.push({ k: '评分服务端', v: '已连接', ok: true });
     const pillApi = $('#pill-api');

@@ -10,6 +10,7 @@
 <meta name="description" content="严格按照广东省江门市中考英语听说考试（人机对话）官方题型与评分标准设计的在线模拟练习系统，AI 自动组卷、录音作答、满分 30 分智能评分。" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%233538cd'/%3E%3Ctext x='50' y='68' font-size='54' text-anchor='middle' fill='white' font-family='sans-serif' font-weight='bold'%3E%E5%90%AC%3C/text%3E%3C/svg%3E" />
 <link rel="stylesheet" href="/styles.css?v=20261107a" />
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
 </head>
 <body>
 
@@ -235,6 +236,7 @@
         <input type="text" id="li-email" placeholder="邮箱或 11 位手机号" autocomplete="username" />
         <label class="muted" style="margin-top:12px">密码</label>
         <input type="password" id="li-pass" placeholder="至少 6 位" autocomplete="current-password" />
+        <div id="li-turnstile" class="turnstile-box" style="margin-top:12px"></div>
         <div class="row captcha-row" style="margin-top:12px;align-items:flex-end">
           <div style="flex:1;min-width:120px">
             <label class="muted">图形验证码（区分大小写）</label>
@@ -267,6 +269,7 @@
         <input type="tel" id="rg-phone" placeholder="11 位中国大陆手机号" autocomplete="tel" inputmode="numeric" maxlength="13" />
         <label class="muted" style="margin-top:12px">密码</label>
         <input type="password" id="rg-pass" placeholder="至少 6 位" autocomplete="new-password" />
+        <div id="rg-turnstile" class="turnstile-box" style="margin-top:12px"></div>
         <div class="row captcha-row" style="margin-top:12px;align-items:flex-end">
           <div style="flex:1;min-width:120px">
             <label class="muted">验证码（区分大小写）</label>
@@ -639,6 +642,26 @@
         <div class="row" style="margin-top:12px">
           <button class="btn" id="btn-urgent-save">保存紧急通知</button>
           <span class="muted" id="cfg-urgent-hint"></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>人机验证（Cloudflare Turnstile）</h2>
+        <p class="muted">填写后，登录与注册页会显示 Cloudflare 人机验证。Site Key 公开，Secret Key 仅服务端使用。两项都留空即关闭。</p>
+        <div class="row" style="margin-top:12px">
+          <div style="flex:1;min-width:240px">
+            <label class="muted">Site Key（站点密钥）</label>
+            <input type="text" id="cfg-ts-site" placeholder="0x4AAAA..." autocomplete="off" />
+          </div>
+          <div style="flex:1;min-width:240px">
+            <label class="muted">Secret Key（服务端密钥）</label>
+            <input type="password" id="cfg-ts-secret" placeholder="留空则不修改" autocomplete="off" />
+            <div class="muted" id="cfg-ts-secret-hint" style="font-size:12px;margin-top:4px"></div>
+          </div>
+        </div>
+        <div class="row" style="margin-top:14px">
+          <button class="btn" id="btn-ts-save">保存人机验证</button>
+          <span class="muted" id="cfg-ts-hint"></span>
         </div>
       </div>
 

@@ -128,6 +128,7 @@ async function loadOverview() {
     $('#cfg-card-buy').value = s.cardBuyUrl || '';
     renderBrevoForm(s.brevo || {});
     renderUrgentNotice(s.urgentNotice || {});
+    renderTurnstileForm(s);
     renderSpeechForm(s.speechApi || {});
     renderImagePreview(p.sourceImage || '');
 
@@ -408,6 +409,35 @@ async function saveUrgentNotice() {
     });
     hint.textContent = '已保存';
     toast('紧急通知已更新', 'ok');
+    await loadOverview();
+  } catch (e) {
+    hint.textContent = '保存失败';
+    toast('保存失败：' + e.message, 'bad', 5000);
+  }
+}
+
+/* ---------- Cloudflare Turnstile 设置 ---------- */
+
+function renderTurnstileForm(s) {
+  const site = document.getElementById('cfg-ts-site');
+  const secret = document.getElementById('cfg-ts-secret');
+  const hint = document.getElementById('cfg-ts-secret-hint');
+  if (site) site.value = s.turnstileSiteKey || '';
+  if (secret) secret.value = '';
+  if (hint) hint.textContent = s.turnstileSecretSet ? '已设置（留空则不修改）' : '尚未设置';
+}
+
+async function saveTurnstile() {
+  const hint = $('#cfg-ts-hint');
+  try {
+    await api('/api/admin/settings', {
+      turnstile: {
+        siteKey: $('#cfg-ts-site').value.trim(),
+        secretKey: $('#cfg-ts-secret').value.trim(),
+      },
+    });
+    hint.textContent = '已保存';
+    toast('人机验证设置已保存', 'ok');
     await loadOverview();
   } catch (e) {
     hint.textContent = '保存失败';
@@ -1021,6 +1051,7 @@ function bind() {
   bindModelSelect();
   $('#btn-brevo-save')?.addEventListener('click', saveBrevo);
   $('#btn-urgent-save')?.addEventListener('click', saveUrgentNotice);
+  $('#btn-ts-save')?.addEventListener('click', saveTurnstile);
   $('#btn-speech-save')?.addEventListener('click', saveSpeech);
   $('#btn-speech-models')?.addEventListener('click', fetchSpeechModels);
   $('#btn-admin-models')?.addEventListener('click', fetchModels);

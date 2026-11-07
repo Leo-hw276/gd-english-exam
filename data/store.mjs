@@ -93,6 +93,11 @@ export const DEFAULT_SETTINGS = {
     title: '',
     body: '',
   },
+  // Cloudflare Turnstile 人机验证（留空 = 不启用）
+  turnstile: {
+    siteKey: '',    // 公开，前端渲染用
+    secretKey: '',  // 保密，仅服务端校验用
+  },
   // 语音服务 API（TTS 朗读 + ASR 转写），留空时 TTS 降级到 edge-tts，ASR 用主 API
   speechApi: {
     apiBase: '',     // 如 https://api.openai.com/v1
@@ -257,6 +262,9 @@ export function getPublicSettings() {
     security: s.security || { registrationOff: false, loginOff: false, speechOff: false },
     // 紧急通知弹窗（前端根据 id 判断是否已读）
     urgentNotice: s.urgentNotice?.enabled ? { id: s.urgentNotice.id, title: s.urgentNotice.title, body: s.urgentNotice.body } : null,
+    // Turnstile 站点密钥（公开可见；Secret 不下发）
+    turnstileSiteKey: String(s.turnstile?.siteKey || '').trim(),
+    turnstileSecretSet: Boolean(s.turnstile?.secretKey),
     // 语音服务配置（Key 不下发）
     speechApi: {
       apiBase: s.speechApi?.apiBase || '',
