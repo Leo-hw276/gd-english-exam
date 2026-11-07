@@ -6,7 +6,7 @@
 <title>广东中考英语听说考试 · 在线模拟练习</title>
 <meta name="description" content="严格按照广东省江门市中考英语听说考试（人机对话）官方题型与评分标准设计的在线模拟练习系统，AI 自动组卷、录音作答、满分 30 分智能评分。" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%233538cd'/%3E%3Ctext x='50' y='68' font-size='54' text-anchor='middle' fill='white' font-family='sans-serif' font-weight='bold'%3E%E5%90%AC%3C/text%3E%3C/svg%3E" />
-<link rel="stylesheet" href="/styles.css?v=20251024b" />
+<link rel="stylesheet" href="/styles.css?v=20261107a" />
 </head>
 <body>
 
@@ -35,89 +35,76 @@
 
 <!-- ============================ 首页 ============================ -->
 <section id="screen-intro" class="screen active">
-  <div class="wrap">
+  <div class="wrap intro-wrap">
 
-    <div class="hero">
-      <h1>广东省中考英语听说考试 · 全真模拟</h1>
-      <p>三大题 · 五小节 · 14 小题 · 满分 30 分 · 约 20 分钟</p>
-    </div>
-
-    <!-- 两栏：左自检 右公告 -->
+    <!-- 两栏：左公告 右自检 -->
     <div class="intro-cols">
-      <div class="intro-col-left">
-        <div class="card" id="card-env">
-          <h2>环境自检</h2>
+      <div class="intro-col">
+        <h2 class="sec-title">公告</h2>
+        <div id="notice-card" style="display:none">
+          <div id="notice-announcements"></div>
+          <div id="notice-abnormal"></div>
+        </div>
+        <div id="notice-empty">
+          <p class="muted">暂无公告</p>
+        </div>
+      </div>
+      <div class="intro-col">
+        <h2 class="sec-title">环境自检</h2>
+        <div id="card-env">
           <div class="kv" id="env-list"></div>
           <div class="row" style="margin-top:14px">
             <button class="btn ghost sm" id="btn-check">重新自检</button>
-            <button class="btn ghost sm" id="btn-mictest">麦克风试音（5 秒）</button>
+            <button class="btn ghost sm" id="btn-mictest">麦克风试音</button>
             <span class="muted" id="mic-hint"></span>
           </div>
           <div id="mictest-mount"></div>
         </div>
       </div>
-      <div class="intro-col-right">
-        <div class="card" id="notice-card" style="display:none">
-          <h2>公告</h2>
-          <div id="notice-announcements"></div>
-          <div id="notice-abnormal"></div>
-        </div>
-        <div class="card" id="notice-empty" style="display:none">
-          <h2>公告</h2>
-          <p class="muted">暂无公告</p>
-        </div>
-      </div>
     </div>
 
     <!-- 开始考试 -->
-    <div class="card">
-      <h2>开始考试</h2>
+    <div class="exam-start">
+      <h2 class="sec-title">开始考试</h2>
       <div class="row" style="margin-bottom:14px">
         <div style="flex:1;min-width:220px">
-          <label class="muted" for="inp-topic">话题方向（可留空由 AI 随机抽取课标话题）</label>
-          <input type="text" id="inp-topic" placeholder="例如：校园生活 / 健康饮食 / 志愿服务 / 环境保护" style="width:100%;margin-top:6px" />
+          <label class="muted" for="inp-topic">话题方向（可留空由 AI 随机抽取）</label>
+          <input type="text" id="inp-topic" placeholder="校园生活 / 健康饮食 / 志愿服务" style="width:100%;margin-top:6px" />
         </div>
         <div style="min-width:150px">
           <label class="muted" for="inp-diff">难度</label>
           <select id="inp-diff" style="width:100%;margin-top:6px">
-            <option value="基础">基础（八下水平）</option>
-            <option value="标准" selected>标准（中考水平）</option>
-            <option value="挑战">挑战（压轴难度）</option>
+            <option value="基础">基础</option>
+            <option value="标准" selected>标准</option>
+            <option value="挑战">挑战</option>
           </select>
         </div>
-        <div style="min-width:170px">
-          <label class="muted" for="inp-city">考区（决定录音时间参数）</label>
+        <div style="min-width:150px">
+          <label class="muted" for="inp-city">考区</label>
           <select id="inp-city" style="width:100%;margin-top:6px"></select>
         </div>
       </div>
       <p class="muted" id="city-hint" style="margin-top:-6px;margin-bottom:12px"></p>
       <div class="row">
-        <button class="btn lg" id="btn-start">开始考试（AI 自动组卷）</button>
-        <button class="btn ghost lg" id="btn-offline">使用内置示例卷练习</button>
+        <button class="btn lg" id="btn-start">开始考试</button>
+        <button class="btn ghost lg" id="btn-offline">内置示例卷</button>
         <span class="muted" id="gen-hint"></span>
       </div>
       <p class="muted" id="quota-hint" style="margin-top:12px"></p>
     </div>
 
-    <!-- 评分细则（开始考试下方） -->
-    <div class="card" style="margin-top:20px">
-      <h2>试卷结构与评分标准</h2>
+    <!-- 评分细则 -->
+    <div class="exam-spec">
+      <h2 class="sec-title">试卷结构</h2>
       <table class="spec">
         <thead>
-          <tr><th style="width:110px">大题</th><th style="width:130px">小节</th><th>任务描述</th><th style="width:70px">题量</th><th style="width:70px">分值</th></tr>
+          <tr><th>大题</th><th>小节</th><th>任务描述</th><th style="width:60px">题量</th><th style="width:60px">分值</th></tr>
         </thead>
         <tbody id="spec-body"></tbody>
         <tfoot>
           <tr><td colspan="3">全卷</td><td class="num">14</td><td class="num">30</td></tr>
         </tfoot>
       </table>
-      <div class="callout info" style="margin-top:16px">
-        <b>考前须知</b><br>
-        1. 请使用 <b>Chrome 或 Edge</b> 浏览器，并允许本页使用<b>麦克风</b>。<br>
-        2. 请佩戴耳机，在安静环境中作答；每道题请靠近麦克风、<b>清晰、自然地朗读</b>。<br>
-        3. 每题录音时都显示「<b>我答完了 · 结束录音</b>」按钮，答完可随时提前结束。<br>
-        4. 录音时间一到系统自动停止，请勿超时作答。
-      </div>
     </div>
 
   </div>
@@ -777,7 +764,7 @@
   </div>
 </div>
 
-<script type="module" src="/js/app.js?v=20251024b"></script>
-<script type="module" src="/js/admin.js?v=20251024b"></script>
+<script type="module" src="/js/app.js?v=20261107a"></script>
+<script type="module" src="/js/admin.js?v=20261107a"></script>
 </body>
 </html>
