@@ -524,9 +524,13 @@ async function doRedeem() {
   }
 }
 
-function renderAccount() {
+async function renderAccount() {
   const body = $('#acc-body');
   if (!body) return;
+  if (!S.user) {
+    body.innerHTML = '<p class="muted">正在检查登录状态…</p>';
+    await refreshMe();
+  }
   if (!S.user) {
     body.innerHTML = `请先 <a href="#" data-goto="screen-auth">登录</a> 或 <a href="#" data-goto="screen-auth" data-tab="register">注册</a>。`;
     $('#acc-orders').textContent = '—';

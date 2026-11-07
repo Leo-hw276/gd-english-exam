@@ -773,7 +773,7 @@ function serveStatic(res, urlPath) {
           }
           res.writeHead(200, {
             'Content-Type': 'text/html; charset=utf-8',
-            'Cache-Control': 'no-cache',
+            'Cache-Control': 'no-store',
           });
           res.end(idx);
         });
