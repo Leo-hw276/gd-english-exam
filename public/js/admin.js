@@ -383,6 +383,28 @@ async function saveSpeech() {
 }
 
  
+async function testSpeech() {
+  const out = $('#cfg-speech-test-out');
+  if (out) out.textContent = '正在测试…';
+  try {
+    const d = await api('/api/admin/speech-test', {});
+    const lines = (d.steps || []).map((s) => {
+      const name = s.step === 'tts' ? '朗读 /audio/speech' : '转写 /audio/transcriptions';
+      if (s.ok) {
+        return `✓ ${name} 正常${s.bytes ? `（返回 ${s.bytes} 字节音频）` : ''}${s.sample ? `（返回：${s.sample.slice(0, 60)}）` : ''}`;
+      }
+      return `✗ ${name} 失败${s.status ? `（HTTP ${s.status}）` : ''}：${s.error || '未知错误'}`;
+    });
+    if (d.error) lines.unshift(`✗ ${d.error}`);
+    if (d.hint) lines.push('', d.hint);
+    if (out) out.textContent = lines.join('\n');
+    toast(d.ok ? '语音接口均可用' : '语音接口有问题，请看下方结果', d.ok ? 'ok' : 'warn', 5000);
+  } catch (e) {
+    if (out) out.textContent = '测试失败：' + e.message;
+    toast('测试失败：' + e.message, 'bad', 5000);
+  }
+}
+
 async function useLocalSpeech() {
   const hint = $('#cfg-speech-model-hint');
   try {
@@ -1051,6 +1073,7 @@ function bind() {
   $('#btn-ts-save')?.addEventListener('click', saveTurnstile);
   $('#btn-speech-save')?.addEventListener('click', saveSpeech);
   $('#btn-speech-models')?.addEventListener('click', fetchSpeechModels);
+  $('#btn-speech-test')?.addEventListener('click', testSpeech);
   $('#btn-speech-local')?.addEventListener('click', useLocalSpeech);
   $('#btn-admin-models')?.addEventListener('click', fetchModels);
   $('#btn-admin-test')?.addEventListener('click', testConn);

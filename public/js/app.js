@@ -722,6 +722,7 @@ async function runEnvCheck() {
     S.turnstileSiteKey = health.turnstileSiteKey || '';
     
     S.ttsEngine = health.ttsEngine === 'api' ? 'api' : 'edge';
+    S.asrEngine = health.asrEngine === 'api' ? 'api' : 'browser';
     Tts.setPreferServer(S.ttsEngine === 'api');
     renderTurnstile('login');
     renderTurnstile('register');
@@ -770,11 +771,13 @@ async function runEnvCheck() {
   }
 
   let asrNote;
-  if (!isAsrSupported()) asrNote = '不支持 —— 将启用「纯声学评分」模式';
+  const serverAsrOn = S.asrEngine === 'api';
+  if (serverAsrOn) asrNote = '服务端转写（录音结束后调用语音 API）';
+  else if (!isAsrSupported()) asrNote = '不支持 —— 将启用「纯声学评分」模式';
   else if (S.asrStatus === AsrStatus.NETWORK_FAIL) asrNote = '识别服务不可达 —— 将启用「纯声学评分」模式';
   else if (S.asrStatus === AsrStatus.OK) asrNote = '已实测可用';
   else asrNote = '浏览器支持（Chrome/Edge 需可访问识别服务，首次作答后确认）';
-  items.push({ k: '语音识别（转写作答内容）', v: asrNote, ok: isAsrSupported() && S.asrStatus !== AsrStatus.NETWORK_FAIL });
+  items.push({ k: '语音识别（转写作答内容）', v: asrNote, ok: serverAsrOn || (isAsrSupported() && S.asrStatus !== AsrStatus.NETWORK_FAIL) });
 
   list.innerHTML = items
     .map(
@@ -785,7 +788,10 @@ async function runEnvCheck() {
 
   const badge = $('#pill-asr');
   if (badge) {
-    if (!isAsrSupported()) {
+    if (serverAsrOn) {
+      badge.textContent = '语音识别：服务端转写';
+      badge.className = 'pill ok';
+    } else if (!isAsrSupported()) {
       badge.textContent = '语音识别：不可用';
       badge.className = 'pill warn';
     } else if (S.asrStatus === AsrStatus.NETWORK_FAIL) {
@@ -994,8 +1000,13 @@ async function recordAnswer({ seconds, key, label = '录音中', note = '', canF
   const rec = new Recorder(S.micStream);
   rec.onTick = updateMeter;
 
+  const serverAsr = S.asrEngine === 'api';
   const asr = new Asr();
+  if (serverAsr) {
+    S.asrStatus = AsrStatus.OK;
+  }
   asr.onUpdate = (final, interim) => {
+    if (serverAsr) return;
     const live = $('#reclive');
     if (!live) return;
     const t = (final + ' ' + interim).trim();
@@ -1010,7 +1021,15 @@ async function recordAnswer({ seconds, key, label = '录音中', note = '', canF
   };
 
   rec.start();
-  if (isAsrSupported()) asr.start();
+  if (serverAsr) {
+    const live = $('#reclive');
+    if (live) {
+      live.textContent = '录音中…结束后由服务端转写';
+      live.classList.remove('empty');
+    }
+  } else if (isAsrSupported()) {
+    asr.start();
+  }
   setRecState(true, '正在录音');
   S.recording = { rec, asr };
 
@@ -1044,7 +1063,11 @@ async function recordAnswer({ seconds, key, label = '录音中', note = '', canF
 
   
   let transcript = asrText || '';
-  if (!transcript && blob && blob.size > 2000) {
+  if (serverAsr) {
+    transcript = '';
+    if (blob && blob.size > 1000) transcript = await transcribeOnServer(blob);
+    if (!transcript) toast('服务端转写未返回文本，本次按纯声学评分', 'warn', 4000);
+  } else if (!transcript && blob && blob.size > 2000) {
     transcript = await transcribeOnServer(blob);
   }
 

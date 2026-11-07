@@ -1473,6 +1473,12 @@ async function handleHealth(req, res, cfg) {
       const key = String(sp.apiKey || s.apiKey || '').trim();
       return base && key ? 'api' : 'edge';
     })(),
+    asrEngine: (() => {
+      const sp = s.speechApi || {};
+      const base = String(sp.apiBase || '').trim();
+      const key = String(sp.apiKey || s.apiKey || '').trim();
+      return base && key ? 'api' : 'browser';
+    })(),
     
     urgentNotice: s.urgentNotice?.enabled ? { id: s.urgentNotice.id, title: s.urgentNotice.title, body: s.urgentNotice.body } : null,
   });
@@ -2335,6 +2341,85 @@ function handleCaptcha(req, res) {
 
  
 
+function makeSilentWav(seconds = 0.6, sampleRate = 16000) {
+  const samples = Math.floor(seconds * sampleRate);
+  const dataLen = samples * 2;
+  const buf = Buffer.alloc(44 + dataLen);
+  buf.write('RIFF', 0);
+  buf.writeUInt32LE(36 + dataLen, 4);
+  buf.write('WAVE', 8);
+  buf.write('fmt ', 12);
+  buf.writeUInt32LE(16, 16);
+  buf.writeUInt16LE(1, 20);
+  buf.writeUInt16LE(1, 22);
+  buf.writeUInt32LE(sampleRate, 24);
+  buf.writeUInt32LE(sampleRate * 2, 28);
+  buf.writeUInt16LE(2, 32);
+  buf.writeUInt16LE(16, 34);
+  buf.write('data', 36);
+  buf.writeUInt32LE(dataLen, 40);
+  return buf;
+}
+
+async function handleAdminSpeechTest(req, res) {
+  if (!requireAdmin(req, res)) return;
+  const s = DB.getSettings();
+  const sp = s.speechApi || {};
+  const base = String(sp.apiBase || '').trim();
+  const key = String(sp.apiKey || s.apiKey || '').trim();
+  const steps = [];
+
+  if (!base) return sendJson(res, 200, { ok: false, error: '未配置「语音 API 地址」，当前朗读使用本地 Edge-TTS', steps });
+  if (!key) return sendJson(res, 200, { ok: false, error: '未配置「语音 API Key」，也无法回退到主 Key', steps });
+
+  try {
+    const r = await fetch(`${base}/audio/speech`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+      body: JSON.stringify({ model: sp.ttsModel || 'tts-1', input: 'hello', voice: sp.ttsVoice || 'alloy' }),
+      signal: AbortSignal.timeout(25000),
+    });
+    if (r.ok) {
+      const buf = Buffer.from(await r.arrayBuffer());
+      steps.push({ step: 'tts', ok: true, bytes: buf.length, contentType: r.headers.get('content-type') || '' });
+    } else {
+      const t = (await r.text().catch(() => '')).slice(0, 300);
+      steps.push({ step: 'tts', ok: false, status: r.status, error: t });
+    }
+  } catch (e) {
+    steps.push({ step: 'tts', ok: false, error: e.message });
+  }
+
+  try {
+    const wav = makeSilentWav();
+    const fd = new FormData();
+    fd.append('file', new Blob([wav], { type: 'audio/wav' }), 'test.wav');
+    fd.append('model', sp.asrModel || 'whisper-1');
+    fd.append('response_format', 'json');
+    const r = await fetch(`${base}/audio/transcriptions`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}` },
+      body: fd,
+      signal: AbortSignal.timeout(30000),
+    });
+    const t = (await r.text().catch(() => '')).slice(0, 300);
+    if (r.ok) steps.push({ step: 'asr', ok: true, sample: t });
+    else steps.push({ step: 'asr', ok: false, status: r.status, error: t });
+  } catch (e) {
+    steps.push({ step: 'asr', ok: false, error: e.message });
+  }
+
+  const ok = steps.every((x) => x.ok);
+  sendJson(res, 200, {
+    ok,
+    base,
+    steps,
+    hint: ok
+      ? '两个接口均可用，朗读与转写会全部走该 API。'
+      : '有一项失败：说明该服务地址不支持对应接口或密钥无权限，请更换支持 /audio/speech 与 /audio/transcriptions 的服务。',
+  });
+}
+
 async function handleTts(req, res) {
   if (DB.getSettings()?.security?.speechOff) {
     return sendJson(res, 503, { ok: false, error: '语音合成服务当前已关闭' });
@@ -2354,10 +2439,9 @@ async function handleTts(req, res) {
 
   const s = DB.getSettings();
   const sp = s.speechApi || {};
-  const speechBase = sp.apiBase || '';
-  const speechKey = sp.apiKey || s.apiKey || '';
+  const speechBase = String(sp.apiBase || '').trim();
+  const speechKey = String(sp.apiKey || s.apiKey || '').trim();
 
-  
   if (speechBase && speechKey) {
     try {
       const ttsModel = sp.ttsModel || 'tts-1';
@@ -2381,10 +2465,16 @@ async function handleTts(req, res) {
         });
         return res.end(buf);
       }
-      console.warn('[tts-api]', r.status, (await r.text()).slice(0, 160));
-      
+      const detail = (await r.text().catch(() => '')).slice(0, 200);
+      console.warn('[tts-api]', r.status, detail);
+      return sendJson(res, 502, {
+        ok: false,
+        error: `语音 API 合成失败（HTTP ${r.status}）${detail ? '：' + detail : ''}`,
+        engine: 'api',
+      });
     } catch (e) {
       console.warn('[tts-api]', e.message);
+      return sendJson(res, 502, { ok: false, error: `语音 API 请求失败：${e.message}`, engine: 'api' });
     }
   }
 
@@ -2746,6 +2836,7 @@ const server = http.createServer((req, res) => {
     if (p === '/api/admin/settings' && req.method === 'POST') return handleAdminSettings(req, res);
     if (p === '/api/admin/models' && req.method === 'POST') return handleAdminModels(req, res);
     if (p === '/api/admin/test' && req.method === 'POST') return handleAdminTest(req, res);
+    if (p === '/api/admin/speech-test' && req.method === 'POST') return handleAdminSpeechTest(req, res);
     if (p === '/api/admin/upload' && req.method === 'POST') return handleAdminUpload(req, res);
     if (p === '/api/admin/codes') return handleAdminCodes(req, res);
     if (p === '/api/admin/users') return handleAdminUsers(req, res);

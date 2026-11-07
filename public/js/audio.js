@@ -141,8 +141,11 @@ export const Tts = {
         return;
       }
       if (token !== this._token) return; 
+      this._mode = 'server';
+      return;
     }
 
+    
     
     if (window.speechSynthesis) {
       const ok = await this._speakNative(text, { rate: speed, pitch, lang: useLang, token });
@@ -271,9 +274,16 @@ export const Tts = {
           body: JSON.stringify({ text, voice, speed }),
         });
         if (!r.ok) {
-          console.warn('[tts] 服务端合成失败:', r.status);
+          let detail = '';
+          try {
+            const j = await r.json();
+            detail = j && j.error ? j.error : '';
+          } catch {}
+          this.lastError = detail || `HTTP ${r.status}`;
+          console.warn('[tts] 服务端合成失败:', r.status, detail);
           return resolve(false);
         }
+        this.lastError = '';
         const blob = await r.blob();
         if (token !== this._token) return resolve(false);
         const url = URL.createObjectURL(blob);
