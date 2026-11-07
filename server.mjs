@@ -701,6 +701,7 @@ function sendJson(res, status, obj) {
     'Content-Type': 'application/json; charset=utf-8',
     'Content-Length': Buffer.byteLength(body),
     'Cache-Control': 'no-store',
+    'X-Server': 'gd-english',
   });
   res.end(body);
 }
@@ -2684,6 +2685,7 @@ const server = http.createServer((req, res) => {
     if (p === '/api/auth/login' && req.method === 'POST') return handleLogin(req, res);
     if (p === '/api/auth/logout' && req.method === 'POST') return handleLogout(req, res);
     if (p === '/api/auth/email-code' && req.method === 'POST') return handleEmailCode(req, res);
+    if (p === '/api/auth/email-code') return sendJson(res, 405, { ok: false, error: '仅支持 POST 方法' });
     if (p === '/api/auth/me') return handleMe(req, res);
     if (p === '/api/redeem' && req.method === 'POST') return handleRedeem(req, res);
 

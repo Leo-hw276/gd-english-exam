@@ -2280,8 +2280,8 @@ function checkUrgentNotice() {
   loadNotices(); // 立即加载公告，不等自检
   // 调试/自动化测试入口
   window.__exam = { Tts, S, showScreen };
-  await runEnvCheck();
-  await refreshMe();
+  // 自检和登录态并行加载，加快首屏
+  await Promise.all([runEnvCheck(), refreshMe()]);
 
   // 登录态就绪后再按 URL 打开对应页面（/login /signup /account /price；#adminpowershell 进后台）
   syncScreenFromLocation();
