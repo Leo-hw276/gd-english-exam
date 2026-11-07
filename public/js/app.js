@@ -560,7 +560,8 @@ async function openHistoryRecord(id) {
     if (!rec) throw new Error('记录不存在');
     S.lastReport = rec.report;
     hideOverlay();
-    renderReport(rec.report, { history: true, topic: rec.topic, at: rec.at });
+    renderReport(rec.report);
+    showScreen('screen-report');
   } catch (e) {
     hideOverlay();
     toast('载入失败：' + e.message, 'bad', 5000);

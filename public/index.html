@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8" />
@@ -562,6 +562,26 @@
         <div style="margin-top:12px">
           <label class="muted">购买卡密链接（收费页「购买卡密」按钮跳转到此地址，留空则不显示按钮）</label>
           <input type="text" id="cfg-card-buy" placeholder="https://example.com/buy" />
+        <div class="row" style="margin-top:8px">
+          <button class="btn ghost sm" id="btn-admin-save-buy">保存购买链接</button>
+          <span class="muted" id="cfg-buy-hint"></span>
+        </div>
+        </div>
+
+        <div style="margin-top:14px">
+          <label class="muted">定价说明配图（可选，展示在收费页底部）</label>
+          <div class="row" style="margin-top:8px">
+            <input type="file" id="cfg-img-file" accept="image/png,image/jpeg,image/webp,image/gif" />
+            <button class="btn ghost sm" id="btn-admin-img-upload">上传图片</button>
+            <button class="btn ghost sm" id="btn-admin-img-clear">清除图片</button>
+            <span class="muted" id="cfg-img-hint">支持 PNG / JPG / WebP，≤3MB</span>
+          </div>
+          <img id="cfg-img-preview" class="cfg-img-preview" alt="" style="display:none" />
+        </div>
+
+        <div class="row" style="margin-top:16px">
+          <button class="btn" id="btn-admin-save-price">保存定价</button>
+          <span class="muted" id="cfg-price-hint"></span>
         </div>
       </div>
 
@@ -587,21 +607,6 @@
           <span class="muted" id="cfg-brevo-hint"></span>
         </div>
 
-        <div style="margin-top:14px">
-          <label class="muted">定价说明配图（可选，展示在收费页底部）</label>
-          <div class="row" style="margin-top:8px">
-            <input type="file" id="cfg-img-file" accept="image/png,image/jpeg,image/webp,image/gif" />
-            <button class="btn ghost sm" id="btn-admin-img-upload">上传图片</button>
-            <button class="btn ghost sm" id="btn-admin-img-clear">清除图片</button>
-            <span class="muted" id="cfg-img-hint">支持 PNG / JPG / WebP，≤3MB</span>
-          </div>
-          <img id="cfg-img-preview" class="cfg-img-preview" alt="" style="display:none" />
-        </div>
-
-        <div class="row" style="margin-top:16px">
-          <button class="btn" id="btn-admin-save-price">保存定价</button>
-          <span class="muted" id="cfg-price-hint"></span>
-        </div>
       </div>
 
       <div class="card">
