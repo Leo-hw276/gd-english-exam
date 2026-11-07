@@ -23,12 +23,7 @@
       <a href="/account" data-goto="screen-account">我的账户</a>
     </nav>
     <div class="spacer"></div>
-    <button class="btn sm ghost" id="btn-notice-open">公告</button>
     <a href="/" data-goto="screen-intro" class="btn sm ghost admin-only" id="btn-admin-back">返回首页</a>
-    <span class="pill brand" id="pill-model">—</span>
-    <span class="pill" id="pill-api">检查中…</span>
-    <span class="pill" id="pill-asr">语音识别</span>
-    <span class="pill" id="pill-tts">TTS</span>
     <a class="btn sm ghost" id="btn-auth-open" href="/login">登录 / 注册</a>
     <div class="userchip hidden" id="user-chip">
       <span class="uc-name" id="uc-name">—</span>
@@ -43,29 +38,38 @@
   <div class="wrap">
 
     <div class="hero">
-      <h1>广东省江门市中考英语听说考试 · 全真模拟</h1>
-      <p>三大题 · 五小节 · 14 小题 · 满分 30 分 · 约 20 分钟。全程录音作答，考后按官方标准评分。</p>
-      <div class="stat-grid">
-        <div class="stat"><div class="k">满分</div><div class="v">30 分</div></div>
-        <div class="stat"><div class="k">小题数</div><div class="v">14 题</div></div>
-        <div class="stat"><div class="k">考试时长</div><div class="v">约 20 分钟</div></div>
-        <div class="stat"><div class="k">作答方式</div><div class="v">人机对话</div></div>
+      <h1>广东省中考英语听说考试 · 全真模拟</h1>
+      <p>三大题 · 五小节 · 14 小题 · 满分 30 分 · 约 20 分钟</p>
+    </div>
+
+    <!-- 两栏：左自检 右公告 -->
+    <div class="intro-cols">
+      <div class="intro-col-left">
+        <div class="card" id="card-env">
+          <h2>环境自检</h2>
+          <div class="kv" id="env-list"></div>
+          <div class="row" style="margin-top:14px">
+            <button class="btn ghost sm" id="btn-check">重新自检</button>
+            <button class="btn ghost sm" id="btn-mictest">麦克风试音（5 秒）</button>
+            <span class="muted" id="mic-hint"></span>
+          </div>
+          <div id="mictest-mount"></div>
+        </div>
+      </div>
+      <div class="intro-col-right">
+        <div class="card" id="notice-card" style="display:none">
+          <h2>公告</h2>
+          <div id="notice-announcements"></div>
+          <div id="notice-abnormal"></div>
+        </div>
+        <div class="card" id="notice-empty" style="display:none">
+          <h2>公告</h2>
+          <p class="muted">暂无公告</p>
+        </div>
       </div>
     </div>
 
-    <div class="card" style="margin-top:20px">
-      <h2>试卷结构（江门考区）</h2>
-      <table class="spec">
-        <thead>
-          <tr><th style="width:110px">大题</th><th style="width:130px">小节</th><th>任务描述</th><th style="width:70px">题量</th><th style="width:70px">分值</th></tr>
-        </thead>
-        <tbody id="spec-body"></tbody>
-        <tfoot>
-          <tr><td colspan="3">全卷</td><td class="num">14</td><td class="num">30</td></tr>
-        </tfoot>
-      </table>
-    </div>
-
+    <!-- 开始考试 -->
     <div class="card">
       <h2>开始考试</h2>
       <div class="row" style="margin-bottom:14px">
@@ -87,17 +91,6 @@
         </div>
       </div>
       <p class="muted" id="city-hint" style="margin-top:-6px;margin-bottom:12px"></p>
-
-      <div class="callout info" style="margin-bottom:16px">
-        <b>考前须知（江门考区）</b><br>
-        1. 请使用 <b>Chrome 或 Edge</b> 浏览器，并允许本页使用<b>麦克风</b>。<br>
-        2. 请佩戴耳机，在安静环境中作答；每道题请靠近麦克风、<b>清晰、自然地朗读</b>。<br>
-        3. 模仿朗读：录音播放 <b>2 遍</b> → 准备 <b>50 秒</b> → 朗读 <b>50 秒</b>；听选信息与回答问题每题 <b>8 秒</b>录音；
-           信息转述：播放 2 遍 → 准备 50 秒 → 转述 60 秒；询问信息每题准备 15 秒、提问 8 秒。<br>
-        4. 每题录音时都显示「<b>我答完了 · 结束录音</b>」按钮，答完可随时提前结束，无需等倒计时。<br>
-        5. 录音时间一到系统自动停止，请勿超时作答。
-      </div>
-
       <div class="row">
         <button class="btn lg" id="btn-start">开始考试（AI 自动组卷）</button>
         <button class="btn ghost lg" id="btn-offline">使用内置示例卷练习</button>
@@ -106,16 +99,27 @@
       <p class="muted" id="quota-hint" style="margin-top:12px"></p>
     </div>
 
-    <div class="card" id="card-env">
-      <h2>环境自检</h2>
-      <div class="kv" id="env-list"></div>
-      <div class="row" style="margin-top:14px">
-        <button class="btn ghost sm" id="btn-check">重新自检</button>
-        <button class="btn ghost sm" id="btn-mictest">麦克风试音（5 秒）</button>
-        <span class="muted" id="mic-hint"></span>
+    <!-- 评分细则（开始考试下方） -->
+    <div class="card" style="margin-top:20px">
+      <h2>试卷结构与评分标准</h2>
+      <table class="spec">
+        <thead>
+          <tr><th style="width:110px">大题</th><th style="width:130px">小节</th><th>任务描述</th><th style="width:70px">题量</th><th style="width:70px">分值</th></tr>
+        </thead>
+        <tbody id="spec-body"></tbody>
+        <tfoot>
+          <tr><td colspan="3">全卷</td><td class="num">14</td><td class="num">30</td></tr>
+        </tfoot>
+      </table>
+      <div class="callout info" style="margin-top:16px">
+        <b>考前须知</b><br>
+        1. 请使用 <b>Chrome 或 Edge</b> 浏览器，并允许本页使用<b>麦克风</b>。<br>
+        2. 请佩戴耳机，在安静环境中作答；每道题请靠近麦克风、<b>清晰、自然地朗读</b>。<br>
+        3. 每题录音时都显示「<b>我答完了 · 结束录音</b>」按钮，答完可随时提前结束。<br>
+        4. 录音时间一到系统自动停止，请勿超时作答。
       </div>
-      <div id="mictest-mount"></div>
     </div>
+
   </div>
 </section>
 

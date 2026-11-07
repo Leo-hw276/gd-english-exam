@@ -118,6 +118,7 @@ function syncScreenFromLocation() {
 
 async function loadNotices() {
   const card = $('#notice-card');
+  const empty = $('#notice-empty');
   if (!card) return;
   try {
     const d = await api('/api/notices', undefined, 'GET');
@@ -125,9 +126,11 @@ async function loadNotices() {
     const abs = d.abnormal || [];
     if (!anns.length && !abs.length) {
       card.style.display = 'none';
+      if (empty) empty.style.display = '';
       return;
     }
     card.style.display = '';
+    if (empty) empty.style.display = 'none';
     $('#notice-announcements').innerHTML = anns
       .map(
         (a) =>
@@ -674,14 +677,15 @@ async function runEnvCheck() {
     S.urgentNotice = health.urgentNotice || null;
     applyEmailVerifyUi();
     items.push({ k: '评分服务端', v: '已连接', ok: true });
-    $('#pill-api').textContent = `接口正常 · ${health.model}`;
-    $('#pill-api').className = 'pill ok';
-    $('#pill-model').textContent = health.model;
+    const pillApi = $('#pill-api');
+    if (pillApi) { pillApi.textContent = `接口正常 · ${health.model}`; pillApi.className = 'pill ok'; }
+    const pillModel = $('#pill-model');
+    if (pillModel) pillModel.textContent = health.model;
     if (health.siteName) document.title = health.siteName;
   } catch (e) {
     items.push({ k: '评分服务端', v: '未连接：' + e.message, ok: false });
-    $('#pill-api').textContent = '接口异常';
-    $('#pill-api').className = 'pill bad';
+    const pillApi2 = $('#pill-api');
+    if (pillApi2) { pillApi2.textContent = '接口异常'; pillApi2.className = 'pill bad'; }
   }
 
   fillCitySelect();
@@ -730,18 +734,20 @@ async function runEnvCheck() {
     .join('');
 
   const badge = $('#pill-asr');
-  if (!isAsrSupported()) {
-    badge.textContent = '语音识别：不可用';
-    badge.className = 'pill warn';
-  } else if (S.asrStatus === AsrStatus.NETWORK_FAIL) {
-    badge.textContent = '语音识别：不可达';
-    badge.className = 'pill bad';
-  } else if (S.asrStatus === AsrStatus.OK) {
-    badge.textContent = '语音识别：正常';
-    badge.className = 'pill ok';
-  } else {
-    badge.textContent = '语音识别：待验证';
-    badge.className = 'pill';
+  if (badge) {
+    if (!isAsrSupported()) {
+      badge.textContent = '语音识别：不可用';
+      badge.className = 'pill warn';
+    } else if (S.asrStatus === AsrStatus.NETWORK_FAIL) {
+      badge.textContent = '语音识别：不可达';
+      badge.className = 'pill bad';
+    } else if (S.asrStatus === AsrStatus.OK) {
+      badge.textContent = '语音识别：正常';
+      badge.className = 'pill ok';
+    } else {
+      badge.textContent = '语音识别：待验证';
+      badge.className = 'pill';
+    }
   }
 }
 

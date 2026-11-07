@@ -1309,4 +1309,28 @@ body.admin-mode #pill-tts { display: none !important; }
   overflow: auto;
 }
 
+/* ========== 首页两栏布局：左自检 右公告 ========== */
+.intro-cols {
+  display: flex;
+  gap: 20px;
+  margin-top: 20px;
+}
+.intro-col-left {
+  flex: 1;
+  min-width: 0;
+}
+.intro-col-right {
+  flex: 1;
+  min-width: 0;
+}
+.intro-col-left .card,
+.intro-col-right .card {
+  margin-top: 0;
+}
+@media (max-width: 768px) {
+  .intro-cols {
+    flex-direction: column;
+  }
+}
+
 
