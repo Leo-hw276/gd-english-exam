@@ -9,7 +9,7 @@
 <title>广东中考英语听说考试 · 在线模拟练习</title>
 <meta name="description" content="严格按照广东省江门市中考英语听说考试（人机对话）官方题型与评分标准设计的在线模拟练习系统，AI 自动组卷、录音作答、满分 30 分智能评分。" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%233538cd'/%3E%3Ctext x='50' y='68' font-size='54' text-anchor='middle' fill='white' font-family='sans-serif' font-weight='bold'%3E%E5%90%AC%3C/text%3E%3C/svg%3E" />
-<link rel="stylesheet" href="/styles.css?v=20261108b" />
+<link rel="stylesheet" href="/styles.css?v=20261108c" />
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
 </head>
 <body>
@@ -432,14 +432,14 @@
 
         <hr style="margin:20px 0;border:none;border-top:1px solid var(--line,#e4e7ec)" />
         <h3 style="font-size:15px;margin:0 0 10px">语音服务（朗读 TTS + 转写 ASR）</h3>
-        <p class="muted" style="font-size:12.5px;margin-bottom:12px">留空则 TTS 降级到 Edge-TTS，ASR 使用上方主 API。单独配置语音 API 可提升朗读和转写质量。</p>
+        <p class="muted" style="font-size:12.5px;margin-bottom:12px">填写语音 API 地址后，朗读（TTS）与转写（ASR）均优先调用该接口；地址留空则朗读使用本地 Edge-TTS、转写使用上方主 API。保存接口配置不会清除此处已填内容。</p>
         <div class="row">
           <div style="flex:2;min-width:240px">
-            <label class="muted">语音 API 地址（留空用主地址）</label>
-            <input type="text" id="cfg-speech-base" placeholder="https://api.openai.com/v1" />
+            <label class="muted">语音 API 地址</label>
+            <input type="text" id="cfg-speech-base" placeholder="例如 https://api.openai.com/v1（留空则用本地朗读）" />
           </div>
           <div style="flex:1;min-width:200px">
-            <label class="muted">语音 API Key（留空用主 Key）</label>
+            <label class="muted">语音 API Key（留空则用主 Key）</label>
             <input type="password" id="cfg-speech-key" placeholder="留空则不修改" autocomplete="off" />
             <div class="muted" id="cfg-speech-key-hint" style="font-size:12px;margin-top:4px"></div>
           </div>
@@ -464,6 +464,7 @@
         </div>
         <div class="row" style="margin-top:10px">
           <button class="btn ghost" id="btn-speech-models">拉取语音模型列表</button>
+          <button class="btn ghost" id="btn-speech-local">改用本地合成</button>
           <span class="muted" id="cfg-speech-model-hint"></span>
         </div>
 
@@ -795,7 +796,7 @@
   </div>
 </div>
 
-<script type="module" src="/js/app.js?v=20261108b"></script>
-<script type="module" src="/js/admin.js?v=20261108b"></script>
+<script type="module" src="/js/app.js?v=20261108c"></script>
+<script type="module" src="/js/admin.js?v=20261108c"></script>
 </body>
 </html>

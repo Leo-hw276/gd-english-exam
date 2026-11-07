@@ -1983,7 +1983,10 @@ async function handleAdminSettings(req, res) {
     }
   }
   // 语音服务 API 配置（TTS + ASR）
-  if (b.speechApi && typeof b.speechApi === 'object') {
+  if (b.clearSpeech) {
+    // 显式「改用本地合成」：清空语音 API 绑定，TTS 走 Edge-TTS
+    patch.speechApi = { apiBase: '', apiKey: '', ttsModel: 'tts-1', ttsVoice: 'alloy', asrModel: 'whisper-1' };
+  } else if (b.speechApi && typeof b.speechApi === 'object') {
     const cs = cur.speechApi || {};
     let base = String(b.speechApi.apiBase || '').trim().replace(/\/+$/, '');
     if (base && !/^https?:\/\//i.test(base)) {
@@ -1991,7 +1994,8 @@ async function handleAdminSettings(req, res) {
     }
     if (base && !/\/v\d+$/.test(base)) base += '/v1';
     patch.speechApi = {
-      apiBase: base,
+      // 留空时沿用原值：主接口每次保存都会带上 speechApi，若不沿用会把已绑定的语音 API 抹掉
+      apiBase: base || cs.apiBase || '',
       apiKey: String(b.speechApi.apiKey || '').trim() || cs.apiKey || '',
       ttsModel: String(b.speechApi.ttsModel || cs.ttsModel || 'tts-1').trim(),
       ttsVoice: String(b.speechApi.ttsVoice || cs.ttsVoice || 'alloy').trim(),
@@ -2390,6 +2394,7 @@ async function handleTts(req, res) {
           'Content-Type': r.headers.get('content-type') || 'audio/mpeg',
           'Content-Length': buf.length,
           'Cache-Control': 'public, max-age=86400',
+          'X-TTS-Engine': 'api',
         });
         return res.end(buf);
       }
@@ -2410,6 +2415,7 @@ async function handleTts(req, res) {
       'Content-Type': 'audio/mpeg',
       'Content-Length': mp3.length,
       'Cache-Control': 'public, max-age=86400',
+      'X-TTS-Engine': 'edge',
     });
     res.end(mp3);
   } catch (e) {

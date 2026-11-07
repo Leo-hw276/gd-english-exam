@@ -383,6 +383,20 @@ async function saveSpeech() {
   return saveApi();
 }
 
+/** 清除语音 API 绑定：朗读改用本地 Edge-TTS */
+async function useLocalSpeech() {
+  const hint = $('#cfg-speech-model-hint');
+  try {
+    await api('/api/admin/settings', { clearSpeech: true });
+    if (hint) hint.textContent = '已改用本地合成';
+    toast('已改用本地 Edge-TTS 合成', 'ok');
+    await loadOverview();
+  } catch (e) {
+    if (hint) hint.textContent = '操作失败';
+    toast('操作失败：' + e.message, 'bad', 5000);
+  }
+}
+
 /* ---------- 紧急通知弹窗 ---------- */
 
 function renderUrgentNotice(un) {
@@ -1054,6 +1068,7 @@ function bind() {
   $('#btn-ts-save')?.addEventListener('click', saveTurnstile);
   $('#btn-speech-save')?.addEventListener('click', saveSpeech);
   $('#btn-speech-models')?.addEventListener('click', fetchSpeechModels);
+  $('#btn-speech-local')?.addEventListener('click', useLocalSpeech);
   $('#btn-admin-models')?.addEventListener('click', fetchModels);
   $('#btn-admin-test')?.addEventListener('click', testConn);
   $('#btn-admin-save')?.addEventListener('click', saveApi);
