@@ -1482,6 +1482,13 @@ async function handleHealth(req, res, cfg) {
     emailCodeResendSec: Brevo.RESEND_SEC,
     // Turnstile 站点密钥（公开，前端渲染挂件用；未配置则为空）
     turnstileSiteKey: String(s.turnstile?.siteKey || '').trim(),
+    // 朗读引擎：后台绑定了语音 API → 'api'（前端优先走服务端 TTS）；否则 'edge'
+    ttsEngine: (() => {
+      const sp = s.speechApi || {};
+      const base = String(sp.apiBase || '').trim();
+      const key = String(sp.apiKey || s.apiKey || '').trim();
+      return base && key ? 'api' : 'edge';
+    })(),
     // 紧急通知弹窗（前端据此弹窗；未开启时不下发）
     urgentNotice: s.urgentNotice?.enabled ? { id: s.urgentNotice.id, title: s.urgentNotice.title, body: s.urgentNotice.body } : null,
   });

@@ -748,6 +748,9 @@ async function runEnvCheck() {
     S.emailCodeResendSec = health.emailCodeResendSec || 60;
     S.urgentNotice = health.urgentNotice || null;
     S.turnstileSiteKey = health.turnstileSiteKey || '';
+    // 后台绑定了语音 API → 优先使用服务端合成（音质统一），否则用浏览器本地方案
+    S.ttsEngine = health.ttsEngine === 'api' ? 'api' : 'edge';
+    Tts.setPreferServer(S.ttsEngine === 'api');
     renderTurnstile('login');
     renderTurnstile('register');
     applyEmailVerifyUi();

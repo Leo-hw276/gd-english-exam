@@ -9,8 +9,8 @@
 /* ==================================================================
  *  1. 语音合成 —— TTS 自动降级
  *
- *  优先：浏览器原生 speechSynthesis（en-US / en-GB 音色）
- *  降级：服务端 /api/tts（Edge-TTS），用户无感知
+ *  优先：后台绑定语音 API 时走服务端 /api/tts；否则浏览器原生 speechSynthesis（en-US / en-GB 音色）
+ *  降级：另一条通路兜底，用户无感知
  *  自检时分别标注状态。
  * ================================================================== */
 
@@ -46,9 +46,17 @@ const SAY_RECORD_DONE = '录音结束。';
 export const Tts = {
   _voices: [],
   _mode: 'unknown', // 'native' | 'server' | 'none'（仅用于状态展示）
+  _preferServer: false, // 后台配置了语音 API 时置 true：优先走服务端合成
   _speed: 1,        // 全局倍速
   _audio: null,     // 服务端音频对象（必须能被 stopNow 中止）
   _token: 0,        // 中止令牌：每次 stopNow 自增，旧朗读自动作废
+
+  /** 由 app.js 依据 /api/health 的 ttsEngine 设置 */
+  setPreferServer(on) {
+    this._preferServer = Boolean(on);
+    if (this._preferServer) this._mode = 'server';
+    else if (window.speechSynthesis && this._voices.length) this._mode = 'native';
+  },
 
   init() {
     const synth = window.speechSynthesis;
@@ -58,15 +66,16 @@ export const Tts = {
     }
     const load = () => {
       this._voices = synth.getVoices() || [];
-      // 音量列表异步加载：加载到就绪后重新判定模式
-      if (this._voices.length && this._mode !== 'native') this._mode = 'native';
+      // 音量列表异步加载：加载到就绪后重新判定模式（服务端优先时不改）
+      if (this._voices.length && this._mode !== 'native' && !this._preferServer) this._mode = 'native';
     };
     load();
     synth.onvoiceschanged = load;
     // 有些浏览器首帧拿不到音色，稍后再取一次
     setTimeout(load, 400);
     setTimeout(load, 1500);
-    if (this._voices.length) this._mode = 'native';
+    if (this._preferServer) this._mode = 'server';
+    else if (this._voices.length) this._mode = 'native';
   },
 
   mode() {
@@ -85,10 +94,10 @@ export const Tts = {
   },
 
   statusText() {
+    if (this._mode === 'server') return '语音合成：服务端音频';
     if (this._mode === 'native') {
       return `语音合成：浏览器本地语音（${this._enVoice()?.name || 'en-US'}）`;
     }
-    if (this._mode === 'server') return '语音合成：服务端音频';
     return '语音合成：不可用';
   },
 
@@ -131,7 +140,8 @@ export const Tts = {
 
   /**
    * 朗读一段文本，真正读完才 resolve。
-   * 降级链：浏览器原生 → 服务端 /api/tts → 静默跳过（不阻塞考试流程）
+   * 后台配置了语音 API（_preferServer）时：服务端 → 浏览器原生 → 跳过
+   * 未配置时：浏览器原生 → 服务端 → 跳过
    * 中文用中文音色，英文用英文音色。
    */
   async speak(text, { rate, pitch = 1, lang } = {}) {
@@ -140,25 +150,38 @@ export const Tts = {
     const useLang = lang || (this.isZh(text) ? 'zh' : 'en');
     const token = this._token;
 
-    // 1) 原生
-    if (window.speechSynthesis) {
-      const ok = await this._speakNative(text, { rate: speed, pitch, lang: useLang, token });
-      if (ok) {
-        this._mode = 'native';
+    // 服务端优先（后台已绑定语音合成 API）
+    if (this._preferServer) {
+      const ok0 = await this._speakServer(text, { speed, lang: useLang, token });
+      if (ok0) {
+        this._mode = 'server';
         return;
       }
       if (token !== this._token) return; // 已被中止
     }
 
-    // 2) 服务端（Edge-TTS）
-    const ok2 = await this._speakServer(text, { speed, lang: useLang, token });
-    if (ok2) {
-      this._mode = 'server';
-      return;
+    // 浏览器原生
+    if (window.speechSynthesis) {
+      const ok = await this._speakNative(text, { rate: speed, pitch, lang: useLang, token });
+      if (ok) {
+        if (!this._preferServer) this._mode = 'native';
+        return;
+      }
+      if (token !== this._token) return; // 已被中止
     }
+
+    // 服务端（已配 API 时上面已试过，这里只在未配置时作为兜底）
+    if (!this._preferServer) {
+      const ok2 = await this._speakServer(text, { speed, lang: useLang, token });
+      if (ok2) {
+        this._mode = 'server';
+        return;
+      }
+    }
+
     if (token === this._token) {
-      // 两条通路都失败：本次跳过，但下次仍会重新先试原生（不永久降级）
-      this._mode = window.speechSynthesis ? 'native' : 'none';
+      // 所有通路都失败：本次跳过，但下次仍会重新尝试（不永久降级）
+      this._mode = this._preferServer ? 'server' : window.speechSynthesis ? 'native' : 'none';
     }
   },
 
