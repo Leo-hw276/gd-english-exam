@@ -1877,6 +1877,30 @@ async function handleAdminLogin(req, res) {
   sendJson(res, 200, { ok: true, token, account: s.adminUsername });
 }
 
+async function handleUnbanSelf(req, res) {
+  const ip = clientIp(req);
+  const rl = RL.adminLogin(ip);
+  if (!rl.ok) return sendJson(res, 429, { ok: false, error: `尝试次数过多，请 ${rl.retryAfterSec} 秒后再试` });
+
+  const b = await jsonBody(req);
+  const cap = verifyCaptcha(b.captchaId, b.captchaCode, ip);
+  if (!cap.ok) return sendJson(res, 400, { ok: false, error: cap.error });
+
+  const s = DB.getSettings();
+  if (!s.adminPasswordHash) return sendJson(res, 400, { ok: false, error: '尚未设置管理员密码' });
+  if (!DB.checkAdminPassword(String(b.password || ''))) {
+    logVisit(req, 'unban-self', { action: 'fail', ip, detail: '管理员密码错误' });
+    return sendJson(res, 401, { ok: false, error: '管理员密码错误' });
+  }
+
+  const n = DB.unbanIp(ip);
+  resetScriptHits(ip);
+  DB.log('unban-self', 'admin', `${ip} 自助解封（${n} 条）`);
+  logVisit(req, 'unban-self', { action: 'ok', ip, detail: `解除 ${n} 条` });
+  if (!n) return sendJson(res, 200, { ok: false, error: `当前 IP（${ip}）不在封禁列表中，可能是前缀/网段封禁，请到后台手动处理` });
+  sendJson(res, 200, { ok: true, ip, removed: n });
+}
+
 async function handleAdminOverview(req, res) {
   if (!requireAdmin(req, res)) return;
   sendJson(res, 200, {
@@ -2724,6 +2748,42 @@ async function handleAdminNotices(req, res) {
 
  
 
+const cliArgs = process.argv.slice(2);
+if (cliArgs.some((a) => a === '--list-bans' || a === '--bans')) {
+  DB.load();
+  const list = DB.listBannedIps();
+  if (!list.length) console.log('封禁列表为空');
+  else {
+    console.log(`共 ${list.length} 条封禁：`);
+    for (const b of list) {
+      const at = b.at ? new Date(b.at).toLocaleString('zh-CN') : '-';
+      console.log(`  ${String(b.ip).padEnd(24)} ${at}  ${b.by || 'admin'}  ${b.note || ''}  [id=${b.id}]`);
+    }
+  }
+  process.exit(0);
+}
+
+const unbanTarget = (() => {
+  const i = cliArgs.findIndex((a) => a === '--unban');
+  if (i >= 0) return cliArgs[i + 1] || '';
+  const eq = cliArgs.find((a) => a.startsWith('--unban='));
+  return eq ? eq.slice('--unban='.length) : '';
+})();
+if (cliArgs.includes('--unban-all') || unbanTarget) {
+  DB.load();
+  if (cliArgs.includes('--unban-all')) {
+    const all = DB.listBannedIps();
+    let n = 0;
+    for (const b of all) n += DB.unbanIp(b.ip);
+    console.log(`已清空封禁列表，解除 ${n} 条`);
+  } else {
+    const n = DB.unbanIp(unbanTarget);
+    console.log(n > 0 ? `已解封 ${unbanTarget}` : `未找到封禁记录：${unbanTarget}`);
+    console.log('当前剩余封禁：', DB.listBannedIps().length, '条');
+  }
+  process.exit(0);
+}
+
 const PORT = Number(argValue('--port') || process.env.PORT || process.env.EXAM_PORT || 8777);
 const HOST = process.env.HOST || '0.0.0.0';
 
@@ -2772,7 +2832,8 @@ const server = http.createServer((req, res) => {
     }
 
     
-    if (DB.isIpBanned(ip)) {
+    const banBypass = p === '/api/captcha' || p === '/api/admin/unban-self';
+    if (!banBypass && DB.isIpBanned(ip)) {
       logVisit(req, 'blocked', { action: 'ip-banned', ip, detail: '当前 IP 已被封禁' });
       if (p.startsWith('/api/')) {
         return sendJson(res, 403, { ok: false, error: '当前 IP 已被封禁，如有疑问请联系管理员', banned: true });
@@ -2782,11 +2843,28 @@ const server = http.createServer((req, res) => {
       return res.end(
         `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>IP 已被封禁</title>` +
           `<style>body{font-family:-apple-system,'Segoe UI',Roboto,'Microsoft YaHei',sans-serif;background:#f4f6fb;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}` +
-          `.box{background:#fff;border-radius:16px;padding:44px 48px;max-width:420px;width:90%;text-align:center;box-shadow:0 8px 30px rgba(16,24,40,.08)}` +
-          `.x{width:64px;height:64px;border-radius:50%;background:#fef2f2;color:#ef4444;font-size:34px;line-height:64px;margin:0 auto 18px;font-weight:700}` +
-          `h1{font-size:20px;margin:0 0 10px;color:#101828}p{color:#667085;font-size:14px;line-height:1.7;margin:0}</style></head><body>` +
+          `.box{background:#fff;border-radius:16px;padding:36px 40px;max-width:440px;width:90%;text-align:center;box-shadow:0 8px 30px rgba(16,24,40,.08)}` +
+          `.x{width:56px;height:56px;border-radius:50%;background:#fef2f2;color:#ef4444;font-size:30px;line-height:56px;margin:0 auto 16px;font-weight:700}` +
+          `h1{font-size:19px;margin:0 0 10px;color:#101828}p{color:#667085;font-size:13.5px;line-height:1.7;margin:0 0 18px}` +
+          `.f{text-align:left;margin-top:6px}.f label{display:block;font-size:12.5px;color:#475467;margin:10px 0 5px}` +
+          `input{width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid #d0d5dd;border-radius:9px;font-size:14px;outline:none}` +
+          `input:focus{border-color:#2563eb}.caprow{display:flex;gap:8px;align-items:center}.caprow img{height:38px;border-radius:8px;cursor:pointer;background:#f2f4f7}` +
+          `button{width:100%;margin-top:16px;padding:10px;border:0;border-radius:9px;background:#2563eb;color:#fff;font-size:14.5px;cursor:pointer}` +
+          `button:disabled{opacity:.6;cursor:default}#msg{margin-top:12px;font-size:13px;min-height:18px}</style></head><body>` +
           `<div class="box"><div class="x">!</div><h1>当前 IP 已被封禁</h1>` +
-          `<p>您的访问 IP <b>${ip.replace(/[<>&"]/g, '')}</b> 已被管理员封禁。<br>如有疑问请联系管理员，或更换网络后重试。</p></div></body></html>`
+          `<p>您的访问 IP <b>${ip.replace(/[<>&"]/g, '')}</b> 已被封禁。<br>如为管理员本人，可在下方验证后立即解封。</p>` +
+          `<div class="f"><label>管理员密码</label><input id="pw" type="password" autocomplete="current-password" />` +
+          `<label>验证码（点击图片刷新）</label><div class="caprow"><input id="code" maxlength="8" style="flex:1" /><span id="capimg"></span></div></div>` +
+          `<button id="go">解除对本 IP 的封禁</button><div id="msg"></div></div>` +
+          `<script>(function(){var id='';var img=document.getElementById('capimg');var msg=document.getElementById('msg');var go=document.getElementById('go');` +
+          `function load(){fetch('/api/captcha').then(function(r){return r.json()}).then(function(d){id=d.id;img.innerHTML=d.svg;var s=img.querySelector('svg');if(s){s.style.height='38px';s.style.cursor='pointer';s.onclick=load;}}).catch(function(){msg.textContent='验证码加载失败';});}` +
+          `load();go.onclick=function(){var pw=document.getElementById('pw').value;var code=document.getElementById('code').value.trim();if(!pw){msg.style.color='#b42318';msg.textContent='请输入管理员密码';return;}` +
+          `go.disabled=true;msg.style.color='#475467';msg.textContent='处理中…';` +
+          `fetch('/api/admin/unban-self',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pw,captchaId:id,captchaCode:code})})` +
+          `.then(function(r){return r.json()}).then(function(d){go.disabled=false;` +
+          `if(d.ok){msg.style.color='#067647';msg.textContent='已解除封禁，正在跳转…';setTimeout(function(){location.href='/';},900);}` +
+          `else{msg.style.color='#b42318';msg.textContent=d.error||'解封失败';load();}}).catch(function(e){go.disabled=false;msg.style.color='#b42318';msg.textContent='请求失败：'+e.message;load();});};})();</script>` +
+          `</body></html>`
       );
     }
 
@@ -2860,6 +2938,7 @@ const server = http.createServer((req, res) => {
 
     
     if (p === '/api/admin/login' && req.method === 'POST') return handleAdminLogin(req, res);
+    if (p === '/api/admin/unban-self' && req.method === 'POST') return handleUnbanSelf(req, res);
     if (p === '/api/admin/overview') return handleAdminOverview(req, res);
     if (p === '/api/admin/settings' && req.method === 'POST') return handleAdminSettings(req, res);
     if (p === '/api/admin/models' && req.method === 'POST') return handleAdminModels(req, res);
