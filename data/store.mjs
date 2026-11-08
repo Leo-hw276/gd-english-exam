@@ -150,6 +150,7 @@ const EMPTY_DB = () => ({
 let db = null;
 let saveTimer = null;
 let dirty = false;
+let loadedMtime = 0;
 
 const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
@@ -165,8 +166,31 @@ function deepMerge(base, patch) {
   return out;
 }
 
+function fileMtime() {
+  try {
+    return fs.statSync(DB_FILE).mtimeMs || 0;
+  } catch {
+    return 0;
+  }
+}
+
+function reloadIfChangedExternally() {
+  if (!db || dirty || saveTimer) return;
+  const m = fileMtime();
+  if (!m || m === loadedMtime) return;
+  try {
+    const raw = fs.readFileSync(DB_FILE, 'utf8');
+    db = deepMerge(EMPTY_DB(), JSON.parse(raw));
+    loadedMtime = m;
+  } catch {
+  }
+}
+
 export function load() {
-  if (db) return db;
+  if (db) {
+    reloadIfChangedExternally();
+    return db;
+  }
   try {
     if (fs.existsSync(DB_FILE)) {
       const raw = fs.readFileSync(DB_FILE, 'utf8');
@@ -190,6 +214,7 @@ export function load() {
     db.settings.adminPasswordHash = hashPassword(process.env.ADMIN_PASSWORD);
     save();
   }
+  loadedMtime = fileMtime();
   return db;
 }
 
@@ -210,6 +235,7 @@ export function flush() {
     const tmp = DB_FILE + '.tmp';
     fs.writeFileSync(tmp, JSON.stringify(db, null, 2), 'utf8');
     fs.renameSync(tmp, DB_FILE);
+    loadedMtime = fileMtime();
   } catch (e) {
     console.error('[store] 写入失败：', e.message);
   }
