@@ -827,6 +827,43 @@ export function removeBannedIpById(id) {
   return before - s.bannedIps.length;
 }
 
+export const UNBAN_MAX_FAILS = 5;
+
+export function getUnbanGuard(ip) {
+  const len = (getSettings().unbanGuard || []).find((x) => String(x.ip) === String(ip));
+  return len || null;
+}
+
+export function noteUnbanFail(ip, max = UNBAN_MAX_FAILS) {
+  const db0 = load();
+  const s = db0.settings;
+  if (!Array.isArray(s.unbanGuard)) s.unbanGuard = [];
+  let e = s.unbanGuard.find((x) => String(x.ip) === String(ip));
+  if (!e) {
+    e = { ip: String(ip), fails: 0, locked: false, at: Date.now() };
+    s.unbanGuard.push(e);
+  }
+  e.fails = Number(e.fails || 0) + 1;
+  e.at = Date.now();
+  if (e.fails >= max) e.locked = true;
+  save();
+  return { fails: e.fails, locked: Boolean(e.locked), remain: Math.max(0, max - e.fails) };
+}
+
+export function clearUnbanGuard(ip) {
+  const db0 = load();
+  const s = db0.settings;
+  if (!Array.isArray(s.unbanGuard)) return 0;
+  const before = s.unbanGuard.length;
+  s.unbanGuard = s.unbanGuard.filter((x) => String(x.ip) !== String(ip));
+  if (s.unbanGuard.length !== before) save();
+  return before - s.unbanGuard.length;
+}
+
+export function listUnbanGuards() {
+  return getSettings().unbanGuard || [];
+}
+
  
 
 export function adminPasswordSet() {

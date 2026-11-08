@@ -1879,6 +1879,17 @@ async function handleAdminLogin(req, res) {
 
 async function handleUnbanSelf(req, res) {
   const ip = clientIp(req);
+
+  const guard = DB.getUnbanGuard(ip);
+  if (guard && guard.locked) {
+    logVisit(req, 'unban-self', { action: 'fail', ip, detail: '已永久禁用' });
+    return sendJson(res, 403, {
+      ok: false,
+      error: '该 IP 的自助解封已被永久禁用，请联系管理员在后台处理',
+      locked: true,
+    });
+  }
+
   const rl = RL.adminLogin(ip);
   if (!rl.ok) return sendJson(res, 429, { ok: false, error: `尝试次数过多，请 ${rl.retryAfterSec} 秒后再试` });
 
@@ -1889,11 +1900,24 @@ async function handleUnbanSelf(req, res) {
   const s = DB.getSettings();
   if (!s.adminPasswordHash) return sendJson(res, 400, { ok: false, error: '尚未设置管理员密码' });
   if (!DB.checkAdminPassword(String(b.password || ''))) {
-    logVisit(req, 'unban-self', { action: 'fail', ip, detail: '管理员密码错误' });
-    return sendJson(res, 401, { ok: false, error: '管理员密码错误' });
+    const r = DB.noteUnbanFail(ip, DB.UNBAN_MAX_FAILS);
+    logVisit(req, 'unban-self', { action: 'fail', ip, detail: `密码错误 ${r.fails}/${DB.UNBAN_MAX_FAILS}` });
+    if (r.locked) {
+      DB.log('unban-self-lock', 'system', `${ip} 连续输错 ${r.fails} 次，已永久禁用自助解封`);
+      return sendJson(res, 403, {
+        ok: false,
+        error: `密码错误次数已达 ${DB.UNBAN_MAX_FAILS} 次，该 IP 自助解封已永久禁用，请联系管理员`,
+        locked: true,
+      });
+    }
+    return sendJson(res, 401, {
+      ok: false,
+      error: `管理员密码错误，还可尝试 ${r.remain} 次（超过 ${DB.UNBAN_MAX_FAILS} 次将永久禁用）`,
+    });
   }
 
   const n = DB.unbanIp(ip);
+  DB.clearUnbanGuard(ip);
   resetScriptHits(ip);
   DB.log('unban-self', 'admin', `${ip} 自助解封（${n} 条）`);
   logVisit(req, 'unban-self', { action: 'ok', ip, detail: `解除 ${n} 条` });
@@ -2733,12 +2757,16 @@ async function handleAdminNotices(req, res) {
   if (action === 'unbanIp') {
     const n = DB.unbanIp(b.ip);
     resetScriptHits(String(b.ip || '').trim());
+    DB.clearUnbanGuard(String(b.ip || '').trim());
     return sendJson(res, 200, { ok: true, removed: n, banned: DB.listBannedIps() });
   }
   if (action === 'removeBannedById') {
     const target = DB.listBannedIps().find((x) => String(x.id) === String(b.id));
     const n = DB.removeBannedIpById(String(b.id));
-    if (target) resetScriptHits(String(target.ip || '').trim());
+    if (target) {
+      resetScriptHits(String(target.ip || '').trim());
+      DB.clearUnbanGuard(String(target.ip || '').trim());
+    }
     return sendJson(res, 200, { ok: true, removed: n, banned: DB.listBannedIps() });
   }
 
@@ -2774,11 +2802,15 @@ if (cliArgs.includes('--unban-all') || unbanTarget) {
   if (cliArgs.includes('--unban-all')) {
     const all = DB.listBannedIps();
     let n = 0;
-    for (const b of all) n += DB.unbanIp(b.ip);
+    for (const b of all) {
+      n += DB.unbanIp(b.ip);
+      DB.clearUnbanGuard(String(b.ip));
+    }
     console.log(`已清空封禁列表，解除 ${n} 条`);
   } else {
     const n = DB.unbanIp(unbanTarget);
-    console.log(n > 0 ? `已解封 ${unbanTarget}` : `未找到封禁记录：${unbanTarget}`);
+    DB.clearUnbanGuard(unbanTarget);
+    console.log(n > 0 ? `已解封 ${unbanTarget}（同时解除自助解封限制）` : `未找到封禁记录：${unbanTarget}`);
     console.log('当前剩余封禁：', DB.listBannedIps().length, '条');
   }
   DB.flush();
