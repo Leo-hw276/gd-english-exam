@@ -33,6 +33,7 @@ import {
   makeActivityStore,
   ipToLocation,
   isPrivateIp,
+  isTrustedProxy,
   countScriptHit,
   resetScriptHits,
 } from './data/security.mjs';
@@ -2750,7 +2751,14 @@ async function handleAdminNotices(req, res) {
     });
   }
   if (action === 'banIp') {
-    const r = DB.banIp(b.ip, b.note, 'admin');
+    const target = String(b.ip || '').trim();
+    if (isTrustedProxy(target)) {
+      return sendJson(res, 400, {
+        ok: false,
+        error: '该地址属于 CDN/反向代理或内网地址，禁止封禁（会误伤大量用户）',
+      });
+    }
+    const r = DB.banIp(target, b.note, 'admin');
     DB.log('admin-ban-ip', 'admin', `${b.ip}${r.added ? '' : '（已存在）'}`);
     return sendJson(res, 200, { ok: true, ...r, banned: DB.listBannedIps() });
   }
@@ -2838,7 +2846,7 @@ const server = http.createServer((req, res) => {
     
     
     const isStaticAsset = /\.(js|css|png|jpg|jpeg|webp|gif|svg|ico|woff2|woff|ttf|map|txt|xml|json)$/i.test(p);
-    if (!isPrivateIp(ip) && !isStaticAsset && !p.startsWith('/uploads/')) {
+    if (!isPrivateIp(ip) && !isTrustedProxy(ip) && !isStaticAsset && !p.startsWith('/uploads/')) {
       const guard = DB.getSettings().scriptGuard || {};
       if (guard.enabled !== false) {
         const uaInfo = parseUa(req.headers['user-agent'] || '');

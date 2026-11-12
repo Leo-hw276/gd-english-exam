@@ -1,343 +1,580 @@
-// data/security.mjs
-// ---------------------------------------------------------------------------
-// IP 解析、可信代理、白名单，以及 server.mjs 依赖的安全辅助函数
-// ---------------------------------------------------------------------------
+ 
 
-import net from 'node:net';
 import crypto from 'node:crypto';
+import { isIP } from 'node:net';
 
-// ----------------------------- 可信代理 CIDR --------------------------------
+ 
 
-const DEFAULT_TRUSTED_CIDRS = [
-  '127.0.0.1/32',
-  '::1/128',
-  '173.245.48.0/20',
-  '103.21.244.0/22',
-  '103.22.200.0/22',
-  '103.31.4.0/22',
-  '141.101.64.0/18',
-  '108.162.192.0/18',
-  '190.93.240.0/20',
-  '188.114.96.0/20',
-  '197.234.240.0/22',
-  '198.41.128.0/17',
-  '162.158.0.0/15',
-  '104.16.0.0/13',
-  '104.24.0.0/14',
-  '172.64.0.0/13',
-  '131.0.72.0/22',
+ 
+const CF_IPV4 = [
+  '173.245.48.0/20', '103.21.244.0/22', '103.22.200.0/22', '103.31.4.0/22',
+  '141.101.64.0/18', '108.162.192.0/18', '190.93.240.0/20', '188.114.96.0/20',
+  '197.234.240.0/22', '198.41.128.0/17', '162.158.0.0/15', '104.16.0.0/13',
+  '104.24.0.0/14', '172.64.0.0/13', '131.0.72.0/22',
 ];
 
-function parseCidrList(raw) {
-  return String(raw || '')
+const CF_IPV6 = [
+  '2400:cb00::/32', '2606:4700::/32', '2803:f800::/32',
+  '2405:b500::/32', '2405:8100::/32', '2a06:98c0::/29', '2c0f:f248::/32',
+];
+
+export function normalizeIp(raw) {
+  let v = String(raw || '').trim();
+  if (!v) return '';
+  if (v.startsWith('[') && v.endsWith(']')) v = v.slice(1, -1);
+  v = v.split('%')[0];
+  v = v.replace(/^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/i, '$1');
+  return v;
+}
+
+function ipv6Groups(ip) {
+  let v = String(ip).toLowerCase();
+  if (!v.includes(':')) return null;
+  if (v.includes('.')) {
+    const idx = v.lastIndexOf(':');
+    const nums = v.slice(idx + 1).split('.').map(Number);
+    if (nums.length !== 4 || nums.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return null;
+    v = v.slice(0, idx + 1) + ((nums[0] << 8) | nums[1]).toString(16) + ':' + ((nums[2] << 8) | nums[3]).toString(16);
+  }
+  const halves = v.split('::');
+  if (halves.length > 2) return null;
+  const left = halves[0] ? halves[0].split(':') : [];
+  const right = halves.length === 2 && halves[1] ? halves[1].split(':') : [];
+  const missing = 8 - left.length - right.length;
+  if (halves.length === 1 ? missing !== 0 : missing < 0) return null;
+  const all = [...left, ...Array(halves.length === 2 ? missing : 0).fill('0'), ...right];
+  if (all.length !== 8) return null;
+  const out = all.map((g) => parseInt(g || '0', 16));
+  if (out.some((n) => !Number.isInteger(n) || n < 0 || n > 0xffff)) return null;
+  return out;
+}
+
+function ipv4ToInt(ip) {
+  const p = String(ip).split('.').map(Number);
+  if (p.length !== 4 || p.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return null;
+  return ((p[0] << 24) >>> 0) + (p[1] << 16) + (p[2] << 8) + p[3];
+}
+
+function inCidr(ip, cidr) {
+  const [net, bitsStr] = String(cidr).split('/');
+  const bits = Number(bitsStr);
+  const a6 = String(ip).includes(':');
+  const n6 = String(net).includes(':');
+  if (a6 !== n6) return false;
+  if (!a6) {
+    if (!Number.isFinite(bits) || bits <= 0 || bits > 32) return false;
+    const a = ipv4ToInt(ip);
+    const b = ipv4ToInt(net);
+    if (a === null || b === null) return false;
+    const mask = bits === 32 ? 0xffffffff : (0xffffffff << (32 - bits)) >>> 0;
+    return ((a & mask) >>> 0) === ((b & mask) >>> 0);
+  }
+  if (!Number.isFinite(bits) || bits <= 0 || bits > 128) return false;
+  const a = ipv6Groups(ip);
+  const b = ipv6Groups(net);
+  if (!a || !b) return false;
+  let remain = bits;
+  for (let i = 0; i < 8 && remain > 0; i++) {
+    const take = Math.min(16, remain);
+    const mask = take === 16 ? 0xffff : (0xffff << (16 - take)) & 0xffff;
+    if ((a[i] & mask) !== (b[i] & mask)) return false;
+    remain -= take;
+  }
+  return true;
+}
+
+ 
+function extraTrustedCidrs() {
+  return String(process.env.TRUSTED_PROXY_CIDRS || '')
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
 }
 
-export function getTrustedProxyCidrs() {
-  return [...DEFAULT_TRUSTED_CIDRS, ...parseCidrList(process.env.TRUSTED_PROXY_CIDRS)];
-}
-
-// ----------------------------- IP 归一化 ------------------------------------
-
-export function normalizeIp(ip) {
-  let s = String(ip || '').trim();
-  if (!s) return '';
-  if (s.startsWith('[') && s.endsWith(']')) s = s.slice(1, -1);
-  s = s.replace(/^::ffff:/i, '');
-  return s;
-}
-
-function ipv4ToBigInt(ip) {
-  const parts = ip.split('.');
-  if (parts.length !== 4) return null;
-  let v = 0n;
-  for (const p of parts) {
-    const n = Number(p);
-    if (!Number.isInteger(n) || n < 0 || n > 255) return null;
-    v = (v << 8n) | BigInt(n);
-  }
-  return { value: v, bits: 32 };
-}
-
-function ipv6ToBigInt(ip) {
-  let addr = ip;
-  if (addr.includes('.')) {
-    const idx = addr.lastIndexOf(':');
-    const v4 = addr.slice(idx + 1);
-    const octets = v4.split('.').map(Number);
-    if (octets.length !== 4 || octets.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return null;
-    const hex = octets.map((n) => n.toString(16).padStart(2, '0')).join('');
-    addr = addr.slice(0, idx + 1) + hex.slice(0, 4) + ':' + hex.slice(4);
-  }
-  const halves = addr.split('::');
-  if (halves.length > 2) return null;
-  let groups;
-  if (halves.length === 2) {
-    const left = halves[0] ? halves[0].split(':') : [];
-    const right = halves[1] ? halves[1].split(':') : [];
-    const fill = 8 - left.length - right.length;
-    if (fill < 0) return null;
-    groups = [...left, ...Array(fill).fill('0'), ...right];
-  } else {
-    groups = addr.split(':');
-  }
-  if (groups.length !== 8) return null;
-  let v = 0n;
-  for (const g of groups) {
-    const n = parseInt(g || '0', 16);
-    if (!Number.isInteger(n) || n < 0 || n > 0xffff) return null;
-    v = (v << 16n) | BigInt(n);
-  }
-  return { value: v, bits: 128 };
-}
-
-function ipToBigInt(ip) {
-  const s = normalizeIp(ip);
-  const version = net.isIP(s);
-  if (version === 4) return ipv4ToBigInt(s);
-  if (version === 6) return ipv6ToBigInt(s);
-  return null;
-}
-
-// ----------------------------- CIDR 匹配 ------------------------------------
-
-export function ipInCidr(ip, cidr) {
-  const text = String(cidr || '').trim();
-  if (!text) return false;
-  const slash = text.indexOf('/');
-  const base = slash === -1 ? text : text.slice(0, slash);
-  const prefix = slash === -1 ? null : Number(text.slice(slash + 1));
-
-  const a = ipToBigInt(ip);
-  const b = ipToBigInt(base);
-  if (!a || !b || a.bits !== b.bits) return false;
-
-  if (prefix === null) return a.value === b.value;
-  if (!Number.isInteger(prefix) || prefix < 0 || prefix > a.bits) return false;
-  if (prefix === 0) return true;
-
-  const shift = BigInt(a.bits - prefix);
-  return a.value >> shift === b.value >> shift;
-}
-
-export const inCidr4 = ipInCidr;
-
-// ----------------------------- 可信代理判断 --------------------------------
-
-export function isTrustedProxy(ip) {
-  const target = normalizeIp(ip);
-  if (!target) return false;
-  return getTrustedProxyCidrs().some((cidr) => ipInCidr(target, cidr));
-}
-
-// ----------------------------- 客户端真实 IP -------------------------------
-
-export function clientIp(req) {
-  const h = req?.headers || {};
-  const peer = normalizeIp(req?.socket?.remoteAddress || '');
-
-  if (!isTrustedProxy(peer)) return peer || 'unknown';
-
-  const candidates = [
-    h['cf-connecting-ip'],
-    h['true-client-ip'],
-    h['x-real-ip'],
-    h['x-forwarded-for'],
-    h['x-vercel-forwarded-for'],
-  ]
-    .flatMap((v) => String(v || '').split(','))
-    .map((s) => normalizeIp(s))
-    .filter(Boolean);
-
-  for (let i = candidates.length - 1; i >= 0; i -= 1) {
-    if (!isTrustedProxy(candidates[i])) return candidates[i];
-  }
-
-  return candidates[0] || peer || 'unknown';
-}
-
-// ----------------------------- IP 白名单 ------------------------------------
-
-export function getIpWhitelist() {
-  return parseCidrList(process.env.IP_WHITELIST);
-}
-
-export function isIpWhitelistEnabled() {
-  return getIpWhitelist().length > 0;
-}
-
-export function isIpInWhitelist(ip) {
-  const list = getIpWhitelist();
-  if (list.length === 0) return true;
-  const target = normalizeIp(ip);
-  if (!target || target === 'unknown') return false;
-  for (const entry of list) {
-    if (entry.includes('/')) {
-      if (ipInCidr(target, entry)) return true;
-    } else if (normalizeIp(entry) === target) {
-      return true;
-    }
+export function isTrustedProxy(addr) {
+  const v = normalizeIp(addr);
+  if (!v) return false;
+  if (isPrivateIp(v)) return true;
+  for (const c of [...CF_IPV4, ...CF_IPV6, ...extraTrustedCidrs()]) {
+    if (inCidr(v, c)) return true;
   }
   return false;
 }
 
-export function isRequestAllowed(req) {
-  if (!isIpWhitelistEnabled()) return true;
-  return isIpInWhitelist(clientIp(req));
-}
+ 
+export function clientIp(req) {
+  const h = req.headers || {};
+  const peer = normalizeIp(req.socket?.remoteAddress);
+  if (!peer) return 'unknown';
+  if (!isTrustedProxy(peer)) return peer;
 
-// ----------------------------- 其他安全辅助函数 -----------------------------
-
-export function ipPrefix(ip) {
-  const s = normalizeIp(ip);
-  if (net.isIP(s) === 4) return s.split('.').slice(0, 3).join('.') + '.0/24';
-  if (net.isIP(s) === 6) return s.split(':').slice(0, 4).join(':') + '::/64';
-  return s;
-}
-
-export function parseUa(ua) {
-  const s = String(ua || '');
-  const lower = s.toLowerCase();
-  const bot = /bot|crawler|spider|slurp|bingpreview|facebookexternalhit|curl|wget|python-requests/i.test(lower);
-  let browser = 'Unknown';
-  if (/edg\//i.test(s)) browser = 'Edge';
-  else if (/chrome\//i.test(s) && !/opr\//i.test(s)) browser = 'Chrome';
-  else if (/safari\//i.test(s) && !/chrome\//i.test(s)) browser = 'Safari';
-  else if (/firefox\//i.test(s)) browser = 'Firefox';
-  else if (/opr\//i.test(s)) browser = 'Opera';
-  let os = 'Unknown';
-  if (/windows nt/i.test(s)) os = 'Windows';
-  else if (/android/i.test(s)) os = 'Android';
-  else if (/iphone|ipad|ipod/i.test(s)) os = 'iOS';
-  else if (/mac os x/i.test(s)) os = 'macOS';
-  else if (/linux/i.test(s)) os = 'Linux';
-  const inApp = /wechat|micromessenger|qq\/|alipay|dingtalk|weibo/i.test(lower);
-  return { browser, os, inApp, bot };
-}
-
-const rateBuckets = new Map();
-
-export function rateLimit(key, { windowMs = 60_000, max = 60 } = {}) {
-  const now = Date.now();
-  let b = rateBuckets.get(key);
-  if (!b || now - b.start >= windowMs) {
-    b = { start: now, count: 0 };
-    rateBuckets.set(key, b);
+  const chain = [];
+  for (const key of ['cf-connecting-ip', 'true-client-ip', 'x-real-ip', 'x-forwarded-for', 'x-vercel-forwarded-for']) {
+    const raw = h[key];
+    if (!raw) continue;
+    for (const piece of String(raw).split(',')) {
+      const ip = normalizeIp(piece);
+      if (ip) chain.push(ip);
+    }
   }
-  b.count += 1;
-  const ok = b.count <= max;
-  const retryAfter = ok ? 0 : Math.ceil((b.start + windowMs - now) / 1000);
-  return { ok, retryAfter, count: b.count, max };
+
+  for (const ip of chain) {
+    if (!isIP(ip)) continue;
+    if (isTrustedProxy(ip)) continue;
+    return ip;
+  }
+  return peer;
+  
+  return cand.replace(/^::ffff:/, '') || 'unknown';
 }
 
-const bannedKeys = new Map();
-
-export function banKey(reqOrIp) {
-  if (typeof reqOrIp === 'string') return normalizeIp(reqOrIp);
-  return clientIp(reqOrIp);
+ 
+export function ipPrefix(ip) {
+  if (!ip || ip === 'unknown') return 'unknown';
+  if (ip.includes(':')) return ip.split(':').slice(0, 4).join(':');
+  const p = ip.split('.');
+  return p.length === 4 ? `${p[0]}.${p[1]}` : ip;
 }
 
+ 
+
+const geoCache = new Map(); 
+const GEO_TTL = 24 * 3600 * 1000; 
+
+export function isPrivateIp(ip) {
+  if (!ip) return true;
+  const v = normalizeIp(ip);
+  if (v === '127.0.0.1' || v === '::1' || v === 'localhost' || v === '::') return true;
+  if (v.includes(':')) {
+    return inCidr(v, 'fc00::/7') || inCidr(v, 'fe80::/10') || v === '::';
+  }
+  return (
+    v.startsWith('0.') ||
+    v.startsWith('10.') ||
+    v.startsWith('192.168.') ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(v) ||
+    v.startsWith('127.') ||
+    /^169\.254\./.test(v)
+  );
+}
+
+ 
+export async function ipToLocation(ip) {
+  if (!ip || ip === 'unknown') return { str: '', country: '', region: '', city: '' };
+  const key = ip.replace(/^::ffff:/, '');
+  const hit = geoCache.get(key);
+  if (hit && Date.now() - hit.at < GEO_TTL) return hit;
+  if (isPrivateIp(key)) {
+    const rec = { str: '本地（内网）', country: '', region: '内网', city: '', at: Date.now() };
+    geoCache.set(key, rec);
+    return rec;
+  }
+
+  
+  const pending = geoCache.get(`p:${key}`);
+  if (pending) return pending;
+
+  const rec = { str: '', country: '', region: '', city: '', at: Date.now() };
+  geoCache.set(key, rec); 
+  const task = (async () => {
+    try {
+      
+      const sources = [
+        { url: `http://ip-api.com/json/${key}?lang=zh-CN&fields=status,country,regionName,city`, parse: (d) => (d.status === 'success' ? { country: d.country || '', region: d.regionName || '', city: d.city || '' } : null) },
+        { url: `https://ipapi.co/${key}/json/`, parse: (d) => (d && d.city ? { country: d.country_name || '', region: d.region || '', city: d.city || '' } : null) },
+      ];
+      for (const src of sources) {
+        try {
+          const r = await fetch(src.url, { signal: AbortSignal.timeout(2500) });
+          if (!r.ok) continue;
+          const d = await r.json();
+          const geo = src.parse(d);
+          if (!geo) continue;
+          rec.country = geo.country;
+          rec.region = geo.region;
+          rec.city = geo.city;
+          rec.str = [geo.region, geo.city].filter(Boolean).join(' ');
+          break;
+        } catch {
+          
+        }
+      }
+    } catch {
+      
+    } finally {
+      rec.at = Date.now();
+      geoCache.set(key, rec);
+      geoCache.delete(`p:${key}`);
+    }
+    return rec;
+  })();
+  geoCache.set(`p:${key}`, task);
+  return task;
+}
+
+ 
+
+export function parseUa(ua = '') {
+  const s = String(ua);
+  const has = (re) => re.test(s);
+
+  let browser = '未知';
+  if (has(/MicroMessenger/i)) browser = '微信内置浏览器';
+  else if (has(/Edg[A-Z]?\//)) browser = 'Edge';
+  else if (has(/OPR\/|Opera/i)) browser = 'Opera';
+  else if (has(/Firefox\//)) browser = 'Firefox';
+  else if (has(/Chrome\//)) browser = 'Chrome';
+  else if (has(/Safari\//)) browser = 'Safari';
+  else if (has(/curl|wget|python|node-fetch|axios|okhttp|Go-http/i)) browser = '脚本/程序';
+
+  let os = '未知';
+  if (has(/Windows NT 10/)) os = 'Windows 10/11';
+  else if (has(/Windows NT/)) os = 'Windows';
+  else if (has(/Android/)) os = 'Android';
+  else if (has(/iPhone|iPad|iPod/)) os = 'iOS';
+  else if (has(/Mac OS X/)) os = 'macOS';
+  else if (has(/Linux/)) os = 'Linux';
+
+  
+  const inApp = has(/MicroMessenger/i)
+    ? '微信'
+    : has(/\bQQ\//i)
+    ? 'QQ'
+    : has(/Aweme|BytedanceWebview/i)
+    ? '抖音'
+    : has(/Alipay/i)
+    ? '支付宝'
+    : '';
+
+  
+  const bot = !browser || browser === '未知' || browser === '脚本/程序' || has(/HeadlessChrome|bot|crawler|spider|scrapy/i);
+
+  return { browser, os, inApp, bot, raw: s.slice(0, 220) };
+}
+
+ 
+
+const buckets = new Map(); 
+
+ 
+const SWEEP_MS = 10 * 60 * 1000;
+let sweeper = null;
+function ensureSweeper() {
+  if (sweeper) return;
+  sweeper = setInterval(() => {
+    const now = Date.now();
+    for (const [k, b] of buckets) {
+      if (now - b.ts > 30 * 60 * 1000) buckets.delete(k);
+    }
+  }, SWEEP_MS);
+  sweeper.unref?.();
+}
+
+ 
+export function rateLimit(key, { windowMs = 60_000, max = 60 } = {}) {
+  ensureSweeper();
+  const now = Date.now();
+  let b = buckets.get(key);
+  if (!b) {
+    b = { ts: now, hits: [] };
+    buckets.set(key, b);
+  }
+  b.ts = now;
+  b.hits = b.hits.filter((t) => now - t < windowMs);
+  if (b.hits.length >= max) {
+    const oldest = b.hits[0];
+    return {
+      ok: false,
+      remaining: 0,
+      count: b.hits.length,
+      retryAfterSec: Math.max(1, Math.ceil((windowMs - (now - oldest)) / 1000)),
+    };
+  }
+  b.hits.push(now);
+  return { ok: true, remaining: max - b.hits.length, count: b.hits.length, retryAfterSec: 0 };
+}
+
+ 
+const bans = new Map(); 
+export function banKey(key, ms) {
+  bans.set(key, Date.now() + ms);
+}
 export function isBanned(key) {
-  const k = String(key || '');
-  const until = bannedKeys.get(k);
+  const until = bans.get(key);
   if (!until) return false;
   if (Date.now() > until) {
-    bannedKeys.delete(k);
+    bans.delete(key);
     return false;
   }
   return true;
 }
 
-const captchas = new Map();
+ 
+const scriptHits = new Map(); 
 
-export function createCaptcha() {
-  const id = crypto.randomBytes(8).toString('hex');
-  const a = crypto.randomInt(1, 10);
-  const b = crypto.randomInt(1, 10);
-  const text = `${a} + ${b} = ?`;
-  const answer = String(a + b);
-  captchas.set(id, { answer, expires: Date.now() + 5 * 60_000 });
-  return { id, text };
-}
-
-export function verifyCaptcha(id, answer) {
-  const rec = captchas.get(String(id || ''));
-  if (!rec) return false;
-  captchas.delete(String(id));
-  if (Date.now() > rec.expires) return false;
-  return String(answer || '').trim() === rec.answer;
-}
-
-export function riskScore(req) {
-  let score = 0;
-  const ua = req?.headers?.['user-agent'] || '';
-  if (!ua) score += 30;
-  if (parseUa(ua).bot) score += 40;
-  if (/curl|wget|python|java\//i.test(ua)) score += 20;
-  const ip = clientIp(req);
-  if (isPrivateIp(ip)) score += 5;
-  return Math.min(100, score);
-}
-
-export function makeActivityStore(onChange) {
-  let events = [];
-  const notify = () => {
-    if (typeof onChange === 'function') {
-      try { onChange(events); } catch {}
+ 
+export function countScriptHit(ip, windowMs = 10 * 60_000) {
+  if (!ip || isPrivateIp(ip)) return 0;
+  const now = Date.now();
+  const arr = (scriptHits.get(ip) || []).filter((t) => now - t < windowMs);
+  arr.push(now);
+  scriptHits.set(ip, arr);
+  
+  if (scriptHits.size > 5000) {
+    for (const [k, v] of scriptHits) {
+      if (!v.length || now - v[v.length - 1] > windowMs) scriptHits.delete(k);
     }
-  };
-  return {
-    load(list) {
-      events = Array.isArray(list) ? list.slice() : [];
-    },
-    push(rec) {
-      const item = { ...rec, at: new Date().toISOString() };
-      events.push(item);
-      if (events.length > 500) events = events.slice(-500);
-      notify();
-      return item;
-    },
-    all() {
-      return events.slice();
-    },
-  };
-}
-
-export async function ipToLocation(ip) {
-  return { str: '' };
-}
-
-export function isPrivateIp(ip) {
-  const s = normalizeIp(ip);
-  const v = net.isIP(s);
-  if (v === 4) {
-    if (s.startsWith('10.') || s.startsWith('127.')) return true;
-    if (s.startsWith('192.168.')) return true;
-    if (/^172\.(1[6-9]|2\d|3[0-1])\./.test(s)) return true;
-    if (s.startsWith('169.254.')) return true;
-    return false;
   }
-  if (v === 6) {
-    if (s === '::1') return true;
-    if (s.startsWith('fc') || s.startsWith('fd')) return true;
-    if (s.startsWith('fe80:')) return true;
-    return false;
+  return arr.length;
+}
+
+ 
+export function getScriptHits(ip, windowMs = 10 * 60_000) {
+  const arr = scriptHits.get(ip) || [];
+  const now = Date.now();
+  return arr.filter((t) => now - t < windowMs).length;
+}
+
+ 
+export function resetScriptHits(ip) {
+  scriptHits.delete(ip);
+}
+
+ 
+
+const CAPTCHA_TTL_MS = 5 * 60 * 1000;
+const captchas = new Map(); 
+
+function sweepCaptchas() {
+  const now = Date.now();
+  for (const [k, v] of captchas) if (now > v.exp) captchas.delete(k);
+}
+
+
+const UPPER = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+const LOWER = 'abcdefghjkmnpqrstuvwxyz';
+const DIGITS = '23456789';
+
+ 
+function pickAnswer(len = 4) {
+  const rnd = (s) => s[crypto.randomInt(s.length)];
+  const chars = [rnd(UPPER), rnd(LOWER), rnd(DIGITS)];
+  const pools = [UPPER, LOWER, DIGITS];
+  while (chars.length < len) chars.push(rnd(pools[crypto.randomInt(pools.length)]));
+  
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = crypto.randomInt(i + 1);
+    [chars[i], chars[j]] = [chars[j], chars[i]];
   }
-  return false;
+  return chars.join('');
 }
 
-const scriptHits = new Map();
+export function createCaptcha(ip = '') {
+  sweepCaptchas();
+  const answer = pickAnswer(4);
 
-export function countScriptHit(key) {
-  const k = String(key || '');
-  const n = (scriptHits.get(k) || 0) + 1;
-  scriptHits.set(k, n);
-  return n;
+  const id = crypto.randomBytes(16).toString('hex');
+  captchas.set(id, { answer, exp: Date.now() + CAPTCHA_TTL_MS, ip });
+
+  const W = 130;
+  const H = 44;
+  const rand = (a, b) => a + Math.random() * (b - a);
+
+  
+  let glyphs = '';
+  for (let i = 0; i < answer.length; i++) {
+    const x = 16 + i * 28 + rand(-3, 3);
+    const y = 30 + rand(-4, 4);
+    const rot = rand(-26, 26).toFixed(1);
+    const size = rand(22, 27).toFixed(1);
+    const hue = Math.floor(rand(200, 300));
+    glyphs +=
+      `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" font-family="Georgia,'Times New Roman',serif"` +
+      ` font-size="${size}" font-weight="700" fill="hsl(${hue} 70% 32%)"` +
+      ` transform="rotate(${rot} ${x.toFixed(1)} ${y.toFixed(1)})">${answer[i]}</text>`;
+  }
+
+  
+  let lines = '';
+  for (let i = 0; i < 5; i++) {
+    lines +=
+      `<path d="M${rand(0, 20).toFixed(0)},${rand(0, H).toFixed(0)} Q${rand(30, 100).toFixed(0)},${rand(0, H).toFixed(0)} ` +
+      `${rand(110, W).toFixed(0)},${rand(0, H).toFixed(0)}" stroke="hsl(${Math.floor(rand(180, 320))} 60% 70%)"` +
+      ` stroke-width="${rand(0.8, 1.8).toFixed(1)}" fill="none" opacity="0.75"/>`;
+  }
+  
+  let dots = '';
+  for (let i = 0; i < 34; i++) {
+    dots += `<circle cx="${rand(0, W).toFixed(0)}" cy="${rand(0, H).toFixed(0)}" r="${rand(0.6, 1.7).toFixed(1)}" fill="hsl(${Math.floor(rand(0, 360))} 65% 62%)" opacity="0.7"/>`;
+  }
+
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="图形验证码">` +
+    `<rect width="${W}" height="${H}" fill="#f4f6fb"/>` +
+    lines +
+    glyphs +
+    dots +
+    `</svg>`;
+
+  return { id, svg, ttlSec: Math.round(CAPTCHA_TTL_MS / 1000) };
 }
 
-export function resetScriptHits(key) {
-  if (key === undefined) scriptHits.clear();
-  else scriptHits.delete(String(key));
+ 
+export function verifyCaptcha(id, input, ip = '') {
+  sweepCaptchas();
+  const rec = captchas.get(String(id || ''));
+  if (!rec) return { ok: false, error: '验证码已过期，请点击图片刷新' };
+  captchas.delete(String(id));
+  if (rec.ip && ip && rec.ip !== ip) return { ok: false, error: '验证码与当前设备不匹配，请刷新重试' };
+  const norm = (s) => String(s || '').replace(/\s+/g, '');
+  if (!norm(input)) return { ok: false, error: '请输入图形验证码' };
+  if (norm(input) !== norm(rec.answer)) {
+    
+    if (norm(input).toUpperCase() === norm(rec.answer).toUpperCase()) {
+      return { ok: false, error: '验证码大小写不正确，请输入已保存的验证码重试' };
+    }
+    return { ok: false, error: '验证码不正确' };
+  }
+  return { ok: true };
+}
+
+ 
+
+ 
+const disposableEmailDomains = new Set([
+  'mailinator.com', 'guerrillamail.com', '10minutemail.com', 'tempmail.com',
+  'throwawaymail.com', 'yopmail.com', 'trashmail.com', 'sharklasers.com',
+  'temp-mail.org', 'getnada.com', 'maildrop.cc', 'fakeinbox.com',
+]);
+
+export function riskScore({ ip, ua, email, recentSamePrefix = 0, recentSameIp = 0 }) {
+  const { bot } = parseUa(ua);
+  const reasons = [];
+  let score = 0;
+
+  if (bot) {
+    score += 40;
+    reasons.push('请求未携带正常浏览器标识');
+  }
+  const domain = String(email || '').split('@')[1] || '';
+  if (domain && disposableEmailDomains.has(domain)) {
+    score += 40;
+    reasons.push('使用了临时邮箱域名');
+  }
+  if (recentSameIp >= 3) {
+    score += Math.min(30, recentSameIp * 6);
+    reasons.push(`同一 IP 近期注册 ${recentSameIp} 次`);
+  }
+  if (recentSamePrefix >= 5) {
+    score += Math.min(25, recentSamePrefix * 3);
+    reasons.push(`同一网段近期注册 ${recentSamePrefix} 次`);
+  }
+  if (!String(email || '').includes('@')) {
+    score += 10;
+    reasons.push('邮箱格式异常');
+  }
+  return { score: Math.min(100, score), reasons, bot };
+}
+
+ 
+
+const MAX_EVENTS = 4000;
+
+export function makeActivityStore(persist) {
+  let events = [];
+
+  const load = (arr) => {
+    events = Array.isArray(arr) ? arr.slice(0, MAX_EVENTS) : [];
+  };
+  const all = () => events;
+
+  function push(ev) {
+    const rec = {
+      at: Date.now(),
+      id: crypto.randomBytes(6).toString('hex'),
+      ...ev,
+    };
+    events.unshift(rec);
+    if (events.length > MAX_EVENTS) events.length = MAX_EVENTS;
+    try {
+      persist?.(events);
+    } catch {}
+    return rec;
+  }
+
+   
+  function query({ kind = '', userId = '', ip = '', q = '', since = 0, until = 0, limit = 200 } = {}) {
+    const kw = String(q || '').toLowerCase();
+    return events
+      .filter((e) => {
+        if (kind && e.kind !== kind) return false;
+        if (userId && e.userId !== userId) return false;
+        if (ip && !String(e.ip || '').includes(ip)) return false;
+        if (since && e.at < since) return false;
+        if (until && e.at > until) return false;
+        if (kw) {
+          const hay = [e.kind, e.action, e.email, e.ip, e.ua, e.browser, e.os, e.detail, e.text]
+            .filter(Boolean)
+            .join(' ')
+            .toLowerCase();
+          if (!hay.includes(kw)) return false;
+        }
+        return true;
+      })
+      .slice(0, Math.max(1, Math.min(1000, limit)));
+  }
+
+   
+  function stats({ since = 0 } = {}) {
+    const byIp = new Map();
+    const byPrefix = new Map();
+    const byUser = new Map();
+    let logins = 0;
+    let registers = 0;
+    let reads = 0;
+    let bots = 0;
+
+    for (const e of events) {
+      if (since && e.at < since) continue;
+      if (e.kind === 'login') logins++;
+      if (e.kind === 'register') registers++;
+      if (e.kind === 'read') reads++;
+      if (e.bot) bots++;
+
+      const bump = (map, key, label) => {
+        if (!key) return;
+        const cur = map.get(key) || { key, label, count: 0, lastAt: 0, bots: 0 };
+        cur.count++;
+        cur.lastAt = Math.max(cur.lastAt, e.at);
+        if (e.bot) cur.bots++;
+        map.set(key, cur);
+      };
+      bump(byIp, e.ip, e.browser);
+      bump(byPrefix, ipPrefix(e.ip), e.os);
+      if (e.userId) bump(byUser, e.userId, e.email);
+    }
+
+    const top = (m, n = 10) => [...m.values()].sort((a, b) => b.count - a.count).slice(0, n).map((v) => ({ ...v, label: v.label || '' }));
+    return {
+      total: events.length,
+      logins,
+      registers,
+      reads,
+      bots,
+      topIps: top(byIp),
+      topPrefixes: top(byPrefix),
+      topUsers: top(byUser),
+    };
+  }
+
+  function clear() {
+    const n = events.length;
+    events = [];
+    try {
+      persist?.(events);
+    } catch {}
+    return n;
+  }
+
+  return { load, all, push, query, stats, clear };
 }
