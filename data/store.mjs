@@ -75,6 +75,7 @@ export const DEFAULT_SETTINGS = {
   
   bannedIps: [],
   ipWhitelist: [],
+  trustedProxies: [],
   
   urgentNotice: {
     enabled: false,
@@ -787,6 +788,39 @@ export function removeIpWhitelistById(id) {
   s.ipWhitelist = s.ipWhitelist.filter((w) => w.id !== id);
   save();
   return before - s.ipWhitelist.length;
+}
+
+export function listTrustedProxies() {
+  return getSettings().trustedProxies || [];
+}
+
+export function addTrustedProxy(entry, note = '') {
+  const db0 = load();
+  const s = db0.settings;
+  if (!Array.isArray(s.trustedProxies)) s.trustedProxies = [];
+  const key = String(entry || '').trim();
+  if (!key) return { added: false, reason: '地址不能为空' };
+  if (s.trustedProxies.some((w) => String(w.ip).trim() === key)) {
+    return { added: false, reason: '该地址已在可信代理列表中' };
+  }
+  s.trustedProxies.unshift({
+    id: newToken().slice(0, 12),
+    ip: key,
+    note: String(note || '').slice(0, 200),
+    at: Date.now(),
+  });
+  save();
+  return { added: true };
+}
+
+export function removeTrustedProxyById(id) {
+  const db0 = load();
+  const s = db0.settings;
+  if (!Array.isArray(s.trustedProxies)) return 0;
+  const before = s.trustedProxies.length;
+  s.trustedProxies = s.trustedProxies.filter((w) => w.id !== id);
+  save();
+  return before - s.trustedProxies.length;
 }
 
  

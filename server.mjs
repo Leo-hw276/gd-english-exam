@@ -35,6 +35,7 @@ import {
   ipToLocation,
   isPrivateIp,
   isTrustedProxy,
+  setExtraTrustedProxies,
   countScriptHit,
   resetScriptHits,
 } from './data/security.mjs';
@@ -2779,6 +2780,7 @@ async function handleAdminNotices(req, res) {
       ok: true,
       banned: DB.listBannedIps(),
       whitelist: DB.listIpWhitelist(),
+      trustedProxies: DB.listTrustedProxies(),
       scriptGuard: DB.getSettings().scriptGuard || {},
     });
   }
@@ -2851,6 +2853,30 @@ async function handleAdminNotices(req, res) {
       DB.clearUnbanGuard(String(target.ip || '').trim());
     }
     return sendJson(res, 200, { ok: true, removed: n, banned: DB.listBannedIps() });
+  }
+  if (action === 'addTrustedProxy') {
+    const target = String(b.ip || '').trim();
+    if (!target) return sendJson(res, 400, { ok: false, error: '请输入要信任的代理 IP / 网段' });
+    const isV6 = target.split('/')[0].includes(':');
+    const probe = target.includes('/') ? target.split('/')[0] : target;
+    if (isV6 !== probe.includes(':')) return sendJson(res, 400, { ok: false, error: '地址格式不正确' });
+    const r = DB.addTrustedProxy(target, b.note);
+    if (r.added) {
+      for (const w of DB.listIpWhitelist()) {
+        if (String(w.ip).trim() === target) DB.removeIpWhitelistById(w.id);
+      }
+      for (const banned of DB.listBannedIps()) {
+        if (String(banned.ip).trim() === target) DB.removeBannedIpById(banned.id);
+      }
+      setExtraTrustedProxies(DB.listTrustedProxies());
+      DB.log('admin-trusted-proxy', 'admin', `${target}${b.note ? `（${String(b.note).slice(0, 60)}）` : ''}`);
+    }
+    return sendJson(res, 200, { ok: true, ...r, trustedProxies: DB.listTrustedProxies() });
+  }
+  if (action === 'removeTrustedProxyById') {
+    const n = DB.removeTrustedProxyById(String(b.id));
+    setExtraTrustedProxies(DB.listTrustedProxies());
+    return sendJson(res, 200, { ok: true, removed: n, trustedProxies: DB.listTrustedProxies() });
   }
 
   return sendJson(res, 400, { ok: false, error: '未知操作' });
@@ -3090,6 +3116,7 @@ server.listen(PORT, HOST, () => {
   const s = DB.getSettings();
   const cfg = getCfg();
   DB.load();
+  setExtraTrustedProxies(DB.listTrustedProxies());
   console.log('');
   console.log('  广东中考英语听说考试在线练习系统');
   console.log('  ------------------------------------------------');

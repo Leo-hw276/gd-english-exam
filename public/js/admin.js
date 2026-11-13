@@ -4,6 +4,7 @@ import { S, $, $$, esc, toast, showScreen } from './app.js';
 
 let adminReady = false;
 let currentClientIp = '';
+let currentPeer = '';
 
 const ADMIN_SECTIONS = [
   { key: 'overview', label: '数据概览', index: '01', cards: ['card-overview'] },
@@ -109,6 +110,52 @@ function renderWhitelist(list) {
   });
 }
 
+function renderTrustedProxies(list) {
+  const box = $('#tp-list');
+  if (!box) return;
+  const rows = list || [];
+  box.innerHTML = rows.length
+    ? rows
+        .map(
+          (w) => `<div class="nt-row">
+              <span class="grow"><b>${esc(w.ip)}</b> <span class="muted">${esc(w.note || '')}</span></span>
+              <button class="btn sm ghost" data-tp-del="${esc(w.id)}">移除</button>
+            </div>`
+        )
+        .join('')
+    : '<p class="muted">暂无（默认只信任 Cloudflare 与内网地址）</p>';
+  $$('#tp-list [data-tp-del]').forEach((btn) => {
+    btn.onclick = async () => {
+      await api('/api/admin/notices', { action: 'removeTrustedProxyById', id: btn.dataset.tpDel });
+      await loadBanned();
+      toast('已移除可信代理', 'ok');
+    };
+  });
+}
+
+async function addTrustedProxy() {
+  const ip = $('#tp-ip')?.value.trim();
+  const note = $('#tp-note')?.value.trim();
+  const hint = $('#tp-hint');
+  if (!ip) {
+    if (hint) hint.textContent = '请输入代理 IP / 网段';
+    return;
+  }
+  try {
+    const d = await api('/api/admin/notices', { action: 'addTrustedProxy', ip, note });
+    if (!d.ok) {
+      if (hint) hint.textContent = d.reason || '添加失败';
+      return;
+    }
+    if (hint) hint.textContent = '已添加，重新检测即可看到真实 IP';
+    toast('已加入可信代理', 'ok');
+    await loadBanned();
+    await checkClientIp();
+  } catch (e) {
+    if (hint) hint.textContent = '添加失败：' + e.message;
+  }
+}
+
 async function checkClientIp() {
   const out = $('#ip-check-out');
   if (out) out.textContent = '检测中…';
@@ -126,7 +173,15 @@ async function checkClientIp() {
     for (const [k, v] of Object.entries(d.headers || {})) {
       lines.push(`  ${k}: ${v || '(无)'}`);
     }
+    if (!d.trustedProxy && (d.headers?.['cf-connecting-ip'] || d.headers?.['x-forwarded-for'])) {
+      lines.push('', `提示：对端 ${d.peer} 不是可信代理，但请求带有转发头。`, '若该对端是平台/机房的反向代理，请把它加入下方「可信代理」。');
+    }
     if (out) out.textContent = lines.join('\n');
+    currentPeer = d.peer || '';
+    if (currentPeer) {
+      const input = $('#tp-ip');
+      if (input && !input.value) input.value = currentPeer;
+    }
   } catch (e) {
     if (out) out.textContent = '检测失败：' + e.message;
   }
@@ -818,6 +873,7 @@ async function loadBanned() {
   const d = await api('/api/admin/notices', { action: 'listBanned' });
   renderBanned(d.banned || []);
   renderWhitelist(d.whitelist || []);
+  renderTrustedProxies(d.trustedProxies || []);
   renderScriptGuard(d.scriptGuard || {});
 }
 
@@ -1239,6 +1295,7 @@ function bind() {
   $('#btn-ban-add')?.addEventListener('click', banIp);
   $('#btn-wl-add')?.addEventListener('click', addWhitelist);
   $('#btn-ip-check')?.addEventListener('click', checkClientIp);
+  $('#btn-tp-add')?.addEventListener('click', addTrustedProxy);
   $('#btn-wl-self')?.addEventListener('click', () => {
     if (!currentClientIp) return toast('尚未获取到当前 IP，请刷新后重试', 'warn');
     const input = $('#wl-ip');

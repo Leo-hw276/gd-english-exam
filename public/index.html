@@ -9,7 +9,7 @@
 <title>广东中考英语听说考试 · 在线模拟练习</title>
 <meta name="description" content="严格按照广东省江门市中考英语听说考试（人机对话）官方题型与评分标准设计的在线模拟练习系统，AI 自动组卷、录音作答、满分 30 分智能评分。" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%233538cd'/%3E%3Ctext x='50' y='68' font-size='54' text-anchor='middle' fill='white' font-family='sans-serif' font-weight='bold'%3E%E5%90%AC%3C/text%3E%3C/svg%3E" />
-<link rel="stylesheet" href="/styles.css?v=20261108h" />
+<link rel="stylesheet" href="/styles.css?v=20261108i" />
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
 </head>
 <body>
@@ -531,6 +531,18 @@
           <button class="btn ghost" id="btn-ip-check">检测当前连接</button>
         </div>
         <div id="ip-check-out" class="muted" style="margin-top:10px;font-size:12.5px;white-space:pre-wrap"></div>
+
+        <h3 style="margin-top:20px;font-size:15px">可信代理</h3>
+        <p class="muted">网站前面若还有一层反向代理（如主机商负载均衡），需把该代理地址加入这里，程序才会信任它转发的真实 IP。</p>
+        <div class="row" style="margin-top:10px">
+          <input type="text" id="tp-ip" placeholder="代理 IP 或网段，如 178.105.199.226 或 178.105.199.0/24" style="flex:2;min-width:280px" />
+          <button class="btn" id="btn-tp-add">加入可信代理</button>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <input type="text" id="tp-note" placeholder="备注（可选，如：平台反向代理）" style="flex:2;min-width:240px" />
+        </div>
+        <div id="tp-hint" class="muted" style="margin-top:4px"></div>
+        <div id="tp-list" class="muted" style="margin-top:10px">—</div>
       </div>
 
       <div class="card" id="card-notices">
@@ -840,7 +852,7 @@
   </div>
 </div>
 
-<script type="module" src="/js/app.js?v=20261108h"></script>
-<script type="module" src="/js/admin.js?v=20261108h"></script>
+<script type="module" src="/js/app.js?v=20261108i"></script>
+<script type="module" src="/js/admin.js?v=20261108i"></script>
 </body>
 </html>

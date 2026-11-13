@@ -115,11 +115,36 @@ function extraTrustedCidrs() {
     .filter(Boolean);
 }
 
+let extraTrustedProxies = [];
+
+function withMask(entry) {
+  const s = String(entry || '').trim();
+  if (!s) return '';
+  if (s.includes('/')) return s;
+  return s.includes(':') ? `${s}/128` : `${s}/32`;
+}
+
+export function setExtraTrustedProxies(list) {
+  extraTrustedProxies = (Array.isArray(list) ? list : [])
+    .map((x) => withMask(normalizeIp(typeof x === 'string' ? x : x && x.ip)))
+    .filter(Boolean);
+}
+
+export function getExtraTrustedProxies() {
+  return extraTrustedProxies.slice();
+}
+
 export function isTrustedProxy(addr) {
   const v = normalizeIp(addr);
   if (!v) return false;
   if (isPrivateIp(v)) return true;
-  for (const c of [...CF_IPV4, ...CF_IPV6, ...extraTrustedCidrs()]) {
+  const cidrs = [
+    ...CF_IPV4,
+    ...CF_IPV6,
+    ...extraTrustedCidrs().map(withMask),
+    ...extraTrustedProxies,
+  ];
+  for (const c of cidrs) {
     if (inCidr(v, c)) return true;
   }
   return false;
@@ -150,32 +175,23 @@ export function clientIpInfo(req) {
   if (!isTrustedProxy(peer)) return { ip: peer, source: 'socket', peer };
 
   const xff = forwardedChain(h['x-forwarded-for']);
-  const viaCloudflare = isCloudflareIp(peer) || xff.some((x) => isCloudflareIp(x));
 
-  if (isCloudflareIp(peer)) {
-    const cf = headerIp(h['cf-connecting-ip']);
-    if (isIP(cf) && !isTrustedProxy(cf)) return { ip: cf, source: 'cf-connecting-ip', peer };
-  }
-
-  for (let i = xff.length - 1; i >= 0; i--) {
-    const ip = xff[i];
-    if (!isIP(ip) || isTrustedProxy(ip)) continue;
-    return { ip, source: 'x-forwarded-for', peer };
-  }
-
+  const candidates = [];
+  const cf = headerIp(h['cf-connecting-ip']);
+  if (cf) candidates.push({ ip: cf, source: 'cf-connecting-ip' });
+  for (const ip of xff) candidates.push({ ip, source: 'x-forwarded-for' });
   for (const key of ['x-real-ip', 'true-client-ip', 'x-vercel-forwarded-for']) {
     const ip = headerIp(h[key]);
-    if (isIP(ip) && !isTrustedProxy(ip)) return { ip, source: key, peer };
+    if (ip) candidates.push({ ip, source: key });
   }
 
-  if (viaCloudflare) {
-    const cf = headerIp(h['cf-connecting-ip']);
-    if (isIP(cf) && !isTrustedProxy(cf)) return { ip: cf, source: 'cf-connecting-ip', peer };
+  for (const c of candidates) {
+    if (!isIP(c.ip)) continue;
+    if (isTrustedProxy(c.ip)) continue;
+    return { ip: c.ip, source: c.source, peer };
   }
 
-  const hadForwardHeader = ['cf-connecting-ip', 'x-real-ip', 'true-client-ip', 'x-forwarded-for', 'x-vercel-forwarded-for'].some(
-    (k) => h[k]
-  );
+  const hadForwardHeader = candidates.length > 0;
   return { ip: peer, source: hadForwardHeader ? 'proxy-fallback' : 'socket', peer };
 }
 
