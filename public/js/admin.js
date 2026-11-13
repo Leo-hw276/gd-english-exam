@@ -3,6 +3,137 @@
 import { S, $, $$, esc, toast, showScreen } from './app.js';
 
 let adminReady = false;
+let currentClientIp = '';
+
+const ADMIN_SECTIONS = [
+  { key: 'overview', label: '数据概览', index: '01', cards: ['card-overview'] },
+  { key: 'ai', label: 'AI 与语音', index: '02', cards: ['card-ai-config'] },
+  { key: 'security', label: '安全与封禁', index: '03', cards: ['card-security', 'card-ban'] },
+  { key: 'content', label: '公告与通知', index: '04', cards: ['card-notices', 'card-abnormal', 'card-urgent'] },
+  { key: 'pricing', label: '定价设置', index: '05', cards: ['card-pricing'] },
+  { key: 'verify', label: '验证与邮件', index: '06', cards: ['card-turnstile', 'card-brevo'] },
+  { key: 'codes', label: '兑换码', index: '07', cards: ['card-codes'] },
+  { key: 'users', label: '用户管理', index: '08', cards: ['card-users'] },
+  { key: 'logs', label: '流水日志', index: '09', cards: ['card-logs'] },
+  { key: 'audit', label: '安全审计', index: '10', cards: ['card-activity'] },
+];
+
+const IP_SOURCE_LABEL = {
+  socket: '直连',
+  'cf-connecting-ip': 'Cloudflare',
+  'x-forwarded-for': '反向代理 XFF',
+  'x-real-ip': '反向代理 X-Real-IP',
+  'true-client-ip': '反向代理 True-Client-IP',
+  'x-vercel-forwarded-for': 'Vercel',
+  'proxy-fallback': '代理回退',
+  unknown: '未知',
+};
+
+function setupAdminShell() {
+  const nav = $('#admin-nav');
+  const main = $('#admin-main');
+  if (!nav || !main || nav.dataset.ready === '1') return;
+  nav.dataset.ready = '1';
+  let saved = '';
+  try { saved = localStorage.getItem('jmkt.admin.panel') || ''; } catch {}
+  const startKey = ADMIN_SECTIONS.some((s) => s.key === saved) ? saved : 'overview';
+
+  for (const sec of ADMIN_SECTIONS) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.dataset.panel = sec.key;
+    btn.innerHTML = `<span class="idx">${sec.index}</span><span>${sec.label}</span>`;
+    btn.addEventListener('click', () => showAdminPanel(sec.key));
+    nav.appendChild(btn);
+
+    const box = document.createElement('div');
+    box.className = 'admin-section';
+    box.dataset.panelContent = sec.key;
+    for (const id of sec.cards) {
+      const el = document.getElementById(id);
+      if (el) box.appendChild(el);
+    }
+    main.appendChild(box);
+  }
+
+  showAdminPanel(startKey);
+}
+
+function showAdminPanel(key) {
+  const sec = ADMIN_SECTIONS.find((s) => s.key === key);
+  if (!sec) return;
+  try { localStorage.setItem('jmkt.admin.panel', key); } catch {}
+  $$('#admin-nav button').forEach((b) => {
+    const on = b.dataset.panel === key;
+    b.classList.toggle('active', on);
+    if (on) b.setAttribute('aria-current', 'page');
+    else b.removeAttribute('aria-current');
+  });
+  $$('#admin-main .admin-section').forEach((box) => {
+    box.classList.toggle('active', box.dataset.panelContent === key);
+  });
+}
+
+function renderClientInfo(client) {
+  if (!client) return;
+  currentClientIp = client.ip || '';
+  const src = IP_SOURCE_LABEL[client.source] || client.source || '未知';
+  const state = client.whitelisted ? '已加入白名单' : '未加入白名单';
+  const info = `当前登录 IP：${client.ip || '—'} · 识别来源：${src} · ${state}`;
+  const side = $('#admin-client-info');
+  if (side) side.textContent = info;
+  const box = $('#wl-current');
+  if (box) box.textContent = info;
+}
+
+function renderWhitelist(list) {
+  const box = $('#wl-list');
+  if (!box) return;
+  const rows = list || [];
+  box.innerHTML = rows.length
+    ? rows
+        .map(
+          (w) => `<div class="nt-row">
+              <span class="grow"><b>${esc(w.ip)}</b> <span class="muted">${esc(w.note || '')}</span><div class="muted">${new Date(w.at).toLocaleString('zh-CN')}</div></span>
+              <button class="btn sm ghost" data-wl-del="${esc(w.id)}">移除</button>
+            </div>`
+        )
+        .join('')
+    : '<p class="muted">暂无白名单</p>';
+  $$('#wl-list [data-wl-del]').forEach((btn) => {
+    btn.onclick = async () => {
+      await api('/api/admin/notices', { action: 'removeWhitelistById', id: btn.dataset.wlDel });
+      await loadBanned();
+      toast('已移出白名单', 'ok');
+    };
+  });
+}
+
+async function addWhitelist() {
+  const hint = $('#wl-hint');
+  const ip = $('#wl-ip').value.trim();
+  const note = $('#wl-note').value.trim();
+  if (!ip) {
+    if (hint) hint.textContent = '请输入要加入白名单的 IP / 网段';
+    return;
+  }
+  try {
+    const d = await api('/api/admin/notices', { action: 'addWhitelist', ip, note });
+    if (d.added) {
+      if (hint) hint.textContent = '已加入白名单';
+      $('#wl-ip').value = '';
+      $('#wl-note').value = '';
+      toast(`已将 ${ip} 加入白名单`, 'ok');
+    } else {
+      if (hint) hint.textContent = d.reason || '加入失败';
+      toast(d.reason || '加入失败', 'bad', 4000);
+    }
+    renderWhitelist(d.whitelist || []);
+  } catch (e) {
+    if (hint) hint.textContent = '加入失败';
+    toast('加入白名单失败：' + e.message, 'bad', 5000);
+  }
+}
 
 async function api(path, body, method = 'POST') {
   const opt = { method, headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin' };
@@ -88,6 +219,8 @@ async function loadOverview() {
     $('#admin-login-card').style.display = 'none';
     $('#admin-panel').style.display = '';
     adminReady = true;
+    renderClientInfo(d.client);
+    renderWhitelist(d.settings?.ipWhitelist || []);
 
     
     const st = d.stats || {};
@@ -661,6 +794,7 @@ async function addAbnormal() {
 async function loadBanned() {
   const d = await api('/api/admin/notices', { action: 'listBanned' });
   renderBanned(d.banned || []);
+  renderWhitelist(d.whitelist || []);
   renderScriptGuard(d.scriptGuard || {});
 }
 
@@ -995,12 +1129,14 @@ function renderActivity(events) {
   }
   tb.innerHTML = events.map((e) => {
     const cls = e.action === 'fail' ? ' style="color:#ef4444"' : e.kind === 'blocked' ? ' style="color:#f59e0b"' : '';
+    const srcLabel = e.ipSource ? IP_SOURCE_LABEL[e.ipSource] || e.ipSource : '';
+    const ipTitle = e.peerIp && e.peerIp !== e.ip ? `直连对端：${e.peerIp}` : '';
     return `<tr>
       <td>${fmtTime(e.at)}</td>
       <td>${esc(fmtKind(e.kind))}</td>
       <td${cls}>${esc(e.action || '')}</td>
       <td>${esc(e.email || e.userId || '')}</td>
-      <td>${esc(e.ip || '')}</td>
+      <td title="${esc(ipTitle)}"><div>${esc(e.ip || '')}</div>${srcLabel ? `<div class="muted" style="font-size:11px">${esc(srcLabel)}</div>` : ''}</td>
       <td>${esc(e.geo || '')}</td>
       <td>${esc(e.browser || '')}</td>
       <td>${esc(e.os || '')}</td>
@@ -1056,6 +1192,7 @@ async function clearActivity() {
  
 
 function bind() {
+  setupAdminShell();
   $('#btn-admin-login')?.addEventListener('click', adminLogin);
   $('#cfg-pass')?.addEventListener('keydown', (e) => e.key === 'Enter' && adminLogin());
   $('#ad-captcha-img')?.addEventListener('click', loadAdminCaptcha);
@@ -1077,6 +1214,12 @@ function bind() {
   $('#btn-nt-add')?.addEventListener('click', addAnnouncement);
   $('#btn-ab-add')?.addEventListener('click', addAbnormal);
   $('#btn-ban-add')?.addEventListener('click', banIp);
+  $('#btn-wl-add')?.addEventListener('click', addWhitelist);
+  $('#btn-wl-self')?.addEventListener('click', () => {
+    if (!currentClientIp) return toast('尚未获取到当前 IP，请刷新后重试', 'warn');
+    const input = $('#wl-ip');
+    if (input) input.value = currentClientIp;
+  });
   $('#btn-sg-save')?.addEventListener('click', saveScriptGuard);
   $('#btn-admin-clear')?.addEventListener('click', clearUsers);
   $('#btn-admin-img-upload')?.addEventListener('click', uploadImage);
@@ -1124,7 +1267,9 @@ document.addEventListener('click', (e) => {
     else {
       const h = await fetch('/api/health').then((r) => r.json());
       const hint = $('#admin-first-hint');
-      if (hint) hint.textContent = '初始状态尚未设置管理员密码：在下方输入任意 6 位以上密码即可完成首次设置，请务必记住。';
+      if (hint && h.adminPasswordSet === false) {
+        hint.textContent = '尚未设置管理员密码：在上方输入任意 6 位以上密码并填写验证码，即可完成首次设置，请务必记住。';
+      }
     }
   } catch {}
 })();

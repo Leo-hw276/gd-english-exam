@@ -19,11 +19,17 @@ const CF_IPV6 = [
 ];
 
 export function normalizeIp(raw) {
-  let v = String(raw || '').trim();
+  let v = String(raw || '').trim().replace(/^["']|["']$/g, '');
   if (!v) return '';
-  if (v.startsWith('[') && v.endsWith(']')) v = v.slice(1, -1);
+  if (v.startsWith('[')) {
+    const end = v.indexOf(']');
+    v = end > 0 ? v.slice(1, end) : v.slice(1);
+  } else if (/^\d{1,3}(?:\.\d{1,3}){3}:\d+$/.test(v)) {
+    v = v.slice(0, v.lastIndexOf(':'));
+  }
   v = v.split('%')[0];
   v = v.replace(/^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/i, '$1');
+  if (v.includes(':')) v = v.toLowerCase();
   return v;
 }
 
@@ -83,6 +89,24 @@ function inCidr(ip, cidr) {
   return true;
 }
 
+export function isCloudflareIp(addr) {
+  const v = normalizeIp(addr);
+  if (!v || !isIP(v)) return false;
+  return [...CF_IPV4, ...CF_IPV6].some((c) => inCidr(v, c));
+}
+
+export function ipMatchesPattern(ip, pattern) {
+  const v = normalizeIp(ip);
+  const raw = String(pattern || '').trim();
+  if (!v || !raw) return false;
+  if (raw.includes('/')) {
+    const [net, bits] = raw.split('/');
+    return inCidr(v, `${normalizeIp(net)}/${bits}`);
+  }
+  if (raw.endsWith('.')) return v.startsWith(raw);
+  return v === normalizeIp(raw);
+}
+
  
 function extraTrustedCidrs() {
   return String(process.env.TRUSTED_PROXY_CIDRS || '')
@@ -102,30 +126,58 @@ export function isTrustedProxy(addr) {
 }
 
  
-export function clientIp(req) {
+function headerIp(value) {
+  if (!value) return '';
+  const raw = Array.isArray(value) ? value[0] : value;
+  return normalizeIp(raw);
+}
+
+function forwardedChain(value) {
+  const out = [];
+  if (!value) return out;
+  for (const piece of String(Array.isArray(value) ? value[0] : value).split(',')) {
+    const ip = normalizeIp(piece);
+    if (ip) out.push(ip);
+  }
+  return out;
+}
+
+ 
+export function clientIpInfo(req) {
   const h = req.headers || {};
   const peer = normalizeIp(req.socket?.remoteAddress);
-  if (!peer) return 'unknown';
-  if (!isTrustedProxy(peer)) return peer;
+  if (!peer) return { ip: 'unknown', source: 'unknown', peer: '' };
+  if (!isTrustedProxy(peer)) return { ip: peer, source: 'socket', peer };
 
-  const chain = [];
-  for (const key of ['cf-connecting-ip', 'true-client-ip', 'x-real-ip', 'x-forwarded-for', 'x-vercel-forwarded-for']) {
-    const raw = h[key];
-    if (!raw) continue;
-    for (const piece of String(raw).split(',')) {
-      const ip = normalizeIp(piece);
-      if (ip) chain.push(ip);
-    }
+  const xff = forwardedChain(h['x-forwarded-for']);
+  const viaCloudflare = isCloudflareIp(peer) || xff.some((x) => isCloudflareIp(x));
+
+  if (isCloudflareIp(peer)) {
+    const cf = headerIp(h['cf-connecting-ip']);
+    if (isIP(cf) && !isTrustedProxy(cf)) return { ip: cf, source: 'cf-connecting-ip', peer };
   }
 
-  for (const ip of chain) {
-    if (!isIP(ip)) continue;
-    if (isTrustedProxy(ip)) continue;
-    return ip;
+  for (let i = xff.length - 1; i >= 0; i--) {
+    const ip = xff[i];
+    if (!isIP(ip) || isTrustedProxy(ip)) continue;
+    return { ip, source: 'x-forwarded-for', peer };
   }
-  return peer;
-  
-  return cand.replace(/^::ffff:/, '') || 'unknown';
+
+  for (const key of ['x-real-ip', 'true-client-ip', 'x-vercel-forwarded-for']) {
+    const ip = headerIp(h[key]);
+    if (isIP(ip) && !isTrustedProxy(ip)) return { ip, source: key, peer };
+  }
+
+  if (viaCloudflare) {
+    const cf = headerIp(h['cf-connecting-ip']);
+    if (isIP(cf) && !isTrustedProxy(cf)) return { ip: cf, source: 'cf-connecting-ip', peer };
+  }
+
+  return { ip: peer, source: 'proxy-fallback', peer };
+}
+
+export function clientIp(req) {
+  return clientIpInfo(req).ip;
 }
 
  

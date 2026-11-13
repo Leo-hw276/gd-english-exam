@@ -2,6 +2,7 @@
 
 
 import { configSources, envLocked } from './env.mjs';
+import { ipMatchesPattern } from './security.mjs';
 
 
 export { configSources, envLocked };
@@ -73,6 +74,7 @@ export const DEFAULT_SETTINGS = {
   },
   
   bannedIps: [],
+  ipWhitelist: [],
   
   urgentNotice: {
     enabled: false,
@@ -272,6 +274,7 @@ export function getPublicSettings() {
       senderName: s.brevo?.senderName || '',
     },
     security: s.security || { registrationOff: false, loginOff: false, speechOff: false },
+    ipWhitelist: s.ipWhitelist || [],
     
     urgentNotice: s.urgentNotice?.enabled ? { id: s.urgentNotice.id, title: s.urgentNotice.title, body: s.urgentNotice.body } : null,
     
@@ -744,38 +747,46 @@ export function removeAbnormal(id) {
  
 export function isIpBanned(ip) {
   if (!ip) return false;
-  const v = String(ip).replace(/^::ffff:/, '');
-  const list = getSettings().bannedIps || [];
-  for (const b of list) {
-    const target = String(b.ip || '').trim();
-    if (!target) continue;
-    
-    if (target.includes('/')) {
-      const [net, bitsStr] = target.split('/');
-      const bits = Number(bitsStr);
-      if (v.includes(':')) {
-        
-        if (Number.isFinite(bits) && bits > 0 && v.startsWith(net.slice(0, 2))) return true;
-      } else {
-        const mask = Number.isFinite(bits) && bits > 0 ? bits : 24;
-        const ipN = v.split('.').map(Number);
-        const netN = net.split('.').map(Number);
-        if (ipN.length === 4 && netN.length === 4) {
-          const toInt = (arr) =>
-            ((arr[0] || 0) << 24) + ((arr[1] || 0) << 16) + ((arr[2] || 0) << 8) + (arr[3] || 0);
-          const shift = 32 - mask;
-          if ((toInt(ipN) >>> shift) === (toInt(netN) >>> shift)) return true;
-        }
-      }
-    } else if (target.endsWith('.')) {
-      
-      if (v.startsWith(target)) return true;
-    } else if (v === target) {
-      
-      return true;
-    }
+  return (getSettings().bannedIps || []).some((b) => ipMatchesPattern(ip, b.ip));
+}
+
+ 
+export function isIpWhitelisted(ip) {
+  if (!ip) return false;
+  return (getSettings().ipWhitelist || []).some((w) => ipMatchesPattern(ip, w.ip));
+}
+
+export function listIpWhitelist() {
+  return getSettings().ipWhitelist || [];
+}
+
+export function addIpWhitelist(ip, note = '') {
+  const db0 = load();
+  const s = db0.settings;
+  if (!Array.isArray(s.ipWhitelist)) s.ipWhitelist = [];
+  const key = String(ip || '').trim();
+  if (!key) return { added: false, reason: 'IP 不能为空' };
+  if (s.ipWhitelist.some((w) => String(w.ip).trim() === key)) {
+    return { added: false, reason: '该地址已在白名单中' };
   }
-  return false;
+  s.ipWhitelist.unshift({
+    id: newToken().slice(0, 12),
+    ip: key,
+    note: String(note || '').slice(0, 200),
+    at: Date.now(),
+  });
+  save();
+  return { added: true };
+}
+
+export function removeIpWhitelistById(id) {
+  const db0 = load();
+  const s = db0.settings;
+  if (!Array.isArray(s.ipWhitelist)) return 0;
+  const before = s.ipWhitelist.length;
+  s.ipWhitelist = s.ipWhitelist.filter((w) => w.id !== id);
+  save();
+  return before - s.ipWhitelist.length;
 }
 
  

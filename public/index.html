@@ -9,7 +9,7 @@
 <title>广东中考英语听说考试 · 在线模拟练习</title>
 <meta name="description" content="严格按照广东省江门市中考英语听说考试（人机对话）官方题型与评分标准设计的在线模拟练习系统，AI 自动组卷、录音作答、满分 30 分智能评分。" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%233538cd'/%3E%3Ctext x='50' y='68' font-size='54' text-anchor='middle' fill='white' font-family='sans-serif' font-weight='bold'%3E%E5%90%AC%3C/text%3E%3C/svg%3E" />
-<link rel="stylesheet" href="/styles.css?v=20261108g" />
+<link rel="stylesheet" href="/styles.css?v=20261113a" />
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
 </head>
 <body>
@@ -388,12 +388,20 @@
         <div class="captcha-img" id="ad-captcha-img" title="点击刷新"></div>
       </div>
       <input type="hidden" id="ad-captcha-id" />
+      <div id="admin-first-hint" class="muted" style="font-size:12.5px;margin-top:10px;line-height:1.6"></div>
       <div class="row" style="margin-top:14px">
         <button class="btn" id="btn-admin-login">登录</button>
       </div>
     </div>
 
     <div id="admin-panel" style="display:none">
+      <div class="admin-shell">
+        <aside class="admin-sidebar">
+          <div class="admin-side-title">管理菜单</div>
+          <nav class="admin-nav" id="admin-nav"></nav>
+          <div class="admin-side-foot muted" id="admin-client-info"></div>
+        </aside>
+        <div class="admin-main" id="admin-main">
       <div class="card" id="card-ai-config">
         <h2>AI 接口配置</h2>
         <div id="cfg-env-source" class="muted" style="font-size:12.5px;margin-bottom:14px"></div>
@@ -486,7 +494,7 @@
         </div>
       </div>
 
-      <div class="card">
+      <div class="card" id="card-overview">
         <div class="row between">
           <h2 style="margin:0">数据概览</h2>
           <button class="btn ghost sm" id="btn-admin-refresh">刷新</button>
@@ -569,6 +577,20 @@
         </div>
         <div id="ban-hint" class="muted" style="margin-top:6px"></div>
 
+        <h3 style="margin-top:20px;font-size:15px">IP 白名单</h3>
+        <p class="muted">白名单内的地址不受封禁、脚本自动防护与接口限流影响。建议把自己家的固定出口 IP 或 IPv6 网段加入，避免误伤。</p>
+        <div class="row" style="margin-top:10px">
+          <input type="text" id="wl-ip" placeholder="IP / 网段 / CIDR，如 1.2.3.4 或 240e:3b00::/32" style="flex:2;min-width:240px" />
+          <button class="btn" id="btn-wl-add">加入白名单</button>
+          <button class="btn ghost" id="btn-wl-self">填入当前 IP</button>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <input type="text" id="wl-note" placeholder="备注（可选，如：家里宽带）" style="flex:2;min-width:220px" />
+        </div>
+        <div id="wl-current" class="muted" style="margin-top:8px"></div>
+        <div id="wl-hint" class="muted" style="margin-top:4px"></div>
+        <div id="wl-list" class="muted" style="margin-top:10px">—</div>
+
         <h3 style="margin-top:20px;font-size:15px">脚本访问防护</h3>
         <p class="muted">同一 IP 在统计窗口内以脚本（curl、Python、程序请求等）访问超过设定次数时，自动封禁该 IP。普通浏览器访问不计入。</p>
         <div class="row" style="margin-top:10px;align-items:flex-end;gap:12px">
@@ -591,7 +613,7 @@
         <div id="ban-list" class="muted" style="margin-top:10px">—</div>
       </div>
 
-      <div class="card">
+      <div class="card" id="card-pricing">
         <h2>定价设置</h2>
         <p class="muted">这里的定价会实时展示在网站「收费标准」页面。</p>
         <div class="row">
@@ -638,7 +660,7 @@
         </div>
       </div>
 
-      <div class="card">
+      <div class="card" id="card-urgent">
         <h2>紧急通知弹窗</h2>
         <p class="muted">开启后，用户打开网站立即弹出通知，点击「我知道了」关闭。修改内容后会重新弹出（已读按通知 ID 记录）。</p>
         <label class="muted" style="display:flex;align-items:center;gap:6px;margin-top:8px">
@@ -658,7 +680,7 @@
         </div>
       </div>
 
-      <div class="card">
+      <div class="card" id="card-turnstile">
         <h2>人机验证（Cloudflare Turnstile）</h2>
         <p class="muted">填写后，登录与注册页会显示 Cloudflare 人机验证。Site Key 公开，Secret Key 仅服务端使用。两项都留空即关闭。</p>
         <div class="row" style="margin-top:12px">
@@ -678,7 +700,7 @@
         </div>
       </div>
 
-      <div class="card">
+      <div class="card" id="card-brevo">
         <h2>邮箱验证码（Brevo）</h2>
         <p class="muted">开启后，注册与邮箱登录都需要输入邮箱验证码。图形验证码始终保留。同一设备 60 秒内只能获取一次验证码。发件邮箱需先在 Brevo 后台完成验证。</p>
         <label class="muted" style="display:flex;align-items:center;gap:6px;margin-top:8px">
@@ -702,7 +724,7 @@
 
       </div>
 
-      <div class="card">
+      <div class="card" id="card-codes">
         <h2>兑换码生成</h2>
         <p class="muted">输入额度类型与数量，随机生成含字母和数字的兑换码，用户在前台输入即可兑换。</p>
         <div class="row">
@@ -731,7 +753,7 @@
         </div>
       </div>
 
-      <div class="card">
+      <div class="card" id="card-users">
         <h2>用户管理</h2>
         <div class="row" style="margin-bottom:12px;gap:8px">
           <button class="btn danger sm" id="btn-admin-clear">🗑 一键清空用户</button>
@@ -745,7 +767,7 @@
         </div>
       </div>
 
-      <div class="card">
+      <div class="card" id="card-logs">
         <h2>流水日志</h2>
         <div style="max-height:280px;overflow:auto">
           <table class="spec" id="cfg-log-table">
@@ -790,6 +812,8 @@
           </table>
         </div>
       </div>
+        </div>
+      </div>
     </div>
   </div>
 </section>
@@ -808,7 +832,7 @@
   </div>
 </div>
 
-<script type="module" src="/js/app.js?v=20261108g"></script>
-<script type="module" src="/js/admin.js?v=20261108g"></script>
+<script type="module" src="/js/app.js?v=20261113a"></script>
+<script type="module" src="/js/admin.js?v=20261113a"></script>
 </body>
 </html>

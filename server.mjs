@@ -22,6 +22,7 @@ import {
 
 import {
   clientIp,
+  clientIpInfo,
   ipPrefix,
   parseUa,
   rateLimit,
@@ -62,12 +63,15 @@ try { Activity.load(DB.data().activity); } catch {}
  
 const geoPromises = new Map(); 
 function logVisit(req, kind, fields = {}) {
-  const ip = clientIp(req);
+  const info = clientIpInfo(req);
+  const ip = info.ip;
   const ua = req.headers['user-agent'] || '';
   const { browser, os, inApp, bot } = parseUa(ua);
   const rec = Activity.push({
     kind,
     ip,
+    ipSource: info.source,
+    peerIp: info.peer,
     browser,
     os,
     inApp,
@@ -1460,6 +1464,7 @@ async function handleHealth(req, res, cfg) {
     pricing: s.pricing,
     siteName: s.siteName,
     authRequired: true,
+    adminPasswordSet: DB.adminPasswordSet(),
     
     cardBuyUrl: String(s.cardBuyUrl || '').trim(),
     
@@ -1869,8 +1874,15 @@ async function handleAdminLogin(req, res) {
 
   
   if (account !== s.adminUsername) return bad();
-  if (!s.adminPasswordHash) return bad();
-  if (!DB.checkAdminPassword(pw)) return bad();
+  if (!s.adminPasswordHash) {
+    if (pw.length < 6) {
+      return sendJson(res, 400, { ok: false, error: '首次设置管理员密码至少 6 位' });
+    }
+    DB.updateSettings({ adminPasswordHash: DB.hashPassword(pw) });
+    DB.log('admin-init', 'system', '首次设置管理员密码');
+  } else if (!DB.checkAdminPassword(pw)) {
+    return bad();
+  }
 
   logVisit(req, 'admin-login', { action: 'ok', ip, detail: s.adminUsername });
   const token = DB.createSession('admin', 'admin');
@@ -1928,6 +1940,7 @@ async function handleUnbanSelf(req, res) {
 
 async function handleAdminOverview(req, res) {
   if (!requireAdmin(req, res)) return;
+  const info = clientIpInfo(req);
   sendJson(res, 200, {
     ok: true,
     settings: DB.getPublicSettings(),
@@ -1936,6 +1949,12 @@ async function handleAdminOverview(req, res) {
     codes: DB.listCodes({ limit: 300 }),
     orders: DB.listOrders(60),
     logs: DB.data().logs.slice(0, 80),
+    client: {
+      ip: info.ip,
+      source: info.source,
+      peer: info.peer,
+      whitelisted: DB.isIpWhitelisted(info.ip),
+    },
   });
 }
 
@@ -2733,6 +2752,7 @@ async function handleAdminNotices(req, res) {
     return sendJson(res, 200, {
       ok: true,
       banned: DB.listBannedIps(),
+      whitelist: DB.listIpWhitelist(),
       scriptGuard: DB.getSettings().scriptGuard || {},
     });
   }
@@ -2758,9 +2778,38 @@ async function handleAdminNotices(req, res) {
         error: '该地址属于 CDN/反向代理或内网地址，禁止封禁（会误伤大量用户）',
       });
     }
+    if (DB.isIpWhitelisted(target)) {
+      return sendJson(res, 400, { ok: false, error: '该地址在 IP 白名单中，请先从白名单移除' });
+    }
     const r = DB.banIp(target, b.note, 'admin');
     DB.log('admin-ban-ip', 'admin', `${b.ip}${r.added ? '' : '（已存在）'}`);
     return sendJson(res, 200, { ok: true, ...r, banned: DB.listBannedIps() });
+  }
+  if (action === 'addWhitelist') {
+    const target = String(b.ip || '').trim();
+    if (!target) return sendJson(res, 400, { ok: false, error: '请输入要加入白名单的 IP / 网段' });
+    if (isTrustedProxy(target)) {
+      return sendJson(res, 400, { ok: false, error: '不能把 CDN/反向代理或内网地址加入白名单' });
+    }
+    if (target.includes('/')) {
+      const [net, bitsStr] = target.split('/');
+      const bits = Number(bitsStr);
+      const isV6 = net.includes(':');
+      const minBits = isV6 ? 16 : 8;
+      if (!Number.isInteger(bits) || bits < minBits || bits > (isV6 ? 128 : 32)) {
+        return sendJson(res, 400, {
+          ok: false,
+          error: `网段范围过大或格式不正确（${isV6 ? 'IPv6' : 'IPv4'} 前缀需不小于 /${minBits}）`,
+        });
+      }
+    }
+    const r = DB.addIpWhitelist(target, b.note);
+    if (r.added) DB.log('admin-whitelist-add', 'admin', `${target}${b.note ? `（${String(b.note).slice(0, 60)}）` : ''}`);
+    return sendJson(res, 200, { ok: true, ...r, whitelist: DB.listIpWhitelist() });
+  }
+  if (action === 'removeWhitelistById') {
+    const n = DB.removeIpWhitelistById(String(b.id));
+    return sendJson(res, 200, { ok: true, removed: n, whitelist: DB.listIpWhitelist() });
   }
   if (action === 'unbanIp') {
     const n = DB.unbanIp(b.ip);
@@ -2840,13 +2889,15 @@ const server = http.createServer((req, res) => {
 
   const route = async () => {
     const cfg = getCfg();
-    const ip = clientIp(req);
+    const ipInfo = clientIpInfo(req);
+    const ip = ipInfo.ip;
+    const whitelisted = DB.isIpWhitelisted(ip);
 
     
     
     
     const isStaticAsset = /\.(js|css|png|jpg|jpeg|webp|gif|svg|ico|woff2|woff|ttf|map|txt|xml|json)$/i.test(p);
-    if (!isPrivateIp(ip) && !isTrustedProxy(ip) && !isStaticAsset && !p.startsWith('/uploads/')) {
+    if (!whitelisted && !isPrivateIp(ip) && !isTrustedProxy(ip) && !isStaticAsset && !p.startsWith('/uploads/')) {
       const guard = DB.getSettings().scriptGuard || {};
       if (guard.enabled !== false) {
         const uaInfo = parseUa(req.headers['user-agent'] || '');
@@ -2874,7 +2925,7 @@ const server = http.createServer((req, res) => {
 
     
     const banBypass = p === '/api/captcha' || p === '/api/admin/unban-self';
-    if (!banBypass && DB.isIpBanned(ip)) {
+    if (!whitelisted && !banBypass && DB.isIpBanned(ip)) {
       logVisit(req, 'blocked', { action: 'ip-banned', ip, detail: '当前 IP 已被封禁' });
       if (p.startsWith('/api/')) {
         return sendJson(res, 403, { ok: false, error: '当前 IP 已被封禁，如有疑问请联系管理员', banned: true });
@@ -2918,9 +2969,11 @@ const server = http.createServer((req, res) => {
 
     
     if (p.startsWith('/api/')) {
-      if (isBanned(ip)) return sendJson(res, 429, { ok: false, error: '请求过于频繁，已临时限制访问' });
-      const rl = RL.api(ip);
-      if (!rl.ok) return sendJson(res, 429, { ok: false, error: `请求过于频繁，请 ${rl.retryAfterSec} 秒后重试` });
+      if (!whitelisted && isBanned(ip)) return sendJson(res, 429, { ok: false, error: '请求过于频繁，已临时限制访问' });
+      if (!whitelisted) {
+        const rl = RL.api(ip);
+        if (!rl.ok) return sendJson(res, 429, { ok: false, error: `请求过于频繁，请 ${rl.retryAfterSec} 秒后重试` });
+      }
     }
 
     
