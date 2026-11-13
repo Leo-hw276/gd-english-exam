@@ -9,7 +9,7 @@
 <title>广东中考英语听说考试 · 在线模拟练习</title>
 <meta name="description" content="严格按照广东省江门市中考英语听说考试（人机对话）官方题型与评分标准设计的在线模拟练习系统，AI 自动组卷、录音作答、满分 30 分智能评分。" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%233538cd'/%3E%3Ctext x='50' y='68' font-size='54' text-anchor='middle' fill='white' font-family='sans-serif' font-weight='bold'%3E%E5%90%AC%3C/text%3E%3C/svg%3E" />
-<link rel="stylesheet" href="/styles.css?v=20261108i" />
+<link rel="stylesheet" href="/styles.css?v=20261113a" />
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
 </head>
 <body>
@@ -488,6 +488,38 @@
         </div>
         <div class="muted" id="cfg-speech-test-out" style="font-size:12.5px;margin-top:8px;white-space:pre-wrap"></div>
 
+        <h3 style="font-size:15px;margin:22px 0 10px">在线支付（易支付）</h3>
+        <div class="grid2" style="gap:10px">
+          <div>
+            <label class="muted">商户 PID</label>
+            <input type="text" id="cfg-epay-pid" placeholder="如 11643" />
+          </div>
+          <div>
+            <label class="muted">商户密钥</label>
+            <input type="text" id="cfg-epay-key" placeholder="留空则不修改" />
+          </div>
+          <div style="min-width:280px">
+            <label class="muted">接口地址</label>
+            <input type="text" id="cfg-epay-base" placeholder="https://pay.521cd.cn/xpay/epay" />
+          </div>
+          <div style="min-width:160px">
+            <label class="muted">支付方式</label>
+            <select id="cfg-epay-types" style="width:100%;margin-top:6px">
+              <option value="alipay,wxpay">支付宝 + 微信</option>
+              <option value="alipay">仅支付宝</option>
+              <option value="wxpay">仅微信</option>
+            </select>
+          </div>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <label class="switch-row">
+            <input type="checkbox" id="cfg-epay-enabled" />
+            <span>启用在线支付</span>
+          </label>
+          <button class="btn" id="btn-epay-save">保存支付配置</button>
+          <span class="muted" id="cfg-epay-hint"></span>
+        </div>
+
         <div class="row" style="margin-top:16px">
           <button class="btn" id="btn-admin-save">保存接口配置</button>
           <span class="muted" id="cfg-save-hint"></span>
@@ -525,25 +557,6 @@
         </div>
       </div>
 
-      <div class="card" id="card-ipdebug">
-        <h2>IP 诊断</h2>
-        <div class="row" style="margin-top:10px">
-          <button class="btn ghost" id="btn-ip-check">检测当前连接</button>
-        </div>
-        <div id="ip-check-out" class="muted" style="margin-top:10px;font-size:12.5px;white-space:pre-wrap"></div>
-
-        <h3 style="margin-top:20px;font-size:15px">可信代理</h3>
-        <p class="muted">网站前面若还有一层反向代理（如主机商负载均衡），需把该代理地址加入这里，程序才会信任它转发的真实 IP。</p>
-        <div class="row" style="margin-top:10px">
-          <input type="text" id="tp-ip" placeholder="代理 IP 或网段，如 178.105.199.226 或 178.105.199.0/24" style="flex:2;min-width:280px" />
-          <button class="btn" id="btn-tp-add">加入可信代理</button>
-        </div>
-        <div class="row" style="margin-top:8px">
-          <input type="text" id="tp-note" placeholder="备注（可选，如：平台反向代理）" style="flex:2;min-width:240px" />
-        </div>
-        <div id="tp-hint" class="muted" style="margin-top:4px"></div>
-        <div id="tp-list" class="muted" style="margin-top:10px">—</div>
-      </div>
 
       <div class="card" id="card-notices">
         <h2>公告栏</h2>
@@ -831,6 +844,22 @@
             <tbody></tbody>
           </table>
         </div>
+
+        <div class="row between" style="margin:22px 0 10px">
+          <h3 style="margin:0;font-size:15px">IP 诊断与可信代理</h3>
+          <button class="btn ghost sm" id="btn-ip-check">检测当前连接</button>
+        </div>
+        <div id="ip-check-out" class="muted" style="font-size:12.5px;white-space:pre-wrap">—</div>
+        <p class="muted" style="margin-top:14px">网站前面若还有一层反向代理（如主机商负载均衡），需把该代理地址加入可信列表，程序才会信任它转发的真实 IP。</p>
+        <div class="row" style="margin-top:10px">
+          <input type="text" id="tp-ip" placeholder="代理 IP 或网段，如 178.105.199.226 或 178.105.199.0/24" style="flex:2;min-width:280px" />
+          <button class="btn" id="btn-tp-add">加入可信代理</button>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <input type="text" id="tp-note" placeholder="备注（可选，如：平台反向代理）" style="flex:2;min-width:240px" />
+        </div>
+        <div id="tp-hint" class="muted" style="margin-top:4px"></div>
+        <div id="tp-list" class="muted" style="margin-top:10px">—</div>
       </div>
         </div>
       </div>
@@ -852,7 +881,7 @@
   </div>
 </div>
 
-<script type="module" src="/js/app.js?v=20261108i"></script>
-<script type="module" src="/js/admin.js?v=20261108i"></script>
+<script type="module" src="/js/app.js?v=20261113a"></script>
+<script type="module" src="/js/admin.js?v=20261113a"></script>
 </body>
 </html>

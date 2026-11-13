@@ -347,6 +347,7 @@ async function loadOverview() {
     renderUrgentNotice(s.urgentNotice || {});
     renderTurnstileForm(s);
     renderSpeechForm(s.speechApi || {});
+    renderEpayForm(d.epay || s.epay || {});
     renderImagePreview(p.sourceImage || '');
 
     renderCodes(d.codes || []);
@@ -513,6 +514,49 @@ function currentSelectVal(id) {
  
 
  
+
+function renderEpayForm(e) {
+  const el = (id) => document.getElementById(id);
+  const pid = el('cfg-epay-pid');
+  const key = el('cfg-epay-key');
+  const base = el('cfg-epay-base');
+  const types = el('cfg-epay-types');
+  const on = el('cfg-epay-enabled');
+  const hint = el('cfg-epay-hint');
+  if (pid) pid.value = e?.pid || '';
+  if (key) key.value = '';
+  if (base) base.value = e?.apiBase || 'https://pay.521cd.cn/xpay/epay';
+  if (on) on.checked = Boolean(e?.enabled);
+  if (types) {
+    const cur = (e?.types || ['alipay', 'wxpay']).join(',');
+    types.value = [...types.options].some((o) => o.value === cur) ? cur : 'alipay,wxpay';
+  }
+  if (hint) hint.textContent = e?.hasKey ? '已设置密钥（留空则不修改）' : '未设置密钥';
+}
+
+async function saveEpay() {
+  const hint = $('#cfg-epay-hint');
+  const types = ($('#cfg-epay-types')?.value || 'alipay,wxpay').split(',').filter(Boolean);
+  try {
+    const d = await api('/api/admin/notices', {
+      action: 'saveEpay',
+      pid: $('#cfg-epay-pid')?.value.trim() || '',
+      key: $('#cfg-epay-key')?.value.trim() || '',
+      apiBase: $('#cfg-epay-base')?.value.trim() || '',
+      enabled: Boolean($('#cfg-epay-enabled')?.checked),
+      types,
+    });
+    if (!d.ok) {
+      if (hint) hint.textContent = d.error || '保存失败';
+      return;
+    }
+    if (hint) hint.textContent = d.epay.enabled ? '已启用' : '已保存（未启用）';
+    toast('支付配置已保存', 'ok');
+    await loadOverview();
+  } catch (e) {
+    if (hint) hint.textContent = '保存失败：' + e.message;
+  }
+}
 
 function renderSpeechForm(sp) {
   const el = (id) => document.getElementById(id);
@@ -1283,6 +1327,7 @@ function bind() {
   $('#btn-ts-save')?.addEventListener('click', saveTurnstile);
   $('#btn-speech-save')?.addEventListener('click', saveSpeech);
   $('#btn-speech-models')?.addEventListener('click', fetchSpeechModels);
+  $('#btn-epay-save')?.addEventListener('click', saveEpay);
   $('#btn-speech-test')?.addEventListener('click', testSpeech);
   $('#btn-speech-local')?.addEventListener('click', useLocalSpeech);
   $('#btn-admin-models')?.addEventListener('click', fetchModels);

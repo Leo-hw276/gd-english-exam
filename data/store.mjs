@@ -53,6 +53,13 @@ export const DEFAULT_SETTINGS = {
   siteName: '广东中考英语听说 · 在线模拟',
   examRegion: 'jiangmen',
   pricing: DEFAULT_PRICING,
+  epay: {
+    enabled: false,
+    pid: '',
+    key: '',
+    apiBase: 'https://pay.521cd.cn/xpay/epay',
+    types: ['alipay', 'wxpay'],
+  },
   paperTemperature: 0.85,
   scoreTemperature: 0.2,
   
@@ -144,6 +151,7 @@ const EMPTY_DB = () => ({
   codes: [],
   logs: [],
   orders: [],
+  payOrders: [],
   activity: [],   
   records: [],    
   announcements: [], 
@@ -635,6 +643,73 @@ export function clearData(scope = {}) {
 
 export function listOrders(limit = 200) {
   return load().orders.slice(0, limit);
+}
+
+function grantBenefits(user, plan, value) {
+  if (plan === 'monthly') {
+    const base = user.proUntil && user.proUntil > Date.now() ? user.proUntil : Date.now();
+    user.proUntil = base + Number(value) * 86400000;
+  } else {
+    user.credits = (user.credits || 0) + Number(value);
+  }
+}
+
+export function createPayOrder({ userId, outTradeNo, plan, money, name, type }) {
+  const db0 = load();
+  if (!Array.isArray(db0.payOrders)) db0.payOrders = [];
+  const rec = {
+    outTradeNo,
+    userId,
+    plan,
+    money: Number(money).toFixed(2),
+    name,
+    type,
+    status: 'pending',
+    tradeNo: '',
+    at: Date.now(),
+    paidAt: 0,
+  };
+  db0.payOrders.unshift(rec);
+  save();
+  return rec;
+}
+
+export function getPayOrder(outTradeNo) {
+  return (load().payOrders || []).find((o) => o.outTradeNo === outTradeNo) || null;
+}
+
+export function listPayOrders(limit = 100) {
+  return (load().payOrders || []).slice(0, limit);
+}
+
+export function completePayOrder(outTradeNo, tradeNo = '') {
+  const db0 = load();
+  const rec = (db0.payOrders || []).find((o) => o.outTradeNo === outTradeNo);
+  if (!rec) return { ok: false, reason: '订单不存在' };
+  if (rec.status === 'paid') return { ok: true, already: true, order: rec };
+
+  const user = db0.users.find((u) => u.id === rec.userId);
+  if (!user) return { ok: false, reason: '用户不存在' };
+
+  const pricing = db0.settings.pricing || DEFAULT_PRICING;
+  const value = rec.plan === 'monthly' ? pricing.monthly?.days || 30 : 1;
+  grantBenefits(user, rec.plan, value);
+
+  rec.status = 'paid';
+  rec.tradeNo = String(tradeNo || '');
+  rec.paidAt = Date.now();
+  db0.orders.unshift({
+    at: Date.now(),
+    userId: user.id,
+    type: rec.plan === 'monthly' ? 'monthly' : 'credits',
+    value,
+    outTradeNo: rec.outTradeNo,
+    money: rec.money,
+    channel: 'epay',
+  });
+  log('pay', user.id, `${rec.plan} ¥${rec.money} ${rec.outTradeNo}`);
+  save();
+  return { ok: true, order: rec, user: publicUser(user) };
 }
 
 export function stats() {

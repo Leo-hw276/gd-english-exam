@@ -4,7 +4,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 
 import {
   EXAM,
@@ -1468,6 +1468,8 @@ async function handleHealth(req, res, cfg) {
     adminPasswordSet: DB.adminPasswordSet(),
     
     cardBuyUrl: String(s.cardBuyUrl || '').trim(),
+    payEngine: epayConf().enabled ? 'epay' : 'off',
+    payTypes: epayConf().enabled ? epayConf().types : [],
     
     emailVerify: emailVerifyOn(),
     emailCodeResendSec: Brevo.RESEND_SEC,
@@ -1567,6 +1569,129 @@ function requireAdmin(req, res) {
   return session;
 }
 
+function epayConf() {
+  const s = DB.getSettings();
+  const e = s.epay || {};
+  const pid = String(e.pid || '').trim();
+  const key = String(e.key || '').trim();
+  let base = String(e.apiBase || '').trim().replace(/\/+$/, '');
+  if (!base) base = 'https://pay.521cd.cn/xpay/epay';
+  return { enabled: Boolean(e.enabled) && Boolean(pid) && Boolean(key), pid, key, base, types: Array.isArray(e.types) && e.types.length ? e.types : ['alipay', 'wxpay'] };
+}
+
+function epaySign(params, key) {
+  const keys = Object.keys(params)
+    .filter((k) => k !== 'sign' && k !== 'sign_type' && params[k] !== '' && params[k] !== null && params[k] !== undefined)
+    .sort();
+  const str = keys.map((k) => `${k}=${params[k]}`).join('&');
+  return createHash('md5').update(str + key, 'utf8').digest('hex');
+}
+
+function epayVerify(params, key) {
+  const given = String(params.sign || '').toLowerCase();
+  if (!given) return false;
+  return epaySign(params, key) === given;
+}
+
+function siteOrigin(req) {
+  const fwd = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
+  const proto = fwd || (req.socket && req.socket.encrypted ? 'https' : 'http');
+  const host = String(req.headers['x-forwarded-host'] || req.headers.host || 'localhost').split(',')[0].trim();
+  return `${proto}://${host}`;
+}
+
+async function handlePayCreate(req, res) {
+  const ctx = requireUser(req, res);
+  if (!ctx) return;
+  const conf = epayConf();
+  if (!conf.enabled) return sendJson(res, 503, { ok: false, error: '在线支付暂未开通' });
+
+  const b = await jsonBody(req);
+  const plan = b.plan === 'monthly' ? 'monthly' : 'once';
+  const type = conf.types.includes(String(b.type || '')) ? String(b.type) : conf.types[0];
+  const pricing = DB.getSettings().pricing || {};
+  const monthly = pricing.monthly || {};
+  const perUse = pricing.perUse || {};
+
+  const money = plan === 'monthly' ? Number(monthly.price || 19.9) : Number(perUse.price || 1);
+  if (!(money > 0)) return sendJson(res, 400, { ok: false, error: '价格配置有误，请联系管理员' });
+  const name = plan === 'monthly' ? `${monthly.name || '月卡'}（${monthly.days || 30} 天）` : `${perUse.name || '次卡'} 1 次`;
+
+  const outTradeNo = `E${Date.now()}${Math.floor(Math.random() * 900 + 100)}`;
+  DB.createPayOrder({ userId: ctx.user.id, outTradeNo, plan, money, name, type });
+
+  const origin = siteOrigin(req);
+  const params = {
+    pid: conf.pid,
+    type,
+    out_trade_no: outTradeNo,
+    notify_url: `${origin}/api/pay/notify`,
+    return_url: `${origin}/api/pay/return`,
+    name,
+    money: money.toFixed(2),
+    sitename: DB.getSettings().siteName || '在线练习系统',
+    clientip: clientIp(req),
+    device: /mobile|android|iphone/i.test(String(req.headers['user-agent'] || '')) ? 'mobile' : 'pc',
+  };
+  params.sign = epaySign(params, conf.key);
+  params.sign_type = 'MD5';
+
+  sendJson(res, 200, { ok: true, outTradeNo, action: `${conf.base}/submit.php`, params });
+}
+
+async function handlePayNotify(req, res) {
+  const conf = epayConf();
+  const url = new URL(req.url, 'http://localhost');
+  const payload = { ...Object.fromEntries(url.searchParams) };
+  if (req.method === 'POST') {
+    const raw = await readRawBody(req);
+    for (const [k, v] of new URLSearchParams(raw)) payload[k] = v;
+  }
+  if (!conf.enabled) return res.writeHead(200, { 'Content-Type': 'text/plain' }).end('fail');
+  if (!epayVerify(payload, conf.key)) {
+    DB.log('pay-notify', 'system', `签名校验失败 ${payload.out_trade_no || ''}`);
+    return res.writeHead(200, { 'Content-Type': 'text/plain' }).end('fail');
+  }
+  if (String(payload.trade_status) !== 'TRADE_SUCCESS') {
+    return res.writeHead(200, { 'Content-Type': 'text/plain' }).end('success');
+  }
+  const order = DB.getPayOrder(String(payload.out_trade_no || ''));
+  if (!order) return res.writeHead(200, { 'Content-Type': 'text/plain' }).end('fail');
+  if (Number(order.money) !== Number(payload.money)) {
+    DB.log('pay-notify', 'system', `金额不符 ${order.outTradeNo} 订单 ${order.money} 回调 ${payload.money}`);
+    return res.writeHead(200, { 'Content-Type': 'text/plain' }).end('fail');
+  }
+  const r = DB.completePayOrder(order.outTradeNo, String(payload.trade_no || ''));
+  DB.log('pay-notify', 'system', `${order.outTradeNo} ${r.ok ? '已入账' : r.reason}`);
+  res.writeHead(200, { 'Content-Type': 'text/plain' }).end('success');
+}
+
+function handlePayReturn(req, res) {
+  const conf = epayConf();
+  const url = new URL(req.url, 'http://localhost');
+  const payload = Object.fromEntries(url.searchParams);
+  const okSign = conf.enabled && epayVerify(payload, conf.key);
+  const outTradeNo = String(payload.out_trade_no || '');
+  const order = outTradeNo ? DB.getPayOrder(outTradeNo) : null;
+  if (okSign && order && String(payload.trade_status) === 'TRADE_SUCCESS' && order.status !== 'paid') {
+    DB.completePayOrder(order.outTradeNo, String(payload.trade_no || ''));
+  }
+  const origin = siteOrigin(req);
+  const status = order && (DB.getPayOrder(outTradeNo) || {}).status === 'paid' ? 'ok' : 'pending';
+  res.writeHead(302, { Location: `${origin}/?pay=${status}` });
+  res.end();
+}
+
+async function handlePayStatus(req, res) {
+  const ctx = requireUser(req, res);
+  if (!ctx) return;
+  const url = new URL(req.url, 'http://localhost');
+  const no = String(url.searchParams.get('no') || '');
+  const order = DB.getPayOrder(no);
+  if (!order || order.userId !== ctx.user.id) return sendJson(res, 404, { ok: false, error: '订单不存在' });
+  sendJson(res, 200, { ok: true, status: order.status, plan: order.plan, money: order.money });
+}
+
 async function jsonBody(req) {
   const raw = await readBody(req);
   try {
@@ -1574,6 +1699,10 @@ async function jsonBody(req) {
   } catch {
     return {};
   }
+}
+
+async function readRawBody(req) {
+  return readBody(req);
 }
 
  
@@ -1975,6 +2104,11 @@ async function handleAdminOverview(req, res) {
     users: DB.listUsers(),
     codes: DB.listCodes({ limit: 300 }),
     orders: DB.listOrders(60),
+    payOrders: DB.listPayOrders(60),
+    epay: (() => {
+      const e = epayConf();
+      return { enabled: e.enabled, pid: e.pid, apiBase: e.base, types: e.types, hasKey: Boolean(e.key) };
+    })(),
     logs: DB.data().logs.slice(0, 80),
     client: {
       ip: info.ip,
@@ -2798,6 +2932,28 @@ async function handleAdminNotices(req, res) {
         : '已关闭脚本访问自动封禁',
     });
   }
+  if (action === 'saveEpay') {
+    const patch = {};
+    if (b.pid !== undefined) patch.pid = String(b.pid || '').trim().slice(0, 40);
+    if (b.key !== undefined) {
+      const k = String(b.key || '').trim();
+      if (k && !/^\*+$/.test(k)) patch.key = k.slice(0, 128);
+    }
+    if (b.apiBase !== undefined) {
+      const u = String(b.apiBase || '').trim().replace(/\/+$/, '');
+      if (u && !/^https?:\/\//i.test(u)) return sendJson(res, 400, { ok: false, error: '接口地址需以 http:// 或 https:// 开头' });
+      patch.apiBase = u;
+    }
+    if (b.enabled !== undefined) patch.enabled = Boolean(b.enabled);
+    if (Array.isArray(b.types)) {
+      const allowed = ['alipay', 'wxpay', 'qqpay', 'bank', 'jdpay'];
+      patch.types = b.types.filter((t) => allowed.includes(String(t)));
+    }
+    DB.updateSettings({ epay: patch });
+    DB.log('admin-epay', 'admin', `enabled=${DB.getSettings().epay.enabled}`);
+    const e = epayConf();
+    return sendJson(res, 200, { ok: true, epay: { enabled: e.enabled, pid: e.pid, apiBase: e.base, types: e.types, hasKey: Boolean(e.key) } });
+  }
   if (action === 'banIp') {
     const target = String(b.ip || '').trim();
     if (isTrustedProxy(target)) {
@@ -3041,6 +3197,11 @@ const server = http.createServer((req, res) => {
         abnormal: DB.listAbnormal(true),
       });
     }
+
+    if (p === '/api/pay/create' && req.method === 'POST') return handlePayCreate(req, res);
+    if (p === '/api/pay/notify') return handlePayNotify(req, res);
+    if (p === '/api/pay/return') return handlePayReturn(req, res);
+    if (p === '/api/pay/status') return handlePayStatus(req, res);
 
     
     if (p === '/api/tts' && req.method === 'POST') return handleTts(req, res);

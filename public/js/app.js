@@ -674,6 +674,7 @@ function renderPricing() {
         <li>支持兑换码开通</li>
       </ul>
       <button class="btn ghost lg" data-goto="screen-account">用兑换码开通</button>
+      <button class="btn lg" data-pay="once">在线购买</button>
     </div>
     <div class="price-card hot">
       <div class="pc-tag best">最受欢迎</div>
@@ -686,6 +687,7 @@ function renderPricing() {
         <li>支持兑换码开通</li>
       </ul>
       <button class="btn lg" data-goto="screen-account">用兑换码开通</button>
+      <button class="btn lg" data-pay="monthly">立即开通</button>
     </div>`;
   const src = $('#price-source');
   if (src) {
@@ -701,6 +703,38 @@ function renderPricing() {
   if (lf) lf.textContent = String(free);
   const rg = $('#reg-gift');
   if (rg) rg.innerHTML = `<b>新用户福利：</b>${esc(p.freeTrialNote || `注册即送 ${free} 次免费听说模拟`)}`;
+
+  $$('#price-grid [data-pay]').forEach((btn) => {
+    btn.classList.toggle('hidden', S.payEngine !== 'epay');
+    btn.onclick = () => startPay(btn.dataset.pay);
+  });
+}
+
+async function startPay(plan) {
+  if (!S.user) {
+    toast('请先登录后再购买', 'warn');
+    go('screen-auth', { tab: 'login' });
+    return;
+  }
+  try {
+    const r = await api('/api/pay/create', { plan, type: (S.payTypes || [])[0] || 'alipay' });
+    if (!r.ok || !r.params) throw new Error(r.error || '下单失败');
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = r.action;
+    form.style.display = 'none';
+    for (const [k, v] of Object.entries(r.params)) {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = k;
+      input.value = v;
+      form.appendChild(input);
+    }
+    document.body.appendChild(form);
+    form.submit();
+  } catch (e) {
+    toast('下单失败：' + e.message, 'bad', 5000);
+  }
 }
 
  
@@ -716,6 +750,8 @@ async function runEnvCheck() {
     if (health.defaultCity) S.city = health.defaultCity;
     if (health.pricing) S.pricing = health.pricing;
     S.cardBuyUrl = health.cardBuyUrl || '';
+    S.payEngine = health.payEngine || 'off';
+    S.payTypes = Array.isArray(health.payTypes) ? health.payTypes : [];
     S.emailVerify = Boolean(health.emailVerify);
     S.emailCodeResendSec = health.emailCodeResendSec || 60;
     S.urgentNotice = health.urgentNotice || null;
@@ -2286,6 +2322,18 @@ function checkUrgentNotice() {
   window.__exam = { Tts, S, showScreen };
   
   await Promise.all([runEnvCheck(), refreshMe()]);
+
+  const payFlag = new URLSearchParams(location.search).get('pay');
+  if (payFlag) {
+    history.replaceState(null, '', location.pathname + location.hash);
+    if (payFlag === 'ok') {
+      await refreshMe();
+      toast('支付成功，额度已到账', 'ok', 5000);
+      if (S.user) go('screen-account');
+    } else {
+      toast('支付结果确认中，请稍后在「我的账户」查看额度', 'warn', 6000);
+    }
+  }
 
   
   syncScreenFromLocation();
