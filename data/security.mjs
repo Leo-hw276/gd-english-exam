@@ -173,7 +173,10 @@ export function clientIpInfo(req) {
     if (isIP(cf) && !isTrustedProxy(cf)) return { ip: cf, source: 'cf-connecting-ip', peer };
   }
 
-  return { ip: peer, source: 'proxy-fallback', peer };
+  const hadForwardHeader = ['cf-connecting-ip', 'x-real-ip', 'true-client-ip', 'x-forwarded-for', 'x-vercel-forwarded-for'].some(
+    (k) => h[k]
+  );
+  return { ip: peer, source: hadForwardHeader ? 'proxy-fallback' : 'socket', peer };
 }
 
 export function clientIp(req) {
