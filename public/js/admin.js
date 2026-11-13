@@ -109,6 +109,29 @@ function renderWhitelist(list) {
   });
 }
 
+async function checkClientIp() {
+  const out = $('#ip-check-out');
+  if (out) out.textContent = '检测中…';
+  try {
+    const d = await api('/api/admin/ip-check', undefined, 'GET');
+    const lines = [
+      `识别 IP：${d.ip || '—'}`,
+      `识别来源：${IP_SOURCE_LABEL[d.source] || d.source || '未知'}`,
+      `直连对端：${d.peer || '—'}（${d.trustedProxy ? '可信代理' : '非代理'}）`,
+      `状态：${d.whitelisted ? '白名单' : '非白名单'} / ${d.banned ? '已封禁' : '未封禁'}`,
+      `时间：${d.at}`,
+      '',
+      '请求头：',
+    ];
+    for (const [k, v] of Object.entries(d.headers || {})) {
+      lines.push(`  ${k}: ${v || '(无)'}`);
+    }
+    if (out) out.textContent = lines.join('\n');
+  } catch (e) {
+    if (out) out.textContent = '检测失败：' + e.message;
+  }
+}
+
 async function addWhitelist() {
   const hint = $('#wl-hint');
   const ip = $('#wl-ip').value.trim();
@@ -1215,6 +1238,7 @@ function bind() {
   $('#btn-ab-add')?.addEventListener('click', addAbnormal);
   $('#btn-ban-add')?.addEventListener('click', banIp);
   $('#btn-wl-add')?.addEventListener('click', addWhitelist);
+  $('#btn-ip-check')?.addEventListener('click', checkClientIp);
   $('#btn-wl-self')?.addEventListener('click', () => {
     if (!currentClientIp) return toast('尚未获取到当前 IP，请刷新后重试', 'warn');
     const input = $('#wl-ip');

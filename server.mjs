@@ -1938,6 +1938,32 @@ async function handleUnbanSelf(req, res) {
   sendJson(res, 200, { ok: true, ip, removed: n });
 }
 
+async function handleAdminIpCheck(req, res) {
+  if (!requireAdmin(req, res)) return;
+  const h = req.headers || {};
+  const info = clientIpInfo(req);
+  const pick = (v) => (v === undefined ? '' : String(Array.isArray(v) ? v.join(', ') : v).slice(0, 300));
+  sendJson(res, 200, {
+    ok: true,
+    at: new Date().toISOString(),
+    ip: info.ip,
+    source: info.source,
+    peer: info.peer,
+    trustedProxy: isTrustedProxy(info.peer),
+    whitelisted: DB.isIpWhitelisted(info.ip),
+    banned: DB.isIpBanned(info.ip),
+    headers: {
+      'cf-connecting-ip': pick(h['cf-connecting-ip']),
+      'x-forwarded-for': pick(h['x-forwarded-for']),
+      'x-real-ip': pick(h['x-real-ip']),
+      'true-client-ip': pick(h['true-client-ip']),
+      'cf-ray': pick(h['cf-ray']),
+      'cf-ipcountry': pick(h['cf-ipcountry']),
+      'user-agent': pick(h['user-agent']),
+    },
+  });
+}
+
 async function handleAdminOverview(req, res) {
   if (!requireAdmin(req, res)) return;
   const info = clientIpInfo(req);
@@ -3034,6 +3060,7 @@ const server = http.createServer((req, res) => {
     if (p === '/api/admin/login' && req.method === 'POST') return handleAdminLogin(req, res);
     if (p === '/api/admin/unban-self' && req.method === 'POST') return handleUnbanSelf(req, res);
     if (p === '/api/admin/overview') return handleAdminOverview(req, res);
+    if (p === '/api/admin/ip-check') return handleAdminIpCheck(req, res);
     if (p === '/api/admin/settings' && req.method === 'POST') return handleAdminSettings(req, res);
     if (p === '/api/admin/models' && req.method === 'POST') return handleAdminModels(req, res);
     if (p === '/api/admin/test' && req.method === 'POST') return handleAdminTest(req, res);
