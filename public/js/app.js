@@ -595,15 +595,19 @@ async function renderTickets() {
   const list = $('#tk-list');
   if (!list) return;
   if (!S.user) {
-    list.innerHTML = '请先 <a href="#" data-goto="screen-auth">登录</a> 后查看工单。';
+    list.innerHTML = '<div class="tk-empty">请先 <a href="#" data-goto="screen-auth">登录</a> 后查看工单。</div>';
     return;
   }
-  list.innerHTML = '<p class="muted">加载中…</p>';
+  list.innerHTML = '<p class="muted" style="padding:16px 0">加载中…</p>';
   try {
     const d = await api('/api/tickets', undefined, 'GET');
     const arr = d.tickets || [];
+    const openN = arr.filter((t) => t.status !== 'closed').length;
+    const closedN = arr.length - openN;
+    if ($('#tk-open-count')) $('#tk-open-count').textContent = openN;
+    if ($('#tk-closed-count')) $('#tk-closed-count').textContent = closedN;
     if (!arr.length) {
-      list.innerHTML = '<p class="muted">暂无工单。</p>';
+      list.innerHTML = '<div class="tk-empty">还没有提交过工单<br /><span style="font-size:12.5px">左侧填写后即可提交</span></div>';
       return;
     }
     list.innerHTML = arr
@@ -611,24 +615,24 @@ async function renderTickets() {
         const open = t.status !== 'closed';
         const badge = open ? '<span class="pill warn">处理中</span>' : '<span class="pill ok">已结束</span>';
         const last = t.replies && t.replies.length ? t.replies[t.replies.length - 1] : null;
-        const lastLine = last
-          ? `<div class="muted">最新回复（${last.by === 'admin' ? '管理员' : '我'}）：${esc(String(last.text).slice(0, 80))}</div>`
-          : '';
-        return `<div class="nt-row">
-            <span class="grow">
-              <b>${esc(t.title)}</b> ${badge}
-              <div class="muted">${new Date(t.createdAt).toLocaleString('zh-CN')}　·　${esc(categoryLabel(t.category))}　·　${(t.replies || []).length} 条回复</div>
-              ${lastLine}
-            </span>
-            <button class="btn sm ghost" data-tk-open="${esc(t.id)}">查看</button>
+        const preview = last
+          ? `${last.by === 'admin' ? '管理员' : '我'}：${String(last.text).replace(/\s+/g, ' ').slice(0, 70)}`
+          : '暂无回复';
+        return `<div class="tk-item" data-tk-open="${esc(t.id)}">
+            <div class="tk-item-main">
+              <div class="tk-item-title"><span>${esc(t.title)}</span>${badge}</div>
+              <div class="tk-item-meta">${esc(categoryLabel(t.category))}　·　${new Date(t.createdAt).toLocaleString('zh-CN')}　·　${(t.replies || []).length} 条回复</div>
+              <div class="tk-item-preview">${esc(preview)}</div>
+            </div>
+            <span class="tk-item-go">查看 ›</span>
           </div>`;
       })
       .join('');
-    $$('#tk-list [data-tk-open]').forEach((btn) => {
-      btn.onclick = () => openTicket(btn.dataset.tkOpen);
+    $$('#tk-list [data-tk-open]').forEach((el) => {
+      el.onclick = () => openTicket(el.dataset.tkOpen);
     });
   } catch (e) {
-    list.innerHTML = `<p class="muted">加载失败：${esc(e.message)}</p>`;
+    list.innerHTML = `<div class="tk-empty">加载失败：${esc(e.message)}</div>`;
   }
 }
 
@@ -678,24 +682,31 @@ async function openTicket(id) {
   const open = t.status !== 'closed';
   const mask = document.createElement('div');
   mask.className = 'modal-mask';
-  const replies = (t.replies || [])
+  const msgs = [{ by: 'user', text: t.body, at: t.createdAt }, ...(t.replies || [])];
+  const thread = msgs
     .map(
-      (r) => `<div class="nt-row"><span class="grow"><b>${r.by === 'admin' ? '管理员' : '我'}</b>
-        <div style="white-space:pre-wrap">${esc(r.text)}</div>
-        <div class="muted">${new Date(r.at).toLocaleString('zh-CN')}</div></span></div>`
+      (r) => `<div class="tk-msg ${r.by === 'admin' ? 'admin' : 'user'}">
+        <div class="tk-avatar ${r.by === 'admin' ? 'admin' : 'user'}">${r.by === 'admin' ? '管' : '我'}</div>
+        <div class="tk-msg-body">
+          <div class="tk-msg-who">${r.by === 'admin' ? '管理员' : '我'}　${new Date(r.at).toLocaleString('zh-CN')}</div>
+          <div class="tk-msg-text">${esc(r.text)}</div>
+        </div>
+      </div>`
     )
     .join('');
-  mask.innerHTML = `<div class="urgent-box" style="max-width:600px">
-    <div class="urgent-head"><span class="urgent-dot"></span><h2 class="urgent-title">${esc(t.title)}</h2></div>
+  mask.innerHTML = `<div class="urgent-box" style="max-width:640px">
+    <div class="urgent-head">
+      <span class="urgent-dot"></span>
+      <h2 class="urgent-title">${esc(t.title)}</h2>
+    </div>
     <div class="urgent-body">
-      <div class="muted">${new Date(t.createdAt).toLocaleString('zh-CN')}　·　${esc(categoryLabel(t.category))}　·　${
+      <div class="muted" style="font-size:12.5px">${esc(categoryLabel(t.category))}　·　${new Date(t.createdAt).toLocaleString('zh-CN')}　·　${
     open ? '处理中' : '已结束'
   }</div>
-      <div style="white-space:pre-wrap;margin-top:10px">${esc(t.body)}</div>
-      <div style="margin-top:14px;border-top:1px solid #e4e7ec;padding-top:12px">${replies || '<p class="muted">暂无回复</p>'}</div>
+      <div class="tk-thread">${thread}</div>
       ${
         open
-          ? `<textarea id="tk-reply" rows="3" placeholder="补充说明…" style="width:100%;margin-top:12px;box-sizing:border-box"></textarea>`
+          ? `<textarea id="tk-reply" rows="3" placeholder="补充说明…" style="width:100%;margin-top:6px;box-sizing:border-box;border:1px solid #e4e7ec;border-radius:10px;padding:10px 12px;font-family:inherit;font-size:13.5px;resize:vertical"></textarea>`
           : ''
       }
     </div>
@@ -2346,6 +2357,13 @@ function bind() {
   $('#btn-redeem').onclick = doRedeem;
   $('#btn-tk-submit')?.addEventListener('click', submitTicket);
   $('#btn-tk-refresh')?.addEventListener('click', renderTickets);
+  $$('#tk-category-chips .tk-chip').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      $$('#tk-category-chips .tk-chip').forEach((c) => c.classList.toggle('active', c === chip));
+      const input = $('#tk-category');
+      if (input) input.value = chip.dataset.cat || 'other';
+    });
+  });
 
   
   $('#li-captcha-img')?.addEventListener('click', () => loadCaptcha($('#li-captcha-img'), $('#li-captcha-id')));

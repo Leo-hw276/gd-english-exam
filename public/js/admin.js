@@ -17,6 +17,7 @@ const ADMIN_SECTIONS = [
   { key: 'users', label: '用户管理', index: '08', cards: ['card-users'] },
   { key: 'logs', label: '流水日志', index: '09', cards: ['card-logs'] },
   { key: 'audit', label: '安全审计', index: '10', cards: ['card-activity'] },
+  { key: 'tickets', label: '工单反馈', index: '11', cards: ['card-tickets'] },
 ];
 
 const IP_SOURCE_LABEL = {

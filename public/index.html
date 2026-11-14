@@ -371,36 +371,52 @@
 
 <section id="screen-tickets" class="screen">
   <div class="page narrow">
-    <div class="section-head">
-      <h1>工单反馈</h1>
-      <p class="muted">遇到问题或有建议可在此提交，处理进度与回复会显示在下方的历史工单中。</p>
-    </div>
-
-    <div class="card">
-      <h2>提交工单</h2>
-      <div class="row" style="margin-top:10px;gap:10px;flex-wrap:wrap">
-        <select id="tk-category" style="min-width:150px">
-          <option value="bug">功能异常</option>
-          <option value="pay">支付与订单</option>
-          <option value="account">账号问题</option>
-          <option value="voice">语音评分</option>
-          <option value="other">其他</option>
-        </select>
-        <input type="text" id="tk-title" placeholder="标题（一句话概括问题）" style="flex:1;min-width:240px" />
+    <div class="tk-head">
+      <div>
+        <h1>工单反馈</h1>
+        <p class="muted">提交后由管理员跟进处理，回复与进度可在工单详情中查看。</p>
       </div>
-      <textarea id="tk-body" rows="5" placeholder="请描述具体情况：出现时间、操作步骤、页面提示等，便于定位问题。" style="width:100%;margin-top:10px;box-sizing:border-box;resize:vertical"></textarea>
-      <div class="row" style="margin-top:12px">
-        <button class="btn" id="btn-tk-submit">提交工单</button>
-        <span class="muted" id="tk-hint"></span>
+      <div class="tk-counts">
+        <div class="tk-count"><b id="tk-open-count">0</b><span>处理中</span></div>
+        <div class="tk-count"><b id="tk-closed-count">0</b><span>已结束</span></div>
       </div>
     </div>
 
-    <div class="card">
-      <div class="row between" style="margin-bottom:10px">
-        <h2 style="margin:0">历史工单</h2>
-        <button class="btn ghost sm" id="btn-tk-refresh">刷新</button>
+    <div class="tk-layout">
+      <div class="card tk-compose">
+        <h2>提交新工单</h2>
+        <input type="hidden" id="tk-category" value="bug" />
+        <div class="tk-field">
+          <label class="tk-label">问题分类</label>
+          <div class="tk-chips" id="tk-category-chips">
+            <button type="button" class="tk-chip active" data-cat="bug">功能异常</button>
+            <button type="button" class="tk-chip" data-cat="pay">支付与订单</button>
+            <button type="button" class="tk-chip" data-cat="account">账号问题</button>
+            <button type="button" class="tk-chip" data-cat="voice">语音评分</button>
+            <button type="button" class="tk-chip" data-cat="other">其他</button>
+          </div>
+        </div>
+        <div class="tk-field">
+          <label class="tk-label" for="tk-title">标题</label>
+          <input type="text" id="tk-title" maxlength="120" placeholder="一句话概括问题" />
+        </div>
+        <div class="tk-field">
+          <label class="tk-label" for="tk-body">详细描述</label>
+          <textarea id="tk-body" rows="6" maxlength="4000" placeholder="请说明出现时间、操作步骤与页面提示，便于定位问题。"></textarea>
+        </div>
+        <div class="tk-actions">
+          <button class="btn" id="btn-tk-submit">提交工单</button>
+          <span class="tk-hint muted" id="tk-hint"></span>
+        </div>
       </div>
-      <div id="tk-list" class="muted">—</div>
+
+      <div class="card tk-history">
+        <div class="tk-history-head">
+          <h2>我的工单</h2>
+          <button class="btn ghost sm" id="btn-tk-refresh">刷新</button>
+        </div>
+        <div id="tk-list" class="tk-list">—</div>
+      </div>
     </div>
   </div>
 </section>
