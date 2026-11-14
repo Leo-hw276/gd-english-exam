@@ -749,7 +749,7 @@ function buildCsp() {
     "style-src 'self' 'unsafe-inline'; " +
     "img-src 'self' data: blob:; " +
     "media-src 'self' data: blob:; " +
-    "connect-src 'self' https://challenges.cloudflare.com https://cloudflareinsights.com; " +
+    "connect-src 'self' data: https://challenges.cloudflare.com https://cloudflareinsights.com; " +
     'frame-src https://challenges.cloudflare.com; ' +
     "font-src 'self' data:; " +
     `object-src 'none'; base-uri 'self'; form-action ${[...formOrigins].join(' ')}; frame-ancestors 'none'`
@@ -1751,7 +1751,13 @@ async function handleEmailCode(req, res) {
   const rl = RL.emailCode(ip);
   if (!rl.ok) return sendJson(res, 429, { ok: false, error: '请求过于频繁，请稍后再试' });
 
-  const b = await jsonBody(req);
+  let b = {};
+  if (req.method === 'POST') {
+    b = await jsonBody(req);
+  } else {
+    const url = new URL(req.url, 'http://localhost');
+    b = Object.fromEntries(url.searchParams);
+  }
 
   
   const cap = verifyCaptcha(b.captchaId, b.captchaCode, ip);
@@ -1981,6 +1987,82 @@ async function handleMyOrders(req, res) {
     }));
   const all = [...paid, ...redeemed].sort((a, b) => (b.at || 0) - (a.at || 0)).slice(0, 50);
   sendJson(res, 200, { ok: true, orders: all });
+}
+
+async function handleTickets(req, res) {
+  const ctx = requireUser(req, res);
+  if (!ctx) return;
+  const url = new URL(req.url, 'http://localhost');
+  const action = url.searchParams.get('action') || '';
+
+  if (req.method === 'GET') {
+    const id = url.searchParams.get('id');
+    if (id) {
+      const t = DB.getTicket(id);
+      if (!t || t.userId !== ctx.user.id) return sendJson(res, 404, { ok: false, error: '工单不存在' });
+      return sendJson(res, 200, { ok: true, ticket: t });
+    }
+    return sendJson(res, 200, { ok: true, tickets: DB.listTickets({ userId: ctx.user.id, limit: 50 }) });
+  }
+
+  const b = await jsonBody(req);
+  try {
+    if (b.action === 'create') {
+      const openCount = DB.listTickets({ userId: ctx.user.id, limit: 500 }).filter((t) => t.status === 'open').length;
+      if (openCount >= 5) return sendJson(res, 429, { ok: false, error: '你还有 5 个未结束的工单，请等待处理后再提交' });
+      const title = String(b.title || '').trim();
+      const body = String(b.body || '').trim();
+      if (title.length < 3) return sendJson(res, 400, { ok: false, error: '标题至少 3 个字' });
+      if (body.length < 5) return sendJson(res, 400, { ok: false, error: '问题描述至少 5 个字' });
+      const t = DB.createTicket({ userId: ctx.user.id, email: ctx.user.email || '', category: b.category, title, body });
+      return sendJson(res, 200, { ok: true, ticket: t });
+    }
+    if (b.action === 'reply') {
+      const t = DB.getTicket(String(b.id || ''));
+      if (!t || t.userId !== ctx.user.id) return sendJson(res, 404, { ok: false, error: '工单不存在' });
+      const text = String(b.text || '').trim();
+      if (!text) return sendJson(res, 400, { ok: false, error: '内容不能为空' });
+      return sendJson(res, 200, { ok: true, ticket: DB.replyTicket(t.id, { by: 'user', text }) });
+    }
+    if (b.action === 'close' || b.action === 'reopen') {
+      const t = DB.getTicket(String(b.id || ''));
+      if (!t || t.userId !== ctx.user.id) return sendJson(res, 404, { ok: false, error: '工单不存在' });
+      const out = b.action === 'close' ? DB.setTicketStatus(t.id, 'closed') : DB.reopenTicket(t.id);
+      return sendJson(res, 200, { ok: true, ticket: out });
+    }
+    return sendJson(res, 400, { ok: false, error: '未知操作' });
+  } catch (e) {
+    sendJson(res, 400, { ok: false, error: e.message });
+  }
+}
+
+async function handleAdminTickets(req, res) {
+  if (!requireAdmin(req, res)) return;
+  const url = new URL(req.url, 'http://localhost');
+  if (req.method === 'GET') {
+    const id = url.searchParams.get('id');
+    if (id) {
+      const t = DB.getTicket(id);
+      if (!t) return sendJson(res, 404, { ok: false, error: '工单不存在' });
+      return sendJson(res, 200, { ok: true, ticket: t });
+    }
+    return sendJson(res, 200, { ok: true, tickets: DB.listTickets({ limit: 200 }) });
+  }
+  const b = await jsonBody(req);
+  try {
+    const t = DB.getTicket(String(b.id || ''));
+    if (!t) return sendJson(res, 404, { ok: false, error: '工单不存在' });
+    if (b.action === 'reply') {
+      const text = String(b.text || '').trim();
+      if (!text) return sendJson(res, 400, { ok: false, error: '回复内容不能为空' });
+      return sendJson(res, 200, { ok: true, ticket: DB.replyTicket(t.id, { by: 'admin', text }) });
+    }
+    if (b.action === 'close') return sendJson(res, 200, { ok: true, ticket: DB.setTicketStatus(t.id, 'closed') });
+    if (b.action === 'reopen') return sendJson(res, 200, { ok: true, ticket: DB.setTicketStatus(t.id, 'open') });
+    return sendJson(res, 400, { ok: false, error: '未知操作' });
+  } catch (e) {
+    sendJson(res, 400, { ok: false, error: e.message });
+  }
 }
 
 async function handleRedeem(req, res) {
@@ -3250,10 +3332,15 @@ const server = http.createServer((req, res) => {
     if (p === '/api/auth/register' && req.method === 'POST') return handleRegister(req, res);
     if (p === '/api/auth/login' && req.method === 'POST') return handleLogin(req, res);
     if (p === '/api/auth/logout' && req.method === 'POST') return handleLogout(req, res);
-    if (p === '/api/auth/email-code' && req.method === 'POST') return handleEmailCode(req, res);
-    if (p === '/api/auth/email-code') return sendJson(res, 405, { ok: false, error: '仅支持 POST 方法' });
+    if (p === '/api/auth/email-code' && (req.method === 'POST' || req.method === 'GET')) return handleEmailCode(req, res);
+    if (p === '/api/auth/email-code') {
+      res.writeHead(405, { 'Content-Type': 'application/json', Allow: 'POST, GET, OPTIONS' });
+      return res.end(JSON.stringify({ ok: false, error: '仅支持 POST 或 GET 方法' }));
+    }
     if (p === '/api/auth/me') return handleMe(req, res);
     if (p === '/api/account/orders') return handleMyOrders(req, res);
+    if (p === '/api/tickets') return handleTickets(req, res);
+    if (p === '/api/admin/tickets') return handleAdminTickets(req, res);
     if (p === '/api/redeem' && req.method === 'POST') return handleRedeem(req, res);
 
     

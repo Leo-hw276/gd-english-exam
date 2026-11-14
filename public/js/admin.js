@@ -323,6 +323,7 @@ async function loadOverview() {
     renderSecurity(s.security);
     saveNotices().catch(() => {});
     loadBanned().catch(() => {});
+  loadAdminTickets().catch(() => {});
 
     const srcBox = $('#cfg-env-source');
     if (srcBox) {
@@ -913,6 +914,93 @@ async function addAbnormal() {
 
  
 
+async function loadAdminTickets() {
+  const box = $('#tk-admin-list');
+  if (!box) return;
+  box.innerHTML = '<p class="muted">加载中…</p>';
+  try {
+    const d = await api('/api/admin/tickets', undefined, 'GET');
+    const filter = $('#tk-admin-filter')?.value ?? 'open';
+    const arr = (d.tickets || []).filter((t) => !filter || (filter === 'open' ? t.status !== 'closed' : t.status === 'closed'));
+    if (!arr.length) {
+      box.innerHTML = '<p class="muted">暂无工单</p>';
+      return;
+    }
+    box.innerHTML = arr
+      .map((t) => {
+        const open = t.status !== 'closed';
+        const badge = open ? '<span class="pill warn">处理中</span>' : '<span class="pill ok">已结束</span>';
+        return `<div class="nt-row">
+            <span class="grow">
+              <b>${esc(t.title)}</b> ${badge}
+              <div class="muted">${esc(t.email || '')}　·　${new Date(t.createdAt).toLocaleString('zh-CN')}　·　${(t.replies || []).length} 条回复</div>
+              <div class="muted">${esc(String(t.body).slice(0, 90))}</div>
+            </span>
+            <button class="btn sm ghost" data-tk-adm="${esc(t.id)}">处理</button>
+          </div>`;
+      })
+      .join('');
+    $$('#tk-admin-list [data-tk-adm]').forEach((btn) => {
+      btn.onclick = () => openAdminTicket(btn.dataset.tkAdm);
+    });
+  } catch (e) {
+    box.innerHTML = `<p class="muted">加载失败：${esc(e.message)}</p>`;
+  }
+}
+
+async function openAdminTicket(id) {
+  let t;
+  try {
+    const d = await api('/api/admin/tickets?id=' + encodeURIComponent(id), undefined, 'GET');
+    t = d.ticket;
+  } catch (e) {
+    return toast('读取失败：' + e.message, 'bad', 5000);
+  }
+  const open = t.status !== 'closed';
+  const replies = (t.replies || [])
+    .map(
+      (r) => `<div class="nt-row"><span class="grow"><b>${r.by === 'admin' ? '管理员' : '用户'}</b>
+        <div style="white-space:pre-wrap">${esc(r.text)}</div>
+        <div class="muted">${new Date(r.at).toLocaleString('zh-CN')}</div></span></div>`
+    )
+    .join('');
+  const mask = document.createElement('div');
+  mask.className = 'modal-mask';
+  mask.innerHTML = `<div class="urgent-box" style="max-width:620px">
+    <div class="urgent-head"><span class="urgent-dot"></span><h2 class="urgent-title">${esc(t.title)}</h2></div>
+    <div class="urgent-body">
+      <div class="muted">${esc(t.email || '')}　·　${new Date(t.createdAt).toLocaleString('zh-CN')}　·　${open ? '处理中' : '已结束'}</div>
+      <div style="white-space:pre-wrap;margin-top:10px">${esc(t.body)}</div>
+      <div style="margin-top:14px;border-top:1px solid #e4e7ec;padding-top:12px">${replies || '<p class="muted">暂无回复</p>'}</div>
+      ${open ? '<textarea id="tk-admin-reply" rows="3" placeholder="回复内容…" style="width:100%;margin-top:12px;box-sizing:border-box"></textarea>' : ''}
+    </div>
+    <div class="urgent-foot" style="gap:8px">
+      ${open ? '<button class="btn" id="tk-admin-send">回复</button><button class="btn ghost" id="tk-admin-close">结束工单</button>' : '<button class="btn ghost" id="tk-admin-reopen">重审</button>'}
+      <button class="btn ghost" id="tk-admin-back">关闭</button>
+    </div>
+  </div>`;
+  document.body.appendChild(mask);
+  const close = () => mask.remove();
+  mask.querySelector('#tk-admin-back').onclick = close;
+  const act = async (payload) => {
+    try {
+      await api('/api/admin/tickets', { id: t.id, ...payload });
+      close();
+      toast('已处理', 'ok');
+      await loadAdminTickets();
+    } catch (e) {
+      toast('操作失败：' + e.message, 'bad', 5000);
+    }
+  };
+  mask.querySelector('#tk-admin-send')?.addEventListener('click', () => {
+    const text = (mask.querySelector('#tk-admin-reply')?.value || '').trim();
+    if (!text) return toast('请输入回复内容', 'warn');
+    act({ action: 'reply', text });
+  });
+  mask.querySelector('#tk-admin-close')?.addEventListener('click', () => act({ action: 'close' }));
+  mask.querySelector('#tk-admin-reopen')?.addEventListener('click', () => act({ action: 'reopen' }));
+}
+
 async function loadBanned() {
   const d = await api('/api/admin/notices', { action: 'listBanned' });
   renderBanned(d.banned || []);
@@ -1341,6 +1429,8 @@ function bind() {
   $('#btn-wl-add')?.addEventListener('click', addWhitelist);
   $('#btn-ip-check')?.addEventListener('click', checkClientIp);
   $('#btn-tp-add')?.addEventListener('click', addTrustedProxy);
+  $('#btn-tk-admin-refresh')?.addEventListener('click', loadAdminTickets);
+  $('#tk-admin-filter')?.addEventListener('change', loadAdminTickets);
   $('#btn-wl-self')?.addEventListener('click', () => {
     if (!currentClientIp) return toast('尚未获取到当前 IP，请刷新后重试', 'warn');
     const input = $('#wl-ip');

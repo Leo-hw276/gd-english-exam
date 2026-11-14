@@ -25,6 +25,7 @@
       <a href="/" data-goto="screen-intro">模拟考试</a>
       <a href="/price" data-goto="screen-pricing">费用与购买</a>
       <a href="/account" data-goto="screen-account">我的账户</a>
+      <a href="/tickets" data-goto="screen-tickets">工单反馈</a>
     </nav>
     <div class="spacer"></div>
     <a href="/" data-goto="screen-intro" class="btn sm ghost admin-only" id="btn-admin-back">返回首页</a>
@@ -368,6 +369,43 @@
 </section>
 
 
+<section id="screen-tickets" class="screen">
+  <div class="page narrow">
+    <div class="section-head">
+      <h1>工单反馈</h1>
+      <p class="muted">遇到问题或有建议可在此提交，处理进度与回复会显示在下方的历史工单中。</p>
+    </div>
+
+    <div class="card">
+      <h2>提交工单</h2>
+      <div class="row" style="margin-top:10px;gap:10px;flex-wrap:wrap">
+        <select id="tk-category" style="min-width:150px">
+          <option value="bug">功能异常</option>
+          <option value="pay">支付与订单</option>
+          <option value="account">账号问题</option>
+          <option value="voice">语音评分</option>
+          <option value="other">其他</option>
+        </select>
+        <input type="text" id="tk-title" placeholder="标题（一句话概括问题）" style="flex:1;min-width:240px" />
+      </div>
+      <textarea id="tk-body" rows="5" placeholder="请描述具体情况：出现时间、操作步骤、页面提示等，便于定位问题。" style="width:100%;margin-top:10px;box-sizing:border-box;resize:vertical"></textarea>
+      <div class="row" style="margin-top:12px">
+        <button class="btn" id="btn-tk-submit">提交工单</button>
+        <span class="muted" id="tk-hint"></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row between" style="margin-bottom:10px">
+        <h2 style="margin:0">历史工单</h2>
+        <button class="btn ghost sm" id="btn-tk-refresh">刷新</button>
+      </div>
+      <div id="tk-list" class="muted">—</div>
+    </div>
+  </div>
+</section>
+
+
 <section id="screen-admin" class="screen">
   <div class="wrap">
     <div class="admin-head">
@@ -557,6 +595,21 @@
         </div>
       </div>
 
+
+      <div class="card" id="card-tickets">
+        <div class="row between" style="margin-bottom:10px">
+          <h2 style="margin:0">工单反馈</h2>
+          <div class="row" style="gap:6px">
+            <select id="tk-admin-filter" style="font-size:13px;padding:3px 8px;border-radius:6px;border:1px solid #d0d5dd">
+              <option value="open">处理中</option>
+              <option value="">全部</option>
+              <option value="closed">已结束</option>
+            </select>
+            <button class="btn ghost sm" id="btn-tk-admin-refresh">刷新</button>
+          </div>
+        </div>
+        <div id="tk-admin-list" class="muted">—</div>
+      </div>
 
       <div class="card" id="card-notices">
         <h2>公告栏</h2>

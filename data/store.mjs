@@ -152,6 +152,7 @@ const EMPTY_DB = () => ({
   logs: [],
   orders: [],
   payOrders: [],
+  tickets: [],
   activity: [],   
   records: [],    
   announcements: [], 
@@ -739,8 +740,73 @@ export function stats() {
  
 
  
-export function addAnnouncement({ title, body, level = 'info', author = 'admin' }) {
+export function createTicket({ userId, email, category, title, body }) {
   const db0 = load();
+  if (!Array.isArray(db0.tickets)) db0.tickets = [];
+  const now = Date.now();
+  const t = {
+    id: newToken().slice(0, 12),
+    userId,
+    email: String(email || ''),
+    category: String(category || 'other').slice(0, 20),
+    title: String(title || '').slice(0, 120),
+    body: String(body || '').slice(0, 4000),
+    status: 'open',
+    createdAt: now,
+    updatedAt: now,
+    replies: [],
+  };
+  db0.tickets.unshift(t);
+  log('ticket-open', userId, t.title);
+  save();
+  return t;
+}
+
+export function listTickets({ userId = null, limit = 200 } = {}) {
+  const all = load().tickets || [];
+  const arr = userId ? all.filter((t) => t.userId === userId) : all;
+  return arr.slice(0, limit);
+}
+
+export function getTicket(id) {
+  return (load().tickets || []).find((t) => t.id === id) || null;
+}
+
+export function replyTicket(id, { by, text }) {
+  const t = getTicket(id);
+  if (!t) throw new Error('工单不存在');
+  if (t.status === 'closed') throw new Error('工单已结束，无法回复');
+  t.replies.push({ by: by === 'admin' ? 'admin' : 'user', text: String(text || '').slice(0, 4000), at: Date.now() });
+  t.updatedAt = Date.now();
+  if (t.status === 'pending') t.status = 'open';
+  log('ticket-reply', by, t.id);
+  save();
+  return t;
+}
+
+export function setTicketStatus(id, status) {
+  const t = getTicket(id);
+  if (!t) throw new Error('工单不存在');
+  const next = status === 'closed' ? 'closed' : 'open';
+  t.status = next;
+  t.updatedAt = Date.now();
+  log('ticket-status', 'system', `${t.id} → ${next}`);
+  save();
+  return t;
+}
+
+export function reopenTicket(id) {
+  const t = getTicket(id);
+  if (!t) throw new Error('工单不存在');
+  t.status = 'open';
+  t.updatedAt = Date.now();
+  t.replies.push({ by: 'user', text: '（用户申请重审）', at: Date.now() });
+  log('ticket-reopen', t.userId, t.id);
+  save();
+  return t;
+}
+
+export function addAnnouncement({ title, body, level = 'info', author = 'admin' }) {  const db0 = load();
   const item = {
     id: newToken().slice(0, 12),
     at: Date.now(),

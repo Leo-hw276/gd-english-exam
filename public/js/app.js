@@ -51,12 +51,14 @@ const ROUTES = {
   '/signup': { screen: 'screen-auth', tab: 'register' },
   '/account': { screen: 'screen-account' },
   '/price': { screen: 'screen-pricing' },
+  '/tickets': { screen: 'screen-tickets' },
 };
 const SCREEN_TO_PATH = {
   'screen-intro': '/',
   'screen-auth': '/login',
   'screen-account': '/account',
   'screen-pricing': '/price',
+  'screen-tickets': '/tickets',
 };
 
 function pathFor(screenId, tab) {
@@ -84,6 +86,7 @@ export function showScreen(id, opts = {}) {
 
   if (id === 'screen-account') renderAccount();
   if (id === 'screen-pricing') renderPricing();
+  if (id === 'screen-tickets') renderTickets();
   if (id === 'screen-auth') {
     if (tab) $(`#auth-tabs .tab[data-tab="${tab}"]`)?.click();
     refreshAllCaptchas();
@@ -586,6 +589,141 @@ async function renderAccount() {
   if (el) el.innerHTML = '<p class="muted">加载中…</p>';
   renderHistory();
   renderMyOrders();
+}
+
+async function renderTickets() {
+  const list = $('#tk-list');
+  if (!list) return;
+  if (!S.user) {
+    list.innerHTML = '请先 <a href="#" data-goto="screen-auth">登录</a> 后查看工单。';
+    return;
+  }
+  list.innerHTML = '<p class="muted">加载中…</p>';
+  try {
+    const d = await api('/api/tickets', undefined, 'GET');
+    const arr = d.tickets || [];
+    if (!arr.length) {
+      list.innerHTML = '<p class="muted">暂无工单。</p>';
+      return;
+    }
+    list.innerHTML = arr
+      .map((t) => {
+        const open = t.status !== 'closed';
+        const badge = open ? '<span class="pill warn">处理中</span>' : '<span class="pill ok">已结束</span>';
+        const last = t.replies && t.replies.length ? t.replies[t.replies.length - 1] : null;
+        const lastLine = last
+          ? `<div class="muted">最新回复（${last.by === 'admin' ? '管理员' : '我'}）：${esc(String(last.text).slice(0, 80))}</div>`
+          : '';
+        return `<div class="nt-row">
+            <span class="grow">
+              <b>${esc(t.title)}</b> ${badge}
+              <div class="muted">${new Date(t.createdAt).toLocaleString('zh-CN')}　·　${esc(categoryLabel(t.category))}　·　${(t.replies || []).length} 条回复</div>
+              ${lastLine}
+            </span>
+            <button class="btn sm ghost" data-tk-open="${esc(t.id)}">查看</button>
+          </div>`;
+      })
+      .join('');
+    $$('#tk-list [data-tk-open]').forEach((btn) => {
+      btn.onclick = () => openTicket(btn.dataset.tkOpen);
+    });
+  } catch (e) {
+    list.innerHTML = `<p class="muted">加载失败：${esc(e.message)}</p>`;
+  }
+}
+
+function categoryLabel(c) {
+  return { bug: '功能异常', pay: '支付与订单', account: '账号问题', voice: '语音评分', other: '其他' }[c] || '其他';
+}
+
+async function submitTicket() {
+  const hint = $('#tk-hint');
+  const title = ($('#tk-title')?.value || '').trim();
+  const body = ($('#tk-body')?.value || '').trim();
+  const category = $('#tk-category')?.value || 'other';
+  if (!S.user) {
+    toast('请先登录后提交工单', 'warn');
+    go('screen-auth', { tab: 'login' });
+    return;
+  }
+  if (title.length < 3) {
+    if (hint) hint.textContent = '标题至少 3 个字';
+    return;
+  }
+  if (body.length < 5) {
+    if (hint) hint.textContent = '问题描述至少 5 个字';
+    return;
+  }
+  try {
+    await api('/api/tickets', { action: 'create', title, body, category });
+    if (hint) hint.textContent = '已提交，处理进度可在下方查看';
+    $('#tk-title').value = '';
+    $('#tk-body').value = '';
+    toast('工单已提交', 'ok');
+    await renderTickets();
+  } catch (e) {
+    if (hint) hint.textContent = '提交失败：' + e.message;
+  }
+}
+
+async function openTicket(id) {
+  let t;
+  try {
+    const d = await api('/api/tickets?id=' + encodeURIComponent(id), undefined, 'GET');
+    t = d.ticket;
+  } catch (e) {
+    toast('读取工单失败：' + e.message, 'bad', 5000);
+    return;
+  }
+  const open = t.status !== 'closed';
+  const mask = document.createElement('div');
+  mask.className = 'modal-mask';
+  const replies = (t.replies || [])
+    .map(
+      (r) => `<div class="nt-row"><span class="grow"><b>${r.by === 'admin' ? '管理员' : '我'}</b>
+        <div style="white-space:pre-wrap">${esc(r.text)}</div>
+        <div class="muted">${new Date(r.at).toLocaleString('zh-CN')}</div></span></div>`
+    )
+    .join('');
+  mask.innerHTML = `<div class="urgent-box" style="max-width:600px">
+    <div class="urgent-head"><span class="urgent-dot"></span><h2 class="urgent-title">${esc(t.title)}</h2></div>
+    <div class="urgent-body">
+      <div class="muted">${new Date(t.createdAt).toLocaleString('zh-CN')}　·　${esc(categoryLabel(t.category))}　·　${
+    open ? '处理中' : '已结束'
+  }</div>
+      <div style="white-space:pre-wrap;margin-top:10px">${esc(t.body)}</div>
+      <div style="margin-top:14px;border-top:1px solid #e4e7ec;padding-top:12px">${replies || '<p class="muted">暂无回复</p>'}</div>
+      ${
+        open
+          ? `<textarea id="tk-reply" rows="3" placeholder="补充说明…" style="width:100%;margin-top:12px;box-sizing:border-box"></textarea>`
+          : ''
+      }
+    </div>
+    <div class="urgent-foot" style="gap:8px">
+      ${open ? '<button class="btn" id="tk-send">发送</button><button class="btn ghost" id="tk-close">结束工单</button>' : '<button class="btn ghost" id="tk-reopen">申请重审</button>'}
+      <button class="btn ghost" id="tk-back">关闭</button>
+    </div>
+  </div>`;
+  document.body.appendChild(mask);
+  const close = () => mask.remove();
+  mask.querySelector('#tk-back').onclick = close;
+  const act = async (payload) => {
+    try {
+      await api('/api/tickets', payload);
+      close();
+      toast('已提交', 'ok');
+      await renderTickets();
+    } catch (e) {
+      toast('操作失败：' + e.message, 'bad', 5000);
+    }
+  };
+  mask.querySelector('#tk-send')?.addEventListener('click', () => {
+    const text = (mask.querySelector('#tk-reply')?.value || '').trim();
+    if (!text) return toast('请输入内容', 'warn');
+    act({ action: 'reply', id: t.id, text });
+  });
+  mask.querySelector('#tk-close')?.addEventListener('click', () => act({ action: 'close', id: t.id }));
+  mask.querySelector('#tk-reopen')?.addEventListener('click', () => act({ action: 'reopen', id: t.id }));
 }
 
 async function renderMyOrders() {
@@ -2206,6 +2344,8 @@ function bind() {
   $('#btn-rg-code')?.addEventListener('click', () => requestEmailCode('register'));
   $('#btn-logout').onclick = doLogout;
   $('#btn-redeem').onclick = doRedeem;
+  $('#btn-tk-submit')?.addEventListener('click', submitTicket);
+  $('#btn-tk-refresh')?.addEventListener('click', renderTickets);
 
   
   $('#li-captcha-img')?.addEventListener('click', () => loadCaptcha($('#li-captcha-img'), $('#li-captcha-id')));
