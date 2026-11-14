@@ -710,7 +710,11 @@ function renderTurnstileForm(s) {
   const hint = document.getElementById('cfg-ts-secret-hint');
   if (site) site.value = s.turnstileSiteKey || '';
   if (secret) secret.value = '';
-  if (hint) hint.textContent = s.turnstileSecretSet ? '已设置（留空则不修改）' : '尚未设置';
+  if (hint) {
+    if (!s.turnstileSiteKey) hint.textContent = '尚未配置，前台不会出现人机验证';
+    else if (!s.turnstileSecretSet) hint.textContent = '只填了 Site Key，缺少 Secret Key：组件会显示但服务端无法校验，登录注册不会强制该项';
+    else hint.textContent = '已设置（留空则不修改）';
+  }
 }
 
 async function saveTurnstile() {

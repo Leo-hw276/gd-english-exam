@@ -93,6 +93,8 @@ export function showScreen(id, opts = {}) {
     loadNotices();
     renderTurnstile(tab === 'register' ? 'register' : 'login');
   }
+  // 离开登录页时销毁人机验证组件，避免其在隐藏状态下心跳超时报 300030
+  syncTurnstile();
 }
 
  
@@ -243,6 +245,8 @@ export const S = {
   marks: {},
   lastReport: null,
   examAborted: false, 
+  turnstileSiteKey: '',
+  turnstileRequired: false,
 };
 
 const PART_META = [
@@ -438,49 +442,102 @@ function startResendCountdown(btn, sec) {
 
 const turnstileWidgets = { login: null, register: null };
 const turnstileTokens = { login: '', register: '' };
+const turnstileFails = { login: 0, register: 0 };
 
- 
+function tsMount(which) {
+  return document.getElementById(which === 'login' ? 'li-turnstile' : 'rg-turnstile');
+}
+
+function tsVisible(el) {
+  if (!el || !el.isConnected) return false;
+  if (typeof el.checkVisibility === 'function') {
+    return el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true });
+  }
+  return el.offsetWidth > 0 && el.offsetHeight > 0;
+}
+
+// 容器一旦不可见必须销毁：api.js 会对静默的组件做心跳检测，
+// 约 40 秒后判定「hung」并报 300030，之后该组件再也不会给出 token
+function destroyTurnstile(which) {
+  const mount = tsMount(which);
+  const id = turnstileWidgets[which];
+  if (window.turnstile && id !== null && id !== undefined) {
+    try { window.turnstile.remove(id); } catch {}
+  }
+  turnstileWidgets[which] = null;
+  turnstileTokens[which] = '';
+  if (mount) {
+    mount.dataset.tsReady = '';
+    mount.innerHTML = '';
+  }
+}
+
+function tsHelp(which, text) {
+  const mount = tsMount(which);
+  if (!mount) return;
+  mount.innerHTML =
+    `<span class="muted" style="font-size:12px">${text} <a href="#" data-ts-retry="${which}">点击重试</a></span>`;
+}
+
 function renderTurnstile(which, attempt = 0) {
   const sk = S.turnstileSiteKey;
-  const mount = document.getElementById(which === 'login' ? 'li-turnstile' : 'rg-turnstile');
+  const mount = tsMount(which);
   if (!mount) return;
   if (!sk) { mount.style.display = 'none'; return; }
   mount.style.display = '';
-
-  // 容器不可见（登录/注册另一页或未进入登录页）时渲染会让组件卡死并报 300030，
-  // 因此等它可见后再渲染，由切换标签或进入登录页时触发
-  if (mount.offsetParent === null) return;
-
+  if (!tsVisible(mount)) return;
   if (!window.turnstile) {
-    if (attempt >= 50) {
-      mount.innerHTML =
-        '<span class="muted" style="font-size:12px">人机验证加载失败，' +
-        `<a href="#" data-ts-retry="${which}">点击重试</a></span>`;
-      return;
-    }
-    setTimeout(() => renderTurnstile(which, attempt + 1), 300);
+    if (attempt >= 60) { tsHelp(which, '人机验证加载失败，可刷新页面重试。'); return; }
+    setTimeout(() => renderTurnstile(which, attempt + 1), 250);
     return;
   }
-  if (mount.dataset.tsReady === '1' && mount.childElementCount > 0) return;
+  if (turnstileWidgets[which] !== null) return;
   try {
-    if (turnstileWidgets[which] !== null) {
-      try { window.turnstile.remove(turnstileWidgets[which]); } catch {}
-      turnstileWidgets[which] = null;
-    }
     mount.innerHTML = '';
     turnstileWidgets[which] = window.turnstile.render(mount, {
       sitekey: sk,
-      callback: (token) => { turnstileTokens[which] = token; },
+      retry: 'never',
+      size: 'flexible',
+      callback: (token) => {
+        turnstileTokens[which] = token;
+        turnstileFails[which] = 0;
+      },
       'expired-callback': () => { turnstileTokens[which] = ''; },
       'error-callback': (code) => {
         turnstileTokens[which] = '';
-        mount.dataset.tsReady = '';
-        console.warn('[turnstile] error', code);
+        turnstileWidgets[which] = null;
+        console.warn('[turnstile] error', code, which);
+        turnstileFails[which] = (turnstileFails[which] || 0) + 1;
+        const n = turnstileFails[which];
+        if (n <= 2) {
+          setTimeout(() => {
+            const m = tsMount(which);
+            if (m) { m.dataset.tsReady = ''; m.innerHTML = ''; }
+            renderTurnstile(which, 0);
+          }, 1500 * n);
+        } else {
+          tsHelp(which, `人机验证未能完成（错误码 ${code}），请关闭广告拦截插件或更换网络后重试。`);
+        }
+        return true;
       },
     });
     mount.dataset.tsReady = '1';
   } catch (e) {
     console.warn('[turnstile]', (e && e.message) || e);
+  }
+}
+
+// 与容器可见性保持一致：可见确保存在，隐藏则销毁
+function syncTurnstile() {
+  for (const which of ['login', 'register']) {
+    const mount = tsMount(which);
+    if (!mount) continue;
+    const visible = Boolean(S.turnstileSiteKey) && tsVisible(mount);
+    if (visible) {
+      if (turnstileWidgets[which] === null) renderTurnstile(which);
+    } else if (turnstileWidgets[which] !== null) {
+      destroyTurnstile(which);
+    }
   }
 }
 
@@ -501,7 +558,7 @@ export async function doLogin() {
   if (!account || !password) return toast('请填写邮箱或手机号，以及密码', 'warn');
   if (!captchaCode) return toast('请输入图形验证码', 'warn');
   if (S.emailVerify && account.includes('@') && !emailCode) return toast('请输入邮箱验证码', 'warn');
-  if (S.turnstileSiteKey && !turnstileTokens.login) return toast('请先完成人机验证', 'warn');
+  if (S.turnstileRequired && !turnstileTokens.login) return toast('请先完成人机验证', 'warn');
   const turnstileToken = turnstileTokens.login;
   try {
     const d = await api('/api/auth/login', { account, password, captchaId, captchaCode, emailCode, turnstileToken });
@@ -532,7 +589,7 @@ export async function doRegister() {
   if (password.length < 6) return toast('密码至少 6 位', 'warn');
   if (!captchaCode) return toast('请输入图形验证码', 'warn');
   if (S.emailVerify && !emailCode) return toast('请输入邮箱验证码', 'warn');
-  if (S.turnstileSiteKey && !turnstileTokens.register) return toast('请先完成人机验证', 'warn');
+  if (S.turnstileRequired && !turnstileTokens.register) return toast('请先完成人机验证', 'warn');
   const turnstileToken = turnstileTokens.register;
   try {
     const d = await api('/api/auth/register', { email, phone, password, name, captchaId, captchaCode, emailCode, turnstileToken });
@@ -972,6 +1029,7 @@ async function runEnvCheck() {
     S.emailCodeResendSec = health.emailCodeResendSec || 60;
     S.urgentNotice = health.urgentNotice || null;
     S.turnstileSiteKey = health.turnstileSiteKey || '';
+    S.turnstileRequired = Boolean(health.turnstileRequired);
     
     S.ttsEngine = health.ttsEngine === 'api' ? 'api' : 'edge';
     S.asrEngine = health.asrEngine === 'api' ? 'api' : 'browser';
@@ -2429,7 +2487,11 @@ function bind() {
     $$('#auth-tabs .tab').forEach((t) => t.classList.toggle('active', t === btn));
     $('#pane-login').style.display = btn.dataset.tab === 'login' ? '' : 'none';
     $('#pane-register').style.display = btn.dataset.tab === 'register' ? '' : 'none';
-    renderTurnstile(btn.dataset.tab === 'register' ? 'register' : 'login');
+    syncTurnstile();
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) syncTurnstile();
   });
 
   

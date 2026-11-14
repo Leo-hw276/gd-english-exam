@@ -1483,6 +1483,7 @@ async function handleHealth(req, res, cfg) {
     emailCodeResendSec: Brevo.RESEND_SEC,
     
     turnstileSiteKey: String(s.turnstile?.siteKey || '').trim(),
+    turnstileRequired: Boolean(String(s.turnstile?.siteKey || '').trim() && String(s.turnstile?.secretKey || '').trim()),
     
     ttsEngine: (() => {
       const sp = s.speechApi || {};
