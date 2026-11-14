@@ -3332,11 +3332,7 @@ const server = http.createServer((req, res) => {
     if (p === '/api/auth/register' && req.method === 'POST') return handleRegister(req, res);
     if (p === '/api/auth/login' && req.method === 'POST') return handleLogin(req, res);
     if (p === '/api/auth/logout' && req.method === 'POST') return handleLogout(req, res);
-    if (p === '/api/auth/email-code' && (req.method === 'POST' || req.method === 'GET')) return handleEmailCode(req, res);
-    if (p === '/api/auth/email-code') {
-      res.writeHead(405, { 'Content-Type': 'application/json', Allow: 'POST, GET, OPTIONS' });
-      return res.end(JSON.stringify({ ok: false, error: '仅支持 POST 或 GET 方法' }));
-    }
+    if (p === '/api/auth/email-code') return handleEmailCode(req, res);
     if (p === '/api/auth/me') return handleMe(req, res);
     if (p === '/api/account/orders') return handleMyOrders(req, res);
     if (p === '/api/tickets') return handleTickets(req, res);

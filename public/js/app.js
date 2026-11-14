@@ -91,6 +91,7 @@ export function showScreen(id, opts = {}) {
     if (tab) $(`#auth-tabs .tab[data-tab="${tab}"]`)?.click();
     refreshAllCaptchas();
     loadNotices();
+    renderTurnstile(tab === 'register' ? 'register' : 'login');
   }
 }
 
@@ -382,7 +383,18 @@ async function requestEmailCode(purpose) {
   if (!captchaCode) return toast('请先输入图形验证码', 'warn');
 
   try {
-    const d = await api('/api/auth/email-code', { email, purpose, captchaId, captchaCode });
+    const payload = { email, purpose, captchaId, captchaCode };
+    let d;
+    try {
+      d = await api('/api/auth/email-code', payload);
+    } catch (err) {
+      // 个别部署方式下 POST 会被网关拦成 405，改用 GET 查询串重试一次
+      if (err && err.status === 405) {
+        d = await api('/api/auth/email-code?' + new URLSearchParams(payload).toString(), undefined, 'GET');
+      } else {
+        throw err;
+      }
+    }
     toast(d.message || '验证码已发送', 'ok', 5000);
     startResendCountdown(btn, d.resendSec || S.emailCodeResendSec || 60);
     
@@ -428,14 +440,25 @@ const turnstileWidgets = { login: null, register: null };
 const turnstileTokens = { login: '', register: '' };
 
  
-function renderTurnstile(which) {
+function renderTurnstile(which, attempt = 0) {
   const sk = S.turnstileSiteKey;
   const mount = document.getElementById(which === 'login' ? 'li-turnstile' : 'rg-turnstile');
   if (!mount) return;
   if (!sk) { mount.style.display = 'none'; return; }
   mount.style.display = '';
+
+  // 容器不可见（登录/注册另一页或未进入登录页）时渲染会让组件卡死并报 300030，
+  // 因此等它可见后再渲染，由切换标签或进入登录页时触发
+  if (mount.offsetParent === null) return;
+
   if (!window.turnstile) {
-    setTimeout(() => renderTurnstile(which), 300);
+    if (attempt >= 50) {
+      mount.innerHTML =
+        '<span class="muted" style="font-size:12px">人机验证加载失败，' +
+        `<a href="#" data-ts-retry="${which}">点击重试</a></span>`;
+      return;
+    }
+    setTimeout(() => renderTurnstile(which, attempt + 1), 300);
     return;
   }
   if (mount.dataset.tsReady === '1' && mount.childElementCount > 0) return;
@@ -449,7 +472,11 @@ function renderTurnstile(which) {
       sitekey: sk,
       callback: (token) => { turnstileTokens[which] = token; },
       'expired-callback': () => { turnstileTokens[which] = ''; },
-      'error-callback': () => { turnstileTokens[which] = ''; },
+      'error-callback': (code) => {
+        turnstileTokens[which] = '';
+        mount.dataset.tsReady = '';
+        console.warn('[turnstile] error', code);
+      },
     });
     mount.dataset.tsReady = '1';
   } catch (e) {
@@ -2402,10 +2429,17 @@ function bind() {
     $$('#auth-tabs .tab').forEach((t) => t.classList.toggle('active', t === btn));
     $('#pane-login').style.display = btn.dataset.tab === 'login' ? '' : 'none';
     $('#pane-register').style.display = btn.dataset.tab === 'register' ? '' : 'none';
+    renderTurnstile(btn.dataset.tab === 'register' ? 'register' : 'login');
   });
 
   
   document.addEventListener('click', (e) => {
+    const retry = e.target.closest('[data-ts-retry]');
+    if (retry) {
+      e.preventDefault();
+      renderTurnstile(retry.dataset.tsRetry, 0);
+      return;
+    }
     const a = e.target.closest('[data-goto]');
     if (!a) return;
     e.preventDefault();
