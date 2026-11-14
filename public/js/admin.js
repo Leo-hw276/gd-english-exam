@@ -5,6 +5,7 @@ import { S, $, $$, esc, toast, showScreen } from './app.js';
 let adminReady = false;
 let currentClientIp = '';
 let currentPeer = '';
+let currentSettings = null;
 
 const ADMIN_SECTIONS = [
   { key: 'overview', label: '数据概览', index: '01', cards: ['card-overview'] },
@@ -312,6 +313,7 @@ async function loadOverview() {
 
     
     const s = d.settings;
+    currentSettings = s;
     const sources = s.sources || {};
 
     $('#cfg-base').value = s.apiBase || '';
@@ -673,32 +675,52 @@ async function useLocalSpeech() {
 
 function renderUrgentNotice(un) {
   const el = (id) => document.getElementById(id);
+  const status = el('cfg-urgent-status');
   const on = el('cfg-urgent-on');
   const title = el('cfg-urgent-title');
   const body = el('cfg-urgent-body');
   const hint = el('cfg-urgent-hint');
-  if (on) on.checked = Boolean(un.enabled);
+  if (on) on.value = un.enabled ? '1' : '';
   if (title) title.value = un.title || '';
   if (body) body.value = un.body || '';
-  if (hint) hint.textContent = un.id ? `当前通知 ID：${un.id}` : '尚未发布';
+  if (status) {
+    status.textContent = un.enabled ? '开启中' : '已暂停';
+    status.className = 'pill ' + (un.enabled ? 'ok' : 'warn');
+  }
+  if (hint) hint.textContent = un.id ? `通知 ID：${un.id}` : '尚未发布';
 }
 
-async function saveUrgentNotice() {
+async function saveUrgentNotice(mode) {
   const hint = $('#cfg-urgent-hint');
+  const cur = currentSettings?.urgentNotice || {};
+  const payload = {
+    urgentNotice: {
+      title: $('#cfg-urgent-title').value.trim(),
+      body: $('#cfg-urgent-body').value.trim(),
+      enabled: cur.enabled ?? false,
+      republish: false,
+    },
+  };
+  if (mode === 'on') payload.urgentNotice.enabled = true;
+  if (mode === 'off') payload.urgentNotice.enabled = false;
+  if (mode === 'save') payload.urgentNotice.enabled = Boolean(cur.enabled);
+  if (mode === 'push') {
+    payload.urgentNotice.enabled = true;
+    payload.urgentNotice.republish = true;
+  }
   try {
-    await api('/api/admin/settings', {
-      urgentNotice: {
-        enabled: $('#cfg-urgent-on').checked,
-        title: $('#cfg-urgent-title').value.trim(),
-        body: $('#cfg-urgent-body').value.trim(),
-      },
-    });
-    hint.textContent = '已保存';
-    toast('紧急通知已更新', 'ok');
+    await api('/api/admin/settings', payload);
+    const msg =
+      mode === 'on' ? '已开启，新用户将看到弹窗' :
+      mode === 'off' ? '已暂停，用户端立即不再弹出' :
+      mode === 'push' ? '已保存并推送，所有用户下次访问将重新弹出' :
+      '已保存（不重复弹出）';
+    if (hint) hint.textContent = msg;
+    toast(msg, 'ok');
     await loadOverview();
   } catch (e) {
-    hint.textContent = '保存失败';
-    toast('保存失败：' + e.message, 'bad', 5000);
+    if (hint) hint.textContent = '操作失败';
+    toast('操作失败：' + e.message, 'bad', 5000);
   }
 }
 
@@ -1416,7 +1438,10 @@ function bind() {
   $('#btn-admin-refresh')?.addEventListener('click', () => loadOverview().then(() => toast('已刷新', 'ok', 1500)));
   bindModelSelect();
   $('#btn-brevo-save')?.addEventListener('click', saveBrevo);
-  $('#btn-urgent-save')?.addEventListener('click', saveUrgentNotice);
+  $('#btn-urgent-on')?.addEventListener('click', () => saveUrgentNotice('on'));
+  $('#btn-urgent-off')?.addEventListener('click', () => saveUrgentNotice('off'));
+  $('#btn-urgent-save')?.addEventListener('click', () => saveUrgentNotice('save'));
+  $('#btn-urgent-push')?.addEventListener('click', () => saveUrgentNotice('push'));
   $('#btn-ts-save')?.addEventListener('click', saveTurnstile);
   $('#btn-speech-save')?.addEventListener('click', saveSpeech);
   $('#btn-speech-models')?.addEventListener('click', fetchSpeechModels);

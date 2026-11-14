@@ -2592,7 +2592,7 @@ function checkUrgentNotice() {
   const n = S.urgentNotice;
   if (!n || !n.id || !n.title) return;
   const key = 'urgent_read_' + n.id;
-  if (localStorage.getItem(key)) return;
+  try { if (localStorage.getItem(key)) return; } catch {}
   const mask = document.createElement('div');
   mask.className = 'modal-mask';
   mask.innerHTML = `<div class="urgent-box">
@@ -2602,7 +2602,7 @@ function checkUrgentNotice() {
   </div>`;
   document.body.appendChild(mask);
   mask.querySelector('#btn-urgent-ok').onclick = () => {
-    localStorage.setItem(key, '1');
+    try { localStorage.setItem(key, '1'); } catch {}
     mask.remove();
   };
 }

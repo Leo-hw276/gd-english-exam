@@ -2317,9 +2317,11 @@ async function handleAdminSettings(req, res) {
       const body  = String(b.urgentNotice.body  || '').trim().slice(0, 2000);
       const enabled = Boolean(b.urgentNotice.enabled);
       const oldUn = cur.urgentNotice || {};
-      
-      const contentChanged = title !== (oldUn.title || '') || body !== (oldUn.body || '');
-      const id = (enabled && contentChanged) ? crypto.randomUUID().slice(0, 8) : (oldUn.id || crypto.randomUUID().slice(0, 8));
+      // id 决定是否重新弹出：只有管理员明确要求“推送”时才更换，
+      // 否则同一通知对已读用户不再弹出，编辑文案/暂停再开启也不打扰
+      let id = oldUn.id || '';
+      if (!id) id = crypto.randomUUID().slice(0, 8);
+      if (b.urgentNotice.republish) id = crypto.randomUUID().slice(0, 8);
       patch.urgentNotice = { enabled, id, title, body };
     } else {
       patch.urgentNotice = { enabled: false, id: '', title: '', body: '' };

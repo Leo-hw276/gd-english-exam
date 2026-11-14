@@ -763,11 +763,11 @@
       </div>
 
       <div class="card" id="card-urgent">
-        <h2>紧急通知弹窗</h2>
-        <p class="muted">开启后，用户打开网站立即弹出通知，点击「我知道了」关闭。修改内容后会重新弹出（已读按通知 ID 记录）。</p>
-        <label class="muted" style="display:flex;align-items:center;gap:6px;margin-top:8px">
-          <input type="checkbox" id="cfg-urgent-on" style="width:auto" /> 开启紧急通知
-        </label>
+        <div class="row between">
+          <h2 style="margin:0">紧急通知弹窗</h2>
+          <span id="cfg-urgent-status" class="pill warn">未知</span>
+        </div>
+        <p class="muted" style="margin-top:6px">开启后，用户打开网站立即弹出通知，点击「我知道了」关闭。同一通知对已读用户不再重复弹出；如需让所有人再次看到，请用「保存并推送」。</p>
         <div style="margin-top:12px">
           <label class="muted">通知标题</label>
           <input type="text" id="cfg-urgent-title" placeholder="如：系统维护通知" />
@@ -776,10 +776,14 @@
           <label class="muted">通知内容</label>
           <textarea id="cfg-urgent-body" rows="4" placeholder="通知正文…"></textarea>
         </div>
-        <div class="row" style="margin-top:12px">
-          <button class="btn" id="btn-urgent-save">保存紧急通知</button>
+        <div class="row" style="margin-top:14px;gap:8px;flex-wrap:wrap">
+          <button class="btn" id="btn-urgent-on">开启</button>
+          <button class="btn ghost" id="btn-urgent-off">暂停</button>
+          <button class="btn ghost" id="btn-urgent-save">仅保存</button>
+          <button class="btn" id="btn-urgent-push">保存并推送</button>
           <span class="muted" id="cfg-urgent-hint"></span>
         </div>
+        <input type="hidden" id="cfg-urgent-on" />
       </div>
 
       <div class="card" id="card-turnstile">
