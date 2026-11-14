@@ -1366,6 +1366,55 @@ body.admin-mode #pill-tts { display: none !important; }
   overflow: hidden;
   box-shadow: 0 12px 40px rgba(16, 24, 40, 0.18);
 }
+.urgent-box {
+  background: #fff;
+  border: 1px solid var(--line, #e4e7ec);
+  border-radius: 14px;
+  width: 100%;
+  max-width: 460px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 12px 40px rgba(16, 24, 40, 0.18);
+}
+.urgent-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 20px 24px 14px;
+  border-bottom: 1px solid var(--line, #e4e7ec);
+}
+.urgent-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #d92d20;
+  flex: 0 0 auto;
+}
+.urgent-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink, #101828);
+  line-height: 1.4;
+}
+.urgent-body {
+  padding: 18px 24px;
+  font-size: 14px;
+  line-height: 1.75;
+  color: var(--ink-2, #475467);
+  white-space: pre-wrap;
+  overflow-y: auto;
+}
+.urgent-foot {
+  display: flex;
+  justify-content: flex-end;
+  padding: 14px 24px 18px;
+  border-top: 1px solid var(--line, #e4e7ec);
+  background: #fcfcfd;
+}
+
 .modal-head {
   display: flex;
   align-items: center;

@@ -435,13 +435,23 @@ function renderTurnstile(which) {
     setTimeout(() => renderTurnstile(which), 300);
     return;
   }
-  if (turnstileWidgets[which] !== null) return; 
-  turnstileWidgets[which] = window.turnstile.render(mount, {
-    sitekey: sk,
-    callback: (token) => { turnstileTokens[which] = token; },
-    'expired-callback': () => { turnstileTokens[which] = ''; },
-    'error-callback': () => { turnstileTokens[which] = ''; },
-  });
+  if (mount.dataset.tsReady === '1' && mount.childElementCount > 0) return;
+  try {
+    if (turnstileWidgets[which] !== null) {
+      try { window.turnstile.remove(turnstileWidgets[which]); } catch {}
+      turnstileWidgets[which] = null;
+    }
+    mount.innerHTML = '';
+    turnstileWidgets[which] = window.turnstile.render(mount, {
+      sitekey: sk,
+      callback: (token) => { turnstileTokens[which] = token; },
+      'expired-callback': () => { turnstileTokens[which] = ''; },
+      'error-callback': () => { turnstileTokens[which] = ''; },
+    });
+    mount.dataset.tsReady = '1';
+  } catch (e) {
+    console.warn('[turnstile]', (e && e.message) || e);
+  }
 }
 
  
@@ -2300,12 +2310,10 @@ function checkUrgentNotice() {
   if (localStorage.getItem(key)) return;
   const mask = document.createElement('div');
   mask.className = 'modal-mask';
-  mask.innerHTML = `<div class="modal-box" style="max-width:440px">
-    <h2 style="margin:0 0 12px;font-size:18px">${esc(n.title)}</h2>
-    <div style="white-space:pre-wrap;line-height:1.7;font-size:14px;color:#444;max-height:50vh;overflow-y:auto">${esc(n.body)}</div>
-    <div style="margin-top:18px;text-align:center">
-      <button class="btn" id="btn-urgent-ok">我知道了</button>
-    </div>
+  mask.innerHTML = `<div class="urgent-box">
+    <div class="urgent-head"><span class="urgent-dot"></span><h2 class="urgent-title">${esc(n.title)}</h2></div>
+    <div class="urgent-body">${esc(n.body)}</div>
+    <div class="urgent-foot"><button class="btn" id="btn-urgent-ok">我知道了</button></div>
   </div>`;
   document.body.appendChild(mask);
   mask.querySelector('#btn-urgent-ok').onclick = () => {

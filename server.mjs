@@ -737,16 +737,24 @@ const SEC_HEADERS = {
 };
 
  
-const HTML_CSP =
-  "default-src 'self'; " +
-  "script-src 'self' https://challenges.cloudflare.com; " +
-  "style-src 'self' 'unsafe-inline'; " +
-  "img-src 'self' data: blob:; " +
-  "media-src 'self' data: blob:; " +
-  "connect-src 'self' https://challenges.cloudflare.com; " +
-  'frame-src https://challenges.cloudflare.com; ' +
-  "font-src 'self' data:; " +
-  "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
+function buildCsp() {
+  const formOrigins = new Set(["'self'"]);
+  try {
+    const base = epayConf().base;
+    if (base) formOrigins.add(new URL(base).origin);
+  } catch {}
+  return (
+    "default-src 'self'; " +
+    "script-src 'self' https://challenges.cloudflare.com https://static.cloudflareinsights.com; " +
+    "style-src 'self' 'unsafe-inline'; " +
+    "img-src 'self' data: blob:; " +
+    "media-src 'self' data: blob:; " +
+    "connect-src 'self' https://challenges.cloudflare.com https://cloudflareinsights.com; " +
+    'frame-src https://challenges.cloudflare.com; ' +
+    "font-src 'self' data:; " +
+    `object-src 'none'; base-uri 'self'; form-action ${[...formOrigins].join(' ')}; frame-ancestors 'none'`
+  );
+}
 
 function serveStatic(res, urlPath) {
   const rel = urlPath === '/' ? '/index.html' : urlPath;
@@ -768,7 +776,7 @@ function serveStatic(res, urlPath) {
           res.writeHead(200, {
             'Content-Type': 'text/html; charset=utf-8',
             'Cache-Control': 'no-store',
-            'Content-Security-Policy': HTML_CSP,
+            'Content-Security-Policy': buildCsp(),
             ...SEC_HEADERS,
           });
           res.end(idx);
@@ -783,7 +791,7 @@ function serveStatic(res, urlPath) {
       'Cache-Control': 'no-cache',
       ...SEC_HEADERS,
     };
-    if (ext === '.html') headers['Content-Security-Policy'] = HTML_CSP;
+    if (ext === '.html') headers['Content-Security-Policy'] = buildCsp();
     res.writeHead(200, headers);
     res.end(buf);
   });
