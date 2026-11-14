@@ -50,7 +50,7 @@ export const DEFAULT_SETTINGS = {
   availableModels: [],
   adminUsername: 'admin',
   adminPasswordHash: process.env.ADMIN_PASSWORD ? hashPassword(process.env.ADMIN_PASSWORD) : '',
-  siteName: '广东中考英语听说 · 在线模拟',
+  siteName: '听说易',
   examRegion: 'jiangmen',
   pricing: DEFAULT_PRICING,
   epay: {
@@ -221,6 +221,10 @@ export function load() {
   
   
   
+  if (db.settings.siteName === '广东中考英语听说 · 在线模拟') {
+    db.settings.siteName = '听说易';
+    save();
+  }
   if (process.env.ADMIN_PASSWORD && !db.settings.adminPasswordHash) {
     db.settings.adminPasswordHash = hashPassword(process.env.ADMIN_PASSWORD);
     save();

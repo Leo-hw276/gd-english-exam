@@ -1953,6 +1953,36 @@ async function handleMe(req, res) {
   sendJson(res, 200, { ok: true, user: DB.publicUser(user), admin: isAdmin, quota: q });
 }
 
+async function handleMyOrders(req, res) {
+  const ctx = requireUser(req, res);
+  if (!ctx) return;
+  const uid = ctx.user.id;
+  const paid = DB.listPayOrders(200)
+    .filter((o) => o.userId === uid)
+    .map((o) => ({
+      at: o.paidAt || o.at,
+      kind: 'pay',
+      plan: o.plan,
+      title: o.plan === 'monthly' ? '月卡（在线支付）' : '次卡（在线支付）',
+      money: o.money,
+      status: o.status,
+      outTradeNo: o.outTradeNo,
+    }));
+  const redeemed = DB.listOrders(200)
+    .filter((o) => o.userId === uid && o.code && o.channel !== 'epay')
+    .map((o) => ({
+      at: o.at,
+      kind: 'code',
+      plan: o.type === 'monthly' ? 'monthly' : 'credits',
+      title: o.type === 'monthly' ? `月卡（兑换码 ${o.value} 天）` : `次卡（兑换码 ${o.value} 次）`,
+      money: '',
+      status: 'paid',
+      code: o.code || '',
+    }));
+  const all = [...paid, ...redeemed].sort((a, b) => (b.at || 0) - (a.at || 0)).slice(0, 50);
+  sendJson(res, 200, { ok: true, orders: all });
+}
+
 async function handleRedeem(req, res) {
   const ctx = requireUser(req, res);
   if (!ctx) return;
@@ -3223,6 +3253,7 @@ const server = http.createServer((req, res) => {
     if (p === '/api/auth/email-code' && req.method === 'POST') return handleEmailCode(req, res);
     if (p === '/api/auth/email-code') return sendJson(res, 405, { ok: false, error: '仅支持 POST 方法' });
     if (p === '/api/auth/me') return handleMe(req, res);
+    if (p === '/api/account/orders') return handleMyOrders(req, res);
     if (p === '/api/redeem' && req.method === 'POST') return handleRedeem(req, res);
 
     
@@ -3287,7 +3318,7 @@ server.listen(PORT, HOST, () => {
   DB.load();
   setExtraTrustedProxies(DB.listTrustedProxies());
   console.log('');
-  console.log('  广东中考英语听说考试在线练习系统');
+  console.log('  听说易 · 英语听说在线模拟练习系统');
   console.log('  ------------------------------------------------');
   console.log(`  地址   : http://${HOST === '0.0.0.0' ? '127.0.0.1' : HOST}:${PORT}`);
   console.log(`  考区   : ${CITY_PROFILES[s.examRegion]?.name || CITY_PROFILES[DEFAULT_CITY].name}`);

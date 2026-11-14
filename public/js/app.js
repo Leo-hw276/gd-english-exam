@@ -332,7 +332,7 @@ function renderQuotaHint() {
       <a href="#" data-goto="screen-auth">立即注册</a>　|　已有兑换码？<a href="#" data-goto="screen-account">去兑换</a>`;
   } else {
     el.innerHTML = `当前额度：<b>${esc(quotaText())}</b>　|
-      <a href="#" data-goto="screen-account">我的账户</a>　|　<a href="#" data-goto="screen-pricing">收费标准</a>`;
+      <a href="#" data-goto="screen-account">我的账户</a>　|　<a href="#" data-goto="screen-pricing">费用与购买</a>`;
   }
 }
 
@@ -583,8 +583,38 @@ async function renderAccount() {
       ${u.proActive || u.credits > 0 || u.freeLeft > 0 ? '可以随时开始考试。' : '额度已用完，请使用兑换码开通次卡或月卡。'}
     </div>`;
   const el = $('#acc-orders');
-  if (el) el.innerHTML = '<p class="muted">兑换成功后额度会立即到账，可在上方「次卡剩余 / 月卡」处查看。</p>';
+  if (el) el.innerHTML = '<p class="muted">加载中…</p>';
   renderHistory();
+  renderMyOrders();
+}
+
+async function renderMyOrders() {
+  const box = $('#acc-orders');
+  if (!box) return;
+  try {
+    const d = await api('/api/account/orders', undefined, 'GET');
+    const list = d.orders || [];
+    if (!list.length) {
+      box.innerHTML = '<p class="muted">暂无开通记录。支付或兑换成功后，记录会显示在这里。</p>';
+      return;
+    }
+    box.innerHTML = list
+      .map((o) => {
+        const when = new Date(o.at).toLocaleString('zh-CN');
+        const paid = o.status === 'paid';
+        const badge = paid ? '<span class="pill ok">已到账</span>' : '<span class="pill warn">未完成</span>';
+        const extra = o.kind === 'pay' ? `¥${o.money}` : o.code ? `兑换码 ${esc(o.code)}` : '';
+        return `<div class="nt-row">
+            <span class="grow">
+              <b>${esc(o.title)}</b> ${badge}
+              <div class="muted">${when}${extra ? ' · ' + extra : ''}${o.outTradeNo ? ' · 单号 ' + esc(o.outTradeNo) : ''}</div>
+            </span>
+          </div>`;
+      })
+      .join('');
+  } catch (e) {
+    box.innerHTML = `<p class="muted">记录加载失败：${esc(e.message)}</p>`;
+  }
 }
 
  
@@ -2304,6 +2334,7 @@ function bind() {
  
 
 function checkUrgentNotice() {
+  if (document.querySelector('.urgent-box')) return;
   const n = S.urgentNotice;
   if (!n || !n.id || !n.title) return;
   const key = 'urgent_read_' + n.id;
